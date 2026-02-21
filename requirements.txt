@@ -1,0 +1,5 @@
+bleak>=0.21.0
+dash>=2.14.0
+plotly>=5.18.0
+numpy>=1.24.0
+scipy>=1.11.0
