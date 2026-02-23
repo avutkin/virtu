@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import asyncio
+import os
 from datetime import datetime, timezone
 from bleak import BleakScanner, BleakClient
 
@@ -33,23 +36,95 @@ class PolarH10:
     # Connection
     # ------------------------------------------------------------------
 
-    async def connect(self, timeout: float = 20.0) -> None:
-        print(f"Scanning for '{self.device_name}'...")
-        device = await BleakScanner.find_device_by_filter(
-            lambda d, _: d.name and self.device_name in d.name,
-            timeout=timeout,
-        )
+    _ADDR_CACHE = os.path.expanduser("~/.justbreathe_h10_addr")
+
+    async def connect(self, timeout: float = 20.0,
+                      device_address: str | None = None) -> None:
+        # --- Direct connect to a known address (skips scanning entirely) ---
+        if device_address:
+            print(f"Connecting directly to {device_address}…")
+            try:
+                client = BleakClient(device_address,
+                                     disconnected_callback=self._on_disconnect)
+                await client.connect(timeout=10.0)
+                self._client = client
+                self._device_label = device_address
+                print(f"Connected to {device_address}.")
+                return
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Direct connect to {device_address} failed: {exc}"
+                ) from exc
+
+        device = None
+
+        # --- Fast path: try cached address first ---
+        if os.path.exists(self._ADDR_CACHE):
+            cached = open(self._ADDR_CACHE).read().strip()
+            if cached:
+                print(f"Trying cached address: {cached}")
+                try:
+                    client = BleakClient(cached,
+                                        disconnected_callback=self._on_disconnect)
+                    await client.connect(timeout=10.0)
+                    self._client = client
+                    self._device_label = self.device_name
+                    print(f"Connected via cached address ({cached}).")
+                    return
+                except Exception as exc:
+                    print(f"Cached address failed ({exc}), falling back to scan.")
+
+        # --- Primary scan: filter by name ---
+        print(f"Scanning for '{self.device_name}' (filter scan, {timeout:.0f}s)…")
+        try:
+            device = await BleakScanner.find_device_by_filter(
+                lambda d, _: d.name and self.device_name in d.name,
+                timeout=timeout,
+            )
+        except Exception as exc:
+            print(f"Filter scan error: {exc}")
+
+        # --- Fallback: full discovery + log everything visible ---
+        if device is None:
+            print("Filter scan found nothing. Running full BLE discovery (10 s)…")
+            try:
+                found = await BleakScanner.discover(timeout=10.0)
+                if found:
+                    print(f"Discovered {len(found)} device(s):")
+                    for d in sorted(found, key=lambda x: x.name or ""):
+                        print(f"  {d.address}  name={d.name!r}  rssi={d.rssi}")
+                    # pick any device whose name contains our target
+                    for d in found:
+                        if d.name and self.device_name in d.name:
+                            device = d
+                            break
+                else:
+                    print("Full discovery returned zero devices — "
+                          "check macOS Bluetooth permission for Terminal/Python.")
+            except Exception as exc:
+                print(f"Full discovery error: {exc}")
+
         if device is None:
             raise RuntimeError(
-                f"Device '{self.device_name}' not found. "
-                "Make sure the sensor is on and in range."
+                f"Device '{self.device_name}' not found after filter scan and "
+                "full discovery. Check that: (1) H10 is powered on and in range, "
+                "(2) macOS Bluetooth is enabled, (3) Terminal/Python has Bluetooth "
+                "permission in System Settings → Privacy & Security → Bluetooth."
             )
+
         self._device_label = device.name or self.device_name
         print(f"Found: {self._device_label} ({device.address})")
 
         self._client = BleakClient(device, disconnected_callback=self._on_disconnect)
         await self._client.connect()
         print("Connected.")
+
+        # Cache the address for fast reconnection next time
+        try:
+            with open(self._ADDR_CACHE, "w") as f:
+                f.write(str(device.address))
+        except OSError:
+            pass
 
     async def disconnect(self) -> None:
         if self._client and self._client.is_connected:
@@ -64,14 +139,20 @@ class PolarH10:
 
     async def start_streams(self) -> None:
         c = self._client
-        # Heart rate (standard GATT, 1 Hz)
-        await c.start_notify(HR_MEAS, self._hr_handler)
+        # Heart rate via standard GATT — supported by most BLE HR monitors
+        try:
+            await c.start_notify(HR_MEAS, self._hr_handler)
+        except Exception as exc:
+            print(f"HR notification unavailable: {exc}")
 
-        # ECG + ACC via PMD data characteristic
-        await c.start_notify(PMD_DATA, self._pmd_handler)
-        await c.write_gatt_char(PMD_CONTROL, CMD_ECG_START, response=True)
-        await c.write_gatt_char(PMD_CONTROL, CMD_ACC_START, response=True)
-        print("Streaming ECG, accelerometer, and pulse.")
+        # ECG + ACC via Polar PMD — Polar H10 / OH1 / Verity Sense only
+        try:
+            await c.start_notify(PMD_DATA, self._pmd_handler)
+            await c.write_gatt_char(PMD_CONTROL, CMD_ECG_START, response=True)
+            await c.write_gatt_char(PMD_CONTROL, CMD_ACC_START, response=True)
+            print("Streaming ECG, accelerometer, and pulse.")
+        except Exception as exc:
+            print(f"Polar PMD unavailable — HR-only mode ({exc})")
 
     async def stop_streams(self) -> None:
         c = self._client
