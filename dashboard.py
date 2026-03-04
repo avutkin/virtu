@@ -20,6 +20,7 @@ import time
 import traceback
 from collections import deque
 from datetime import datetime, timezone
+from flask import request as _flask_req
 
 import numpy as np
 import dash
@@ -49,7 +50,10 @@ C_GOOD      = "#3fb950"
 C_WARN      = "#d29922"
 C_BAD       = "#f85149"
 C_VLF       = "#22d3ee"   # cyan — VLF power
+C_ULF       = "#a78bfa"   # violet — ULF power
 C_BLINK     = "#2dd4bf"   # teal — eye blink
+C_PNN50     = "#f472b6"   # pink/rose — pNN50
+C_SDNN      = "#58a6ff"   # blue — SDNN (same as C_RR for KPI consistency)
 C_NAV_ACT   = "#58a6ff"   # active navigation pill
 
 # ── shared style atoms ────────────────────────────────────────────────────────
@@ -91,6 +95,195 @@ def _empty_fig(title: str = "") -> go.Figure:
     return fig
 
 
+# ── per-metric info content ───────────────────────────────────────────────────
+_METRIC_INFO: dict[str, dict] = {
+    "hr": {
+        "title": "Heart Rate  —  Beats per Minute (bpm)",
+        "nervous": "Heart rate is set by the sinoatrial node under competing sympathetic (accelerator) and parasympathetic (vagal brake) inputs. Resting HR reflects chronic autonomic tone — lower resting HR generally indicates stronger vagal modulation and higher cardiovascular reserve.",
+        "psychological": "Acute stress, anxiety, and emotional arousal raise HR within seconds via sympathetic activation and vagal withdrawal. Sustained elevated HR (> 90 bpm at rest) is a reliable marker of chronic stress load. Calm, meditative states push HR toward 55–65 bpm in most adults.",
+        "exercise": "HR rises linearly with exercise intensity up to VO₂max. Training zones are defined as percentages of HRmax. Zone 2 (60–70% HRmax) is optimal for aerobic base building. Recovery HR — how fast it drops in the first minute post-exercise — is a direct fitness marker.",
+        "improve": "Consistent Zone 2 aerobic training lowers resting HR by 5–15 bpm over months. Slow resonance breathing (5–6 br/min) produces beat-to-beat HR oscillations (RSA) and strengthens the vagal brake. Adequate sleep, hydration, and low caffeine reduce the resting sympathetic drive that keeps HR elevated.",
+    },
+    "ecg": {
+        "title": "ECG  —  Electrocardiogram (µV)",
+        "nervous": "Captures the electrical depolarisation/repolarisation cycle of the heart. QRS-complex spacing is the raw source of all HRV metrics. Beat-to-beat variation visible in peak spacing directly reflects autonomic regulation — wider spacing variation = stronger parasympathetic (vagal) tone.",
+        "psychological": "Autonomic state shapes ECG morphology in real time. Stress flattens beat-to-beat variation. Calm, focused states produce rhythmically varying R-R intervals (respiratory sinus arrhythmia). Emotional arousal shortens the RR interval and reduces variance.",
+        "exercise": "Heart rate rises linearly with exercise intensity; RR intervals compress. High-intensity effort produces near-uniform, rapid QRS sequences. Recovery rate back to resting rhythm is a key fitness indicator — faster recovery = better cardiovascular conditioning.",
+        "improve": "Aerobic conditioning (Zone 2, 150+ min/week) broadens the HRV range visible in ECG. Electrolyte balance (Mg²⁺, K⁺) stabilises conduction. Slow diaphragmatic breathing makes RSA oscillations visible as rhythmic peak-spacing variation.",
+    },
+    "acc": {
+        "title": "ACC Z-axis  —  Breathing Waveform (mG)",
+        "nervous": "Chest-wall movement captured by the accelerometer. Peak-to-trough amplitude reflects tidal volume; cycle frequency reflects breathing rate. Slow, deep, regular oscillations activate the vagus nerve via pulmonary stretch receptors and baroreflex coupling.",
+        "psychological": "Breathing pattern is the most direct lever for real-time autonomic state change. Shallow, rapid breathing (>20 br/min) sustains stress activation. Slow, diaphragmatic breathing (5–7 br/min) immediately shifts the autonomic balance toward parasympathetic dominance.",
+        "exercise": "Amplitude and rate increase with exercise intensity. Recovery rate to resting pattern (slow, regular oscillations) reflects aerobic fitness. Elite athletes show complete respiratory recovery within 2–3 minutes of stopping.",
+        "improve": "Practise 3D diaphragmatic breathing: inhale expands belly first, then lateral ribcage, then chest. Target 5–6 breaths/min. Box breathing (4:4:4:4) or 4:7:8 patterns develop breath control. Yoga, Pilates, and freediving training all improve respiratory mechanics.",
+    },
+    "rr": {
+        "title": "RR Tachogram  —  Beat-to-Beat Intervals (ms)",
+        "nervous": "Sequential plot of time between each heartbeat. Higher variance = stronger HRV. Rhythmic oscillations (respiratory sinus arrhythmia, RSA) — the heart speeding on inhale and slowing on exhale — are the direct signature of healthy vagal-cardiac coupling.",
+        "psychological": "A flattened tachogram (low variance, uniform intervals) indicates stress, fatigue, over-arousal, or excess sympathetic drive. Wave-like RSA oscillations indicate a relaxed, regulated state. Trauma and chronic anxiety consistently suppress RR variability.",
+        "exercise": "Variance collapses during vigorous exercise as sympathetic drive dominates. Post-exercise recovery of RR variance speed is proportional to aerobic fitness level and recovery quality.",
+        "improve": "Slow deliberate breathing (5–7 br/min) makes RSA oscillations visible in the tachogram — this is the real-time marker of vagal-cardiac coupling. HRV biofeedback training, meditation, and progressive relaxation all increase resting RR variance.",
+    },
+    "psd": {
+        "title": "HRV Power Spectrum  —  Welch PSD",
+        "nervous": "Full frequency decomposition of heart-rate variability. VLF (0.003–0.04 Hz) reflects long-range autonomic regulation and neuroendocrine activity. LF (0.04–0.15 Hz) reflects baroreflex and mixed sympathetic/parasympathetic activity. HF (0.15–0.40 Hz) reflects pure parasympathetic (vagal) modulation coupled to respiration.",
+        "psychological": "A sharp, tall HF peak centred on your breathing frequency indicates resonance — the optimal HRV biofeedback state characterised by calm, focused attention and emotional stability. Broad, flat spectra indicate autonomic dysregulation. Dominant LF with suppressed HF is the typical stress/anxiety signature.",
+        "exercise": "Hard exercise shifts power into LF and suppresses HF. Resonance breathing at rest produces a prominent, narrow HF peak. Regular endurance training progressively increases total spectral power and shifts the baseline toward HF dominance.",
+        "improve": "Breathe at your resonance frequency (~0.1 Hz, about 6 breaths/min) to maximise the HF peak and create LF-HF synchrony. HRV biofeedback training using this chart as feedback is the gold-standard method for increasing total HRV power.",
+    },
+    "coh": {
+        "title": "RR–Breathing Coherence",
+        "nervous": "Measures synchronisation between heart rhythm oscillations and breathing rhythm. High coherence (score > 0.7) means the baroreflex is strongly activated — each breath cycle is perfectly entraining the heart via the vagus nerve. This is the physiological state targeted by HRV biofeedback.",
+        "psychological": "High coherence is associated with calm, focused, emotionally stable states. It predicts better decision-making, emotional regulation, and cognitive performance. The coherence state is used clinically for anxiety, PTSD, and performance training.",
+        "exercise": "Vigorous exercise disrupts coherence by introducing noise into both RR and ACC signals. Elite athletes can maintain moderate coherence at moderate intensities. Coherence training at rest translates to better autonomic recovery post-exercise.",
+        "improve": "Breathe at your personal resonance frequency (typically 4.5–7 br/min). Find your resonance: start at 6 br/min and adjust ±0.5 br/min until coherence peaks. Consistent daily HRV biofeedback practice (20 min/day) trains the baroreflex. Slow exhale (longer than inhale) amplifies the effect.",
+    },
+    "vti": {
+        "title": "Vagal Tone Index  —  ln(RMSSD)",
+        "nervous": "Natural log of RMSSD — a dimensionless index of parasympathetic (vagal) activity. Log transformation normalises the skewed distribution of RMSSD. VTI > 3.5 indicates robust vagal tone. VTI < 2.5 indicates sympathetic dominance and increased cardiovascular risk.",
+        "psychological": "VTI is the strongest single-number predictor of emotional regulation capacity, resilience under stress, and cognitive flexibility. Athletes and meditators consistently show VTI > 4.0. Burnout, chronic stress, and anxiety disorders reliably suppress VTI.",
+        "exercise": "Rises during aerobic conditioning and recovery. Drops acutely after hard training (normal) and chronically with overtraining (warning). Use morning resting VTI as the primary readiness-to-train indicator: >10% drop from baseline = reduce load.",
+        "improve": "Coherent breathing (5–6 br/min), cold-water immersion, regular Zone 2 cardio, strength training, quality sleep (>7h), time in nature, social connection, and mindfulness meditation all reliably increase resting VTI over weeks.",
+    },
+    "rmssd": {
+        "title": "RMSSD  —  Root Mean Square of Successive Differences (ms)",
+        "nervous": "Gold-standard time-domain marker of cardiac parasympathetic (high-frequency vagal) modulation. Computed from beat-to-beat differences — large successive changes mean the vagus nerve is actively modulating heart rate. Normal range: 20–100 ms; athletes commonly exceed 100 ms.",
+        "psychological": "Higher resting RMSSD correlates with better emotional regulation, reduced anxiety, greater frustration tolerance, and higher working-memory capacity. Low RMSSD is a biomarker for depression, PTSD, and chronic stress disorders.",
+        "exercise": "Increases with sustained aerobic training over weeks. Acutely decreases after hard sessions. Morning RMSSD is the most widely used HRV readiness metric in sports science — track the 7-day rolling average and flag days >10% below baseline.",
+        "improve": "Slow diaphragmatic breathing, yoga, endurance training, stress management techniques, cold showers, limiting alcohol, consistent sleep schedule. Gains from lifestyle change typically visible within 4–8 weeks of consistent effort.",
+    },
+    "sdnn": {
+        "title": "SDNN  —  Standard Deviation of NN Intervals (ms)",
+        "nervous": "Overall autonomic variability — captures contributions from both sympathetic and parasympathetic branches across all frequency bands. Reflects the total regulatory capacity of the autonomic nervous system. SDNN > 50 ms is the clinical threshold for adequate HRV; < 20 ms is associated with significantly elevated cardiovascular risk.",
+        "psychological": "Chronic low SDNN is associated with depression, anxiety disorders, burnout, and poor stress recovery. Higher SDNN is linked to adaptive coping, psychological flexibility, and resilience. SDNN responds to both physical training and mind-body practices.",
+        "exercise": "Improves progressively with consistent aerobic and mixed-intensity training. Acutely suppressed by high-intensity effort. Long-term endurance athletes show SDNN values 30–50% above population norms.",
+        "improve": "Consistent aerobic exercise (especially Zone 2), stress-reduction practices (meditation, nature exposure), sleep optimisation, reduced alcohol, balanced training load with adequate recovery. SDNN improves more slowly than RMSSD — track monthly trends.",
+    },
+    "pnn50": {
+        "title": "pNN50  —  % of RR differences > 50 ms",
+        "nervous": "Percentage of consecutive RR intervals differing by more than 50 ms. Very sensitive to high-frequency parasympathetic (vagal) activity. Normal resting range: 3–25%. Athletes commonly exceed 25%. Extremely sensitive to recovery state — more so than SDNN.",
+        "psychological": "Strong correlation with positive affect, psychological safety, and parasympathetic dominance. Anxiety and chronic stress reliably drive pNN50 toward zero. Improvement in pNN50 after mind-body intervention is one of the fastest-responding HRV biomarkers.",
+        "exercise": "Highly sensitive to training load. A pNN50 drop >50% from personal baseline is a reliable signal of insufficient recovery. Use weekly averages rather than single-day values to track fitness trends.",
+        "improve": "Long slow distance (LSD) training, breathing exercises, cold-water immersion, mindfulness. Responds quickly to acute interventions (single slow-breathing session raises pNN50 within minutes) and builds with consistent training over weeks.",
+    },
+    "lfhf": {
+        "title": "LF / HF Ratio  —  Sympathetic Balance",
+        "nervous": "Ratio of low-frequency (0.04–0.15 Hz) to high-frequency (0.15–0.40 Hz) HRV power. LF reflects combined baroreflex and sympathetic modulation; HF reflects pure vagal respiratory coupling. Ratio < 0.5 = parasympathetic dominance (recovery/rest). 0.5–2.0 = balanced. > 2.0 = sympathetic dominance (stress/arousal).",
+        "psychological": "Elevated LF/HF is the autonomic signature of acute stress, anticipatory anxiety, cognitive load, and fight-or-flight activation. Sustained high ratio is seen in burnout, PTSD, and cardiovascular disease. Ratio responds rapidly to slow breathing — a single coherent breath cycle can shift it measurably.",
+        "exercise": "Rises sharply with exercise intensity. Returns to baseline during recovery — rate of return reflects autonomic flexibility and fitness. Caffeine, stimulants, and poor sleep all chronically elevate resting LF/HF.",
+        "improve": "Coherent breathing at 0.1 Hz is the fastest and most reliable method. Reduce stimulants and screen exposure before sleep. Cold exposure, progressive muscle relaxation, and biofeedback training all shift ratio toward parasympathetic dominance.",
+    },
+    "vlf": {
+        "title": "VLF Power  —  Very Low Frequency (0.003–0.04 Hz)",
+        "nervous": "Power in the 0.003–0.04 Hz band, reflecting long-range autonomic regulation — renin-angiotensin-aldosterone system (RAAS) activity, thermoregulation, gut-brain axis, and metabolic regulation. The strongest predictor of long-term all-cause mortality in clinical studies. Requires at least 5–30 minutes of recording for reliable estimation.",
+        "psychological": "Strongly linked to PTSD severity, depression, and dissociation. Trauma reliably suppresses VLF. Low VLF is associated with poor emotion regulation and interoceptive deficits. Mind-body practices that improve gut-brain coherence (breathwork, yoga) raise VLF over months.",
+        "exercise": "Improves with sustained aerobic training (> 150 min/week). Reflects mitochondrial health, metabolic flexibility, and neuroendocrine regulation. Sauna and cold-water immersion both acutely and chronically raise VLF through thermoregulatory stress adaptation.",
+        "improve": "Regular aerobic exercise is the primary driver. Sauna (3–5×/week, 15+ min), cold immersion, quality sleep (particularly deep slow-wave sleep), and gut microbiome health (fibre, probiotic foods) all contribute. VLF improves over months — track 30-day rolling trends.",
+    },
+    "ulf": {
+        "title": "ULF Power  —  Ultra Low Frequency (< 0.003 Hz)",
+        "nervous": "Power in the < 0.003 Hz band, reflecting the slowest autonomic fluctuations: circadian rhythms, neuroendocrine cycles (cortisol, melatonin), thermoregulatory oscillations, and inflammatory system dynamics. ULF is only meaningful from recordings ≥ 30 minutes. Requires at least 30 min of continuous heart-rate data for estimation.",
+        "psychological": "Chronically low ULF is associated with burnout, chronic fatigue syndrome, and impaired hormonal circadian rhythm. High ULF correlates with emotional resilience, hormonal balance, and adaptive autonomic regulation across the day. Trauma and PTSD selectively suppress ultra-low frequency autonomic variability.",
+        "exercise": "Sustained aerobic training (> 150 min/week) increases ULF over weeks by improving neuroendocrine regulation. Morning sessions (aligning with cortisol peak) produce the strongest ULF stimulus. Sleep quality directly gates overnight ULF restoration — deep sleep stages produce the largest slow autonomic oscillations.",
+        "improve": "Consistent sleep timing (same bedtime/wake time) is the single strongest driver — circadian alignment maximises overnight hormonal cycling visible in ULF. Regular aerobic exercise, stress reduction, and sunlight exposure in the morning all support ULF. Track weekly trends rather than daily values — ULF changes on a timescale of days to weeks.",
+    },
+    "cbi": {
+        "title": "CBI  —  Conscious Breathing Index",
+        "nervous": "Composite score (0–1) combining peak coherence (35%), breathing regularity (25%), breathing frequency (25%), and RMSSD (15%). Captures the overall quality of vagal activation through deliberate breath control. CBI > 0.6 indicates a high-quality parasympathetic state.",
+        "psychological": "High CBI reflects the physiological substrate of the calm, focused, high-performance state — the autonomic equivalent of 'flow'. Sustained CBI > 0.6 during a session correlates with reduced cortisol, improved working memory, and better emotional regulation.",
+        "exercise": "CBI drops during and immediately after vigorous exercise. Use CBI to monitor the quality of active recovery, cool-down breathing, and between-set rest intervals. A rapid CBI rebound is a fitness indicator.",
+        "improve": "Conscious slow breathing (5–7 br/min) with extended exhale. Prioritise a 2:1+ exhale-to-inhale ratio. Box breathing, 4:7:8, and coherent breathing protocols all raise CBI. Consistency matters — daily 10–20 min practice produces the fastest gains.",
+    },
+    "breath_wave": {
+        "title": "Breathing Phases  —  Inhale (blue) / Exhale (green)",
+        "nervous": "Filtered breathing waveform with each phase shaded. Inhale (sympathetic): thoracic expansion stretches baroreceptors, briefly accelerating heart rate. Exhale (parasympathetic): compression activates the vagus nerve, decelerating heart rate. This alternation is the mechanism of respiratory sinus arrhythmia (RSA).",
+        "psychological": "Visible regularity indicates a well-regulated autonomic state. Irregular, shallow phases suggest stress, distraction, or poor breath awareness. Consciously matching inhale to exhale and then extending exhale produces immediate parasympathetic shift.",
+        "exercise": "Breathing phases are barely visible during high-intensity exercise as rate accelerates. During cool-down, watching phase regularity return is a direct readback of autonomic recovery.",
+        "improve": "Aim for slow (5–6 br/min), deep, diaphragmatic breathing with exhale ≥ inhale. Use this waveform as visual biofeedback: smooth, regular, symmetrical cycles with gentle exhale elongation are the target pattern.",
+    },
+    "ie_ratio": {
+        "title": "Inhale · Exhale Duration  —  I:E Ratio per Breath",
+        "nervous": "Per-breath bar chart of inhale (blue) and exhale (green) durations. Exhale directly activates the vagus nerve via baroreceptor unloading. I:E ≥ 1.5 (exhale 50% longer than inhale) activates mild vagal tone. I:E ≥ 2.0 (exhale twice as long) produces strong parasympathetic activation.",
+        "psychological": "Extended exhale is the single most direct, evidence-based breath intervention for shifting from sympathetic to parasympathetic dominance. 4:8 breathing (4 s inhale, 8 s exhale) can reduce acute anxiety within 2–3 minutes.",
+        "exercise": "During recovery or between exercise sets, actively extending exhale accelerates HR recovery and reduces perceived exertion. Elite athletes and special forces personnel use this deliberately during tactical rest intervals.",
+        "improve": "Practise 4:8 (inhale:exhale), 4:7:8, or box breathing with extended exhale phase. Pursed-lip exhale, humming (vagal vibration), and sighing (deep inhale + long exhale) are simple, anytime-anywhere vagal activation techniques.",
+    },
+    "ie_trend": {
+        "title": "I:E Ratio Trend  —  Exhale / Inhale (rolling 1-min avg)",
+        "nervous": "Rolling time-series of the mean I:E ratio, showing how consistently you maintain vagal-activating exhale dominance across the session. Sustained ratio > 1.5 over 20+ minutes indicates a meaningful shift in autonomic baseline toward parasympathetic tone.",
+        "psychological": "This chart answers: are you maintaining your breath discipline over time, or drifting back to stress-pattern breathing? Sustained high I:E is correlated with lower cortisol, improved mood, and cognitive performance at the session level.",
+        "exercise": "Monitor I:E trend during rest intervals in circuit or interval training. A rising trend during recovery indicates effective use of breath to accelerate between-set recovery.",
+        "improve": "Set an I:E ratio intention at the start of each session (e.g., 1:2). Use the breath-wave chart for real-time feedback and this chart to confirm the pattern is holding over time. Nasal breathing naturally promotes longer, more controlled exhales.",
+    },
+    "blink_rate": {
+        "title": "Eye Blink Rate  —  Blinks per Minute",
+        "nervous": "Spontaneous blink rate is regulated by dopaminergic circuits in the striatum and modulated by the autonomic nervous system. Normal range 12–20 blinks/min. Very low rate (< 5) indicates strong cognitive engagement or sympathetic arousal (fight-or-flight reduces blink rate). Very high rate (> 25) indicates fatigue or emotional distress.",
+        "psychological": "< 5 blinks/min: deep focus or dry-eye strain. 5–12: focused concentration with some strain risk. 12–20: optimal alert-relaxed state. > 20: fatigue, distraction, high emotional arousal. Blink rate tracks the balance between task engagement and cognitive fatigue.",
+        "exercise": "Physical exertion can transiently reduce blink rate during focus-intensive movement (e.g., sports, climbing). Post-exercise fatigue increases blink rate. Screen-heavy cognitive work suppresses blink rate and dries the cornea — a common occupational hazard.",
+        "improve": "20-20-20 rule: every 20 minutes, look 20 feet away for 20 seconds. Optimise ambient lighting (no glare, not too bright). Conscious blink exercises. Reduce screen brightness. Lubricating eye drops if working in dry environments.",
+    },
+    "blink_ibi": {
+        "title": "Inter-Blink Intervals  —  Blink Rhythm & Attention Variability",
+        "nervous": "Time between successive blinks (seconds). Short, regular IBIs indicate relaxed baseline blink rhythm. Long IBIs indicate sustained focal attention or sympathetic activation. High BRV (blink-rate variability, equivalent of HRV for blinks) indicates attention fluctuation — the mind is switching between engagement and disengagement.",
+        "psychological": "Low BRV = sustained, stable focus. High BRV = attention is wandering or fluctuating — possibly due to fatigue, mind-wandering, or emotional distraction. Monitoring BRV alongside blink rate gives a two-dimensional view of attentional state.",
+        "exercise": "Fatigue from intense physical or cognitive work increases BRV as attentional control degrades. Skilled performance in sports requiring sustained visual attention (archery, shooting, tennis) correlates with low BRV during competition.",
+        "improve": "Attention training protocols (e.g., sustained attention to response task, SART). Mindfulness meditation specifically trains the meta-awareness needed to detect and recover attention lapses. Optimised sleep significantly reduces BRV.",
+    },
+}
+
+_ACTIVITY_CATS: dict[str, dict] = {
+    "food":       {"icon": "🍽",  "color": "#f97316",
+                   "presets": ["Breakfast", "Lunch", "Dinner", "Snack", "Heavy meal", "Light meal"]},
+    "caffeine":   {"icon": "☕",  "color": "#ca8a04",
+                   "presets": ["Coffee", "Espresso", "Tea", "Green tea", "Energy drink", "Pre-workout"]},
+    "supplement": {"icon": "💊",  "color": "#7c3aed",
+                   "presets": ["Magnesium", "Omega-3", "Vitamin D", "L-theanine", "Ashwagandha", "Creatine"]},
+    "exercise":   {"icon": "🏃",  "color": "#16a34a",
+                   "presets": ["Running", "Cycling", "Strength / Gym", "HIIT", "Yoga", "Swimming", "Walking"]},
+    "breathwork": {"icon": "🌬",  "color": "#0ea5e9",
+                   "presets": ["Box breathing", "4-7-8", "Wim Hof", "Coherent breathing", "Custom"]},
+    "meditation": {"icon": "🧘",  "color": "#8b5cf6",
+                   "presets": ["Mindfulness", "Body scan", "Guided", "NSDR / Yoga nidra"]},
+    "work":       {"icon": "💼",  "color": "#64748b",
+                   "presets": ["Deep work", "Meeting", "Email / Admin", "Creative", "Break"]},
+    "sleep":      {"icon": "😴",  "color": "#3b82f6",
+                   "presets": ["Sleep onset", "Woke up", "Nap"]},
+    "stress":     {"icon": "⚡",  "color": "#dc2626",
+                   "presets": ["Stressful event", "Conflict", "High-pressure task", "Deadline"]},
+    "social":     {"icon": "👥",  "color": "#059669",
+                   "presets": ["Social", "Call", "Family time"]},
+    "other":      {"icon": "📌",  "color": "#6b7280",   "presets": []},
+}
+
+_INFO_BTN_STYLE = {
+    "backgroundColor": "transparent",
+    "color": C_DIM,
+    "border": f"1px solid {C_BORDER}",
+    "borderRadius": "50%",
+    "width": "18px",
+    "height": "18px",
+    "fontSize": "10px",
+    "lineHeight": "17px",
+    "cursor": "pointer",
+    "padding": "0",
+    "textAlign": "center",
+    "fontFamily": "'JetBrains Mono', monospace",
+    "flexShrink": "0",
+    "marginLeft": "6px",
+}
+
+
+def _info_btn(metric: str, section: str = "live") -> html.Button:
+    return html.Button(
+        "?",
+        id={"type": "info-btn", "metric": metric, "section": section},
+        n_clicks=0,
+        style=_INFO_BTN_STYLE,
+        title=_METRIC_INFO.get(metric, {}).get("title", ""),
+    )
+
+
 def _nav_pill(active: bool) -> dict:
     return {
         "backgroundColor": C_NAV_ACT if active else "transparent",
@@ -127,6 +320,19 @@ CREATE TABLE IF NOT EXISTS rr_log (
     id    INTEGER PRIMARY KEY AUTOINCREMENT,
     rr_ms INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS activities (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts           TEXT NOT NULL,
+    ts_date      TEXT NOT NULL,
+    ts_time      TEXT NOT NULL,
+    category     TEXT NOT NULL,
+    name         TEXT NOT NULL,
+    notes        TEXT DEFAULT '',
+    duration_min INTEGER DEFAULT 0,
+    intensity    INTEGER DEFAULT 0,
+    source       TEXT DEFAULT 'manual'
+);
+CREATE INDEX IF NOT EXISTS idx_act_date ON activities(ts_date);
 """
 
 def _open_db() -> sqlite3.Connection:
@@ -134,7 +340,9 @@ def _open_db() -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=DELETE")  # no WAL sidecar files — safer under kill -9
     conn.executescript(_CREATE_METRICS)
     # Add columns to existing databases that predate them
-    for col in ("vlf REAL DEFAULT 0", "mean_ie REAL DEFAULT 0"):
+    for col in ("vlf REAL DEFAULT 0", "mean_ie REAL DEFAULT 0",
+                "pnn50 REAL DEFAULT 0", "sdnn REAL DEFAULT 0",
+                "ulf REAL DEFAULT 0"):
         try:
             conn.execute(f"ALTER TABLE biometric_metrics ADD COLUMN {col}")
             conn.commit()
@@ -160,25 +368,27 @@ def _save_metric(conn: sqlite3.Connection, rec: dict) -> None:
     now = datetime.now()
     conn.execute(
         "INSERT INTO biometric_metrics "
-        "(ts, ts_date, vti, cbi, rmssd, breath_bpm, bpm, lfhf, vlf, mean_ie) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+        "(ts, ts_date, vti, cbi, rmssd, breath_bpm, bpm, lfhf, vlf, mean_ie, pnn50, sdnn, ulf) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (now.isoformat(), now.strftime("%Y-%m-%d"),
          rec["vti"], rec["cbi"], rec["rmssd"],
-         rec["breath_bpm"], rec["bpm"], rec["lfhf"], rec["vlf"], rec["mean_ie"]),
+         rec["breath_bpm"], rec["bpm"], rec["lfhf"], rec["vlf"], rec["mean_ie"],
+         rec["pnn50"], rec["sdnn"], rec.get("ulf") or 0.0),
     )
     conn.commit()
 
 def _load_today(conn: sqlite3.Connection) -> list[dict]:
     today = datetime.now().strftime("%Y-%m-%d")
     cur = conn.execute(
-        "SELECT ts, vti, cbi, rmssd, breath_bpm, bpm, lfhf, vlf, mean_ie "
+        "SELECT ts, vti, cbi, rmssd, breath_bpm, bpm, lfhf, vlf, mean_ie, pnn50, sdnn, ulf "
         "FROM biometric_metrics WHERE ts_date=? ORDER BY ts",
         (today,),
     )
     return [
         dict(t=row[0][11:16], vti=row[1], cbi=row[2], rmssd=row[3],
              breath_bpm=row[4], bpm=row[5], lfhf=row[6], vlf=row[7] or 0.0,
-             mean_ie=row[8] or 0.0)
+             mean_ie=row[8] or 0.0, pnn50=row[9] or 0.0, sdnn=row[10] or 0.0,
+             ulf=row[11] or 0.0)
         for row in cur.fetchall()
     ]
 
@@ -190,6 +400,10 @@ def _load_week(conn: sqlite3.Connection) -> list[dict]:
                AVG(CASE WHEN rmssd      > 0 THEN rmssd      END),
                AVG(CASE WHEN breath_bpm > 0 THEN breath_bpm END),
                AVG(CASE WHEN lfhf       > 0 THEN lfhf       END),
+               AVG(CASE WHEN pnn50      > 0 THEN pnn50      END),
+               AVG(CASE WHEN sdnn       > 0 THEN sdnn       END),
+               AVG(CASE WHEN bpm        > 0 THEN bpm        END),
+               AVG(CASE WHEN ulf        > 0 THEN ulf        END),
                COUNT(*)
         FROM biometric_metrics
         WHERE ts_date >= date('now','-6 days')
@@ -198,7 +412,7 @@ def _load_week(conn: sqlite3.Connection) -> list[dict]:
     """)
     rows = []
     for r in cur.fetchall():
-        date, vti, cbi, rmssd, breath, lfhf, n = r
+        date, vti, cbi, rmssd, breath, lfhf, pnn50, sdnn, bpm, ulf, n = r
         label = datetime.strptime(date, "%Y-%m-%d").strftime("%a %d")
         rows.append(dict(
             date=date, label=label,
@@ -207,9 +421,67 @@ def _load_week(conn: sqlite3.Connection) -> list[dict]:
             rmssd=round(rmssd,1) if rmssd  else 0,
             breath_bpm=round(breath,1) if breath else 0,
             lfhf=round(lfhf, 2)  if lfhf   else 0,
+            pnn50=round(pnn50,1) if pnn50  else 0,
+            sdnn=round(sdnn, 1)  if sdnn   else 0,
+            bpm=round(bpm, 1)    if bpm    else 0,
+            ulf=round(ulf, 1)    if ulf    else 0,
             n=n,
         ))
     return rows
+
+
+def _save_activity(conn: sqlite3.Connection, rec: dict) -> None:
+    conn.execute(
+        "INSERT INTO activities (ts, ts_date, ts_time, category, name, notes, duration_min, intensity, source) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
+        (rec["ts"], rec["ts_date"], rec["ts_time"], rec["category"], rec["name"],
+         rec.get("notes", ""), rec.get("duration_min", 0), rec.get("intensity", 0),
+         rec.get("source", "manual")),
+    )
+    conn.commit()
+
+
+def _load_activities_today(conn: sqlite3.Connection) -> list[dict]:
+    today = datetime.now().strftime("%Y-%m-%d")
+    cur = conn.execute(
+        "SELECT id, ts, ts_date, ts_time, category, name, notes, duration_min, intensity, source "
+        "FROM activities WHERE ts_date=? ORDER BY ts DESC",
+        (today,),
+    )
+    return [
+        dict(id=r[0], ts=r[1], ts_date=r[2], ts_time=r[3], category=r[4],
+             name=r[5], notes=r[6], duration_min=r[7], intensity=r[8], source=r[9])
+        for r in cur.fetchall()
+    ]
+
+
+def _load_activities_week(conn: sqlite3.Connection) -> list[dict]:
+    cur = conn.execute(
+        "SELECT id, ts, ts_date, ts_time, category, name, notes, duration_min, intensity, source "
+        "FROM activities WHERE ts_date >= date('now','-6 days') ORDER BY ts",
+    )
+    return [
+        dict(id=r[0], ts=r[1], ts_date=r[2], ts_time=r[3], category=r[4],
+             name=r[5], notes=r[6], duration_min=r[7], intensity=r[8], source=r[9])
+        for r in cur.fetchall()
+    ]
+
+
+def _load_activities_14d(conn: sqlite3.Connection) -> list[dict]:
+    cur = conn.execute(
+        "SELECT id, ts, ts_date, ts_time, category, name, notes, duration_min, intensity, source "
+        "FROM activities WHERE ts_date >= date('now','-13 days') ORDER BY ts",
+    )
+    return [
+        dict(id=r[0], ts=r[1], ts_date=r[2], ts_time=r[3], category=r[4],
+             name=r[5], notes=r[6], duration_min=r[7], intensity=r[8], source=r[9])
+        for r in cur.fetchall()
+    ]
+
+
+def _delete_activity(conn: sqlite3.Connection, activity_id: int) -> None:
+    conn.execute("DELETE FROM activities WHERE id=?", (activity_id,))
+    conn.commit()
 
 
 # ── thread-safe data buffer ───────────────────────────────────────────────────
@@ -261,7 +533,10 @@ class MetricsHistory:
     def append(self, vti: float, cbi: float, rmssd: float | None,
                breath_bpm: float | None, bpm: float | None,
                lfhf: float | None, vlf: float | None,
-               mean_ie: float | None = None) -> None:
+               mean_ie: float | None = None,
+               pnn50: float | None = None,
+               sdnn: float | None = None,
+               ulf: float | None = None) -> None:
         with self._lock:
             self._rows.append(dict(
                 t=datetime.now().strftime("%H:%M"),
@@ -273,6 +548,9 @@ class MetricsHistory:
                 lfhf=round(lfhf, 3)             if lfhf       is not None else 0.0,
                 vlf=round(vlf, 2)               if vlf        is not None else 0.0,
                 mean_ie=round(mean_ie, 2)       if mean_ie    is not None else 0.0,
+                pnn50=round(pnn50, 1)           if pnn50      is not None else 0.0,
+                sdnn=round(sdnn, 1)             if sdnn       is not None else 0.0,
+                ulf=round(ulf, 1)               if ulf        is not None else 0.0,
             ))
 
     def preload(self, records: list[dict]) -> None:
@@ -307,6 +585,13 @@ class LivePolarH10(PolarH10):
             self._buf.add_acc(z)
             offset += 2
 
+    def _on_disconnect(self, _client) -> None:
+        """Called by Bleak when the device drops unexpectedly.
+        Wake the keep-alive loop immediately so it can reconnect."""
+        print("Device disconnected — triggering reconnect.", flush=True)
+        _sensor_status["state"] = "disconnected — reconnecting…"
+        _ble_reconnect.set()
+
     def _hr_handler(self, _char, data: bytearray) -> None:
         flags = data[0]
         bpm = int.from_bytes(data[1:3], "little") if (flags & 0x01) else data[1]
@@ -327,7 +612,7 @@ _db_lock       = threading.Lock()            # serialize all SQLite access acros
 _buf.preload_rr(_load_rr_window(_db))        # warm up RR buffer from last session
 _history       = MetricsHistory()
 _history.preload(_load_today(_db))           # restore today's charts across restarts
-_sensor_status = {"state": "searching", "device": "", "since": time.time()}
+_sensor_status = {"state": "searching", "device": "", "since": time.time(), "battery": None}
 
 # ── eye blink detector ────────────────────────────────────────────────────────
 _blink = BlinkDetector()
@@ -337,10 +622,14 @@ _blink_rate_history: deque[dict] = deque(maxlen=2700)  # ≈ 90 min at 2 s caden
 # Live waveforms and gauges still update so you can monitor without recording.
 _measuring: dict = {"active": True}
 
+# Auto-detect state for exercise detection from ACC / HR signals.
+_auto_detect: dict = {"exercise_streak": 0, "pending_exercise_ts": None,
+                      "hr_streak": 0, "pending_hr_ts": None}
+
 # Last KPI values written by the slow callback, read by the fast callback.
 # Avoids running Welch PSD in the 200 ms loop.
 _kpi_cache: dict = {
-    "bpm": "—", "rmssd": "—", "sdnn": "—",
+    "bpm": "—", "rmssd": "—", "sdnn": "—", "pnn50": "—",
     "breath": "—", "regularity": "—", "lfhf": "—",
 }
 
@@ -395,12 +684,22 @@ def _start_ble(buf: DataBuffer) -> None:
                     _sensor_status.update(state="connected",
                                           device=sensor._device_label,
                                           since=time.time())
-                    await sensor.start_streams()
-                    # keep-alive: poll every 0.5 s for a user-requested reconnect
+                    # 15-second hard timeout — catches the post-reconnect PMD hang
+                    await asyncio.wait_for(sensor.start_streams(), timeout=15.0)
+                    # Read battery once after streams are up
+                    _sensor_status["battery"] = await sensor.read_battery()
+                    # keep-alive: poll every 0.5 s; exit on disconnect or user request
                     while not _ble_reconnect.is_set():
                         await asyncio.sleep(0.5)
+                        # Belt-and-suspenders: detect silent drop if callback didn't fire
+                        if sensor._client and not sensor._client.is_connected:
+                            _sensor_status["state"] = "disconnected — reconnecting…"
+                            break
                     _ble_reconnect.clear()
-                    delay = 0   # user-requested → reconnect immediately
+                    delay = 0   # fast reconnect on disconnect or user request
+                except asyncio.TimeoutError:
+                    print("start_streams() timed out — reconnecting", flush=True)
+                    _sensor_status["state"] = "stream start timed out — reconnecting…"
                 except RuntimeError:
                     _sensor_status["state"] = (
                         "not found — check power / Bluetooth permission, retrying…"
@@ -408,9 +707,15 @@ def _start_ble(buf: DataBuffer) -> None:
                 except Exception as exc:
                     _sensor_status["state"] = f"error: {str(exc)[:60]} — retrying…"
                 finally:
+                    _sensor_status["battery"] = None
+                    # Hard 5-second timeouts on teardown — prevents the loop from
+                    # hanging indefinitely if Bleak blocks writing to a dead device.
                     try:
-                        await sensor.stop_streams()
-                        await sensor.disconnect()
+                        await asyncio.wait_for(sensor.stop_streams(), timeout=5.0)
+                    except Exception:
+                        pass
+                    try:
+                        await asyncio.wait_for(sensor.disconnect(), timeout=5.0)
                     except Exception:
                         pass
 
@@ -423,6 +728,15 @@ def _start_ble(buf: DataBuffer) -> None:
 # ── Dash app ──────────────────────────────────────────────────────────────────
 app = dash.Dash(__name__, title="Just Breathe")
 app.server.config["SECRET_KEY"] = "just-breathe"
+
+
+@app.server.after_request
+def _no_cache_dash_internal(response):
+    """Prevent browser from caching Dash's callback map so stale signatures never persist."""
+    if _flask_req.path in ("/_dash-dependencies", "/_dash-layout"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+    return response
 
 
 # ── reusable component builders ───────────────────────────────────────────────
@@ -956,6 +1270,102 @@ def _range_label(minutes: int) -> str:
     return f"{minutes // 60} h" if minutes >= 60 else f"{minutes} min"
 
 
+def _add_activity_overlays(fig: go.Figure, activities: list[dict]) -> go.Figure:
+    """Add dotted vertical lines for each logged activity onto a time-series figure."""
+    for act in activities:
+        cat_info = _ACTIVITY_CATS.get(act["category"], _ACTIVITY_CATS["other"])
+        color = cat_info["color"]
+        icon  = cat_info["icon"]
+        fig.add_vline(
+            x=act["ts_time"],
+            line_dash="dot", line_color=color, line_width=1.5, opacity=0.6,
+            annotation_text=f"{icon} {act['name'][:10]}",
+            annotation_position="top left",
+            annotation_font=dict(size=8, color=color),
+        )
+    return fig
+
+
+def _activity_timeline_fig(activities: list[dict], records: list[dict]) -> go.Figure:
+    """Swim-lane activity markers with VTI overlay on secondary y-axis."""
+    fig = go.Figure()
+
+    if not activities and not records:
+        fig.update_layout(
+            **_PLOT_LAYOUT,
+            title=dict(text="Activity Timeline", font=dict(color=C_DIM, size=12), x=0.01),
+        )
+        fig.add_annotation(text="no activities logged yet", x=0.5, y=0.5,
+                           showarrow=False, xref="paper", yref="paper",
+                           font=dict(color=C_DIM, size=13))
+        return fig
+
+    # Primary y-axis: swim lanes per category
+    cats_present = list(dict.fromkeys(a["category"] for a in activities))
+    cat_y = {cat: i for i, cat in enumerate(cats_present)}
+
+    for cat in cats_present:
+        acts = [a for a in activities if a["category"] == cat]
+        info = _ACTIVITY_CATS.get(cat, _ACTIVITY_CATS["other"])
+        fig.add_trace(go.Scatter(
+            x=[a["ts_time"] for a in acts],
+            y=[cat_y[cat]] * len(acts),
+            mode="markers+text",
+            marker=dict(size=14, color=info["color"], symbol="circle",
+                        line=dict(color=C_CARD, width=1)),
+            text=[f"{info['icon']} {a['name'][:8]}" for a in acts],
+            textposition="top center",
+            textfont=dict(size=8, color=info["color"]),
+            name=f"{info['icon']} {cat}",
+            hovertemplate="<b>%{text}</b><br>%{x}<extra></extra>",
+            yaxis="y",
+        ))
+
+    # Secondary y-axis: VTI trend
+    if records:
+        buckets: dict[str, list] = {}
+        for r in records:
+            v = r.get("vti", 0)
+            if v > 0:
+                t = r["t"]
+                buckets.setdefault(t, []).append(v)
+        if buckets:
+            vts = list(buckets.keys())
+            vvals = [float(np.mean(v)) for v in buckets.values()]
+            fig.add_trace(go.Scatter(
+                x=vts, y=vvals, mode="lines",
+                line=dict(color=C_VTI, width=1.5, dash="solid"),
+                name="VTI", yaxis="y2",
+                hovertemplate="VTI %{y:.2f}<extra></extra>",
+                opacity=0.7,
+            ))
+
+    fig.update_layout(
+        **_PLOT_LAYOUT,
+        uirevision="activity-timeline",
+        title=dict(text="Activity Timeline  ·  today", font=dict(color=C_DIM, size=12), x=0.01),
+        xaxis=_ax("time"),
+        yaxis=dict(
+            tickmode="array",
+            tickvals=list(cat_y.values()),
+            ticktext=[f"{_ACTIVITY_CATS.get(c, _ACTIVITY_CATS['other'])['icon']} {c}"
+                      for c in cats_present],
+            showgrid=True, gridcolor=C_BORDER, zeroline=False,
+            tickfont=dict(color=C_DIM, size=10),
+        ),
+        yaxis2=dict(
+            overlaying="y", side="right",
+            title="VTI", showgrid=False,
+            tickfont=dict(color=C_VTI, size=9),
+            zeroline=False,
+        ),
+        legend=dict(font=dict(size=9, color=C_DIM), bgcolor="rgba(0,0,0,0)",
+                    orientation="h", y=-0.2),
+        showlegend=True,
+    )
+    return fig
+
+
 def _rbtn_style(active: bool, color: str) -> dict:
     return {
         "backgroundColor": color if active else "transparent",
@@ -972,13 +1382,17 @@ def _rbtn_style(active: bool, color: str) -> dict:
 
 
 def _range_btn_group(store_id: str, b60: str, b120: str, b720: str,
-                     color: str) -> html.Div:
-    return html.Div([
+                     color: str, metric: str | None = None,
+                     section: str = "live") -> html.Div:
+    children = [
         dcc.Store(id=store_id, data="60"),
         html.Button("60 m", id=b60,  n_clicks=0, style=_rbtn_style(True,  color)),
         html.Button("2 h",  id=b120, n_clicks=0, style=_rbtn_style(False, color)),
         html.Button("12 h", id=b720, n_clicks=0, style=_rbtn_style(False, color)),
-    ], style={"display": "flex", "gap": "4px"})
+    ]
+    if metric:
+        children.append(_info_btn(metric, section))
+    return html.Div(children, style={"display": "flex", "gap": "4px"})
 
 
 def _vti_live_fig(records: list[dict], minutes: int = 60) -> go.Figure:
@@ -1096,9 +1510,210 @@ def _lfhf_trend(records: list[dict]) -> go.Figure:
     return fig
 
 
-def _vlf_live_fig(records: list[dict]) -> go.Figure:
-    """VLF power line chart — last 60 min, 1-minute averages, with reference guidelines."""
-    window = records[-1800:] if len(records) > 1800 else records
+def _vlf_trend(records: list[dict]) -> go.Figure:
+    fig = _trend_fig(records, "vlf", "VLF Power  (0.003–0.04 Hz)", C_VLF, "ms²")
+    fig.add_hline(y=500, line_dash="dash", line_color=C_GOOD, line_width=1,
+                  annotation_text="good  ≥ 500", annotation_position="bottom right")
+    fig.add_hline(y=100, line_dash="dash", line_color=C_BAD, line_width=1,
+                  annotation_text="low  < 100", annotation_position="top right")
+    return fig
+
+
+def _ulf_trend(records: list[dict]) -> go.Figure:
+    fig = _trend_fig(records, "ulf", "ULF Power  (< 0.003 Hz)  ·  needs ≥ 30 min", C_ULF, "ms²")
+    fig.add_hline(y=800, line_dash="dash", line_color=C_GOOD, line_width=1,
+                  annotation_text="good  ≥ 800", annotation_position="bottom right")
+    fig.add_hline(y=200, line_dash="dash", line_color=C_BAD, line_width=1,
+                  annotation_text="low  < 200", annotation_position="top right")
+    return fig
+
+
+def _sdnn_zones(fig: go.Figure) -> go.Figure:
+    """Overlay low / moderate / good / strong HRV bands onto an SDNN figure."""
+    fig.add_hrect(y0=0,   y1=20,  fillcolor="rgba(248,81,73,0.10)",  line_width=0,
+                  annotation_text="low",      annotation_position="top left",
+                  annotation_font=dict(color=C_BAD,  size=10))
+    fig.add_hrect(y0=20,  y1=50,  fillcolor="rgba(210,153,34,0.10)", line_width=0,
+                  annotation_text="moderate", annotation_position="top left",
+                  annotation_font=dict(color=C_WARN, size=10))
+    fig.add_hrect(y0=50,  y1=100, fillcolor="rgba(63,185,80,0.07)",  line_width=0,
+                  annotation_text="good",     annotation_position="top left",
+                  annotation_font=dict(color=C_GOOD, size=10))
+    fig.add_hrect(y0=100, y1=220, fillcolor="rgba(63,185,80,0.14)",  line_width=0,
+                  annotation_text="strong",   annotation_position="top left",
+                  annotation_font=dict(color=C_GOOD, size=10))
+    fig.add_hline(y=20,  line_dash="dash", line_color=C_BAD,  line_width=1)
+    fig.add_hline(y=50,  line_dash="dash", line_color=C_WARN, line_width=1)
+    fig.add_hline(y=100, line_dash="dash", line_color=C_GOOD, line_width=1)
+    return fig
+
+
+def _pnn50_zones(fig: go.Figure) -> go.Figure:
+    """Overlay low / moderate / good / strong parasympathetic bands onto a pNN50 figure."""
+    fig.add_hrect(y0=0,  y1=3,   fillcolor="rgba(248,81,73,0.10)",  line_width=0,
+                  annotation_text="low",      annotation_position="top left",
+                  annotation_font=dict(color=C_BAD,  size=10))
+    fig.add_hrect(y0=3,  y1=10,  fillcolor="rgba(210,153,34,0.10)", line_width=0,
+                  annotation_text="moderate", annotation_position="top left",
+                  annotation_font=dict(color=C_WARN, size=10))
+    fig.add_hrect(y0=10, y1=25,  fillcolor="rgba(63,185,80,0.07)",  line_width=0,
+                  annotation_text="good",     annotation_position="top left",
+                  annotation_font=dict(color=C_GOOD, size=10))
+    fig.add_hrect(y0=25, y1=105, fillcolor="rgba(63,185,80,0.14)",  line_width=0,
+                  annotation_text="strong",   annotation_position="top left",
+                  annotation_font=dict(color=C_GOOD, size=10))
+    fig.add_hline(y=3,  line_dash="dash", line_color=C_BAD,  line_width=1)
+    fig.add_hline(y=10, line_dash="dash", line_color=C_WARN, line_width=1)
+    fig.add_hline(y=25, line_dash="dash", line_color=C_GOOD, line_width=1)
+    return fig
+
+
+def _hrv_live_fig(records: list[dict], key: str, title: str,
+                  color: str, unit: str, minutes: int,
+                  zone_fn) -> go.Figure:
+    """Generic live HRV trend with configurable zone overlay."""
+    n = minutes * 30
+    window = records[-n:] if len(records) > n else records
+    if not window:
+        return zone_fn(_empty_fig(title))
+    buckets: dict[str, list] = {}
+    for r in window:
+        v = r.get(key, 0)
+        if v > 0:
+            t = r["t"]
+            if t not in buckets:
+                buckets[t] = []
+            buckets[t].append(v)
+    if not buckets:
+        return zone_fn(_empty_fig(title))
+    ts   = list(buckets.keys())
+    vals = [float(np.mean(v)) for v in buckets.values()]
+    fig = go.Figure(go.Scatter(
+        x=ts, y=vals, mode="lines+markers",
+        line=dict(color=color, width=2),
+        marker=dict(size=3, color=color),
+        hovertemplate=f"%{{x}}  {key.upper()} %{{y:.1f}} {unit}<extra></extra>",
+    ))
+    fig.update_layout(
+        **_PLOT_LAYOUT,
+        uirevision=f"{key}-live-{minutes}",
+        title=dict(text=f"{title}  ·  last {_range_label(minutes)}  ·  1 min avg",
+                   font=dict(color=color, size=12), x=0.01),
+        xaxis=_ax("time"),
+        yaxis=_ax(unit, rangemode="tozero"),
+    )
+    return zone_fn(fig)
+
+
+def _sdnn_live_fig(records: list[dict], minutes: int = 60) -> go.Figure:
+    return _hrv_live_fig(records, "sdnn",  "SDNN",  C_SDNN,  "ms", minutes, _sdnn_zones)
+
+
+def _pnn50_live_fig(records: list[dict], minutes: int = 60) -> go.Figure:
+    return _hrv_live_fig(records, "pnn50", "pNN50", C_PNN50, "%",  minutes, _pnn50_zones)
+
+
+def _rmssd_zones(fig: go.Figure) -> go.Figure:
+    """Overlay low / moderate / good / strong parasympathetic bands onto an RMSSD figure."""
+    fig.add_hrect(y0=0,   y1=20,  fillcolor="rgba(248,81,73,0.10)",  line_width=0,
+                  annotation_text="low",      annotation_position="top left",
+                  annotation_font=dict(color=C_BAD,  size=10))
+    fig.add_hrect(y0=20,  y1=50,  fillcolor="rgba(210,153,34,0.10)", line_width=0,
+                  annotation_text="moderate", annotation_position="top left",
+                  annotation_font=dict(color=C_WARN, size=10))
+    fig.add_hrect(y0=50,  y1=100, fillcolor="rgba(63,185,80,0.07)",  line_width=0,
+                  annotation_text="good",     annotation_position="top left",
+                  annotation_font=dict(color=C_GOOD, size=10))
+    fig.add_hrect(y0=100, y1=250, fillcolor="rgba(63,185,80,0.14)",  line_width=0,
+                  annotation_text="strong",   annotation_position="top left",
+                  annotation_font=dict(color=C_GOOD, size=10))
+    fig.add_hline(y=20,  line_dash="dash", line_color=C_BAD,  line_width=1)
+    fig.add_hline(y=50,  line_dash="dash", line_color=C_WARN, line_width=1)
+    fig.add_hline(y=100, line_dash="dash", line_color=C_GOOD, line_width=1)
+    return fig
+
+
+def _rmssd_live_fig(records: list[dict], minutes: int = 60) -> go.Figure:
+    return _hrv_live_fig(records, "rmssd", "RMSSD  (parasympathetic activity)",
+                         C_ACC, "ms", minutes, _rmssd_zones)
+
+
+def _sdnn_trend(records: list[dict]) -> go.Figure:
+    fig = _trend_fig(records, "sdnn", "SDNN  (overall HRV)", C_SDNN, "ms")
+    fig.update_layout(yaxis=dict(rangemode="tozero"))
+    return _sdnn_zones(fig)
+
+
+def _pnn50_trend(records: list[dict]) -> go.Figure:
+    fig = _trend_fig(records, "pnn50", "pNN50  (parasympathetic activity)", C_PNN50, "%")
+    fig.update_layout(yaxis=dict(rangemode="tozero"))
+    return _pnn50_zones(fig)
+
+
+def _hr_zones(fig: go.Figure) -> go.Figure:
+    """Overlay bradycardia / normal / elevated / high HR bands."""
+    fig.add_hrect(y0=0,   y1=60,  fillcolor="rgba(88,166,255,0.08)",  line_width=0,
+                  annotation_text="low",      annotation_position="top left",
+                  annotation_font=dict(color=C_RR,   size=10))
+    fig.add_hrect(y0=60,  y1=100, fillcolor="rgba(63,185,80,0.07)",   line_width=0,
+                  annotation_text="normal",   annotation_position="top left",
+                  annotation_font=dict(color=C_GOOD, size=10))
+    fig.add_hrect(y0=100, y1=140, fillcolor="rgba(210,153,34,0.10)",  line_width=0,
+                  annotation_text="elevated", annotation_position="top left",
+                  annotation_font=dict(color=C_WARN, size=10))
+    fig.add_hrect(y0=140, y1=220, fillcolor="rgba(248,81,73,0.10)",   line_width=0,
+                  annotation_text="high",     annotation_position="top left",
+                  annotation_font=dict(color=C_BAD,  size=10))
+    fig.add_hline(y=60,  line_dash="dash", line_color=C_RR,   line_width=1)
+    fig.add_hline(y=100, line_dash="dash", line_color=C_WARN, line_width=1)
+    fig.add_hline(y=140, line_dash="dash", line_color=C_BAD,  line_width=1)
+    return fig
+
+
+def _hr_live_fig(records: list[dict], minutes: int = 60) -> go.Figure:
+    """Heart rate live trend with zone bands — configurable window, 1-min avg."""
+    n = minutes * 30
+    window = records[-n:] if len(records) > n else records
+    if not window:
+        return _hr_zones(_empty_fig("Heart Rate  (bpm)"))
+    buckets: dict[str, list] = {}
+    for r in window:
+        v = r.get("bpm", 0)
+        if v > 0:
+            t = r["t"]
+            if t not in buckets:
+                buckets[t] = []
+            buckets[t].append(v)
+    if not buckets:
+        return _hr_zones(_empty_fig("Heart Rate  (bpm)"))
+    ts   = list(buckets.keys())
+    vals = [float(np.mean(v)) for v in buckets.values()]
+    fig = go.Figure(go.Scatter(
+        x=ts, y=vals, mode="lines+markers",
+        line=dict(color=C_ECG, width=2),
+        marker=dict(size=3, color=C_ECG),
+        hovertemplate="%{x}  %{y:.0f} bpm<extra></extra>",
+    ))
+    fig.update_layout(
+        **_PLOT_LAYOUT,
+        uirevision=f"hr-live-{minutes}",
+        title=dict(text=f"Heart Rate  ·  last {_range_label(minutes)}  ·  1 min avg",
+                   font=dict(color=C_ECG, size=12), x=0.01),
+        xaxis=_ax("time"),
+        yaxis=_ax("bpm", rangemode="tozero"),
+    )
+    return _hr_zones(fig)
+
+
+def _hr_trend(records: list[dict]) -> go.Figure:
+    fig = _trend_fig(records, "bpm", "Heart Rate", C_ECG, "bpm")
+    return _hr_zones(fig)
+
+
+def _vlf_live_fig(records: list[dict], minutes: int = 60) -> go.Figure:
+    """VLF power line chart — configurable window, 1-min averages, 24 h mean line."""
+    n = minutes * 30
+    window = records[-n:] if len(records) > n else records
     if not window:
         return _empty_fig("VLF Power  (0.003–0.04 Hz)")
 
@@ -1117,24 +1732,90 @@ def _vlf_live_fig(records: list[dict]) -> go.Figure:
     ts   = list(buckets.keys())
     vals = [float(np.mean(v)) for v in buckets.values()]
 
+    # 24 h mean — computed from ALL today's records, not just the window
+    all_vlf = [r.get("vlf", 0) for r in records if r.get("vlf", 0) > 0]
+    mean_24h = float(np.mean(all_vlf)) if all_vlf else None
+
     fig = go.Figure(go.Scatter(
         x=ts, y=vals, mode="lines+markers",
         line=dict(color=C_VLF, width=1.5),
         marker=dict(size=3, color=C_VLF),
         hovertemplate="%{x}  VLF %{y:.1f} ms²<extra></extra>",
     ))
-    # Guidelines: good ≥ 500 ms², low < 100 ms²
+    # Reference lines
     fig.add_hline(y=500, line_dash="dash", line_color=C_GOOD, line_width=1,
                   annotation_text="good  ≥ 500",
                   annotation_position="bottom right")
     fig.add_hline(y=100, line_dash="dash", line_color=C_BAD, line_width=1,
                   annotation_text="low  < 100",
                   annotation_position="top right")
+    # 24 h mean
+    if mean_24h is not None:
+        fig.add_hline(y=mean_24h, line_dash="dot", line_color=C_DIM, line_width=1.5,
+                      annotation_text=f"24 h mean  {mean_24h:.0f}",
+                      annotation_position="top left",
+                      annotation_font=dict(color=C_DIM, size=10))
     fig.update_layout(
         **_PLOT_LAYOUT,
-        uirevision="vlf-live",
-        title=dict(text="VLF Power  (0.003–0.04 Hz)  — last 60 min  ·  1 min avg",
+        uirevision=f"vlf-live-{minutes}",
+        title=dict(text=f"VLF Power  (0.003–0.04 Hz)  ·  last {_range_label(minutes)}  ·  1 min avg",
                    font=dict(color=C_VLF, size=12), x=0.01),
+        xaxis=_ax("time"),
+        yaxis=_ax("ms²", rangemode="tozero"),
+    )
+    return fig
+
+
+def _ulf_live_fig(records: list[dict], minutes: int = 60) -> go.Figure:
+    """ULF power line chart — configurable window, 1-min averages, 24 h mean line."""
+    n = minutes * 30
+    window = records[-n:] if len(records) > n else records
+    if not window:
+        return _empty_fig("ULF Power  (< 0.003 Hz)  ·  needs ≥ 30 min data")
+
+    buckets: dict[str, list] = {}
+    for r in window:
+        v = r.get("ulf", 0)
+        if v > 0:
+            key = r["t"]
+            if key not in buckets:
+                buckets[key] = []
+            buckets[key].append(v)
+
+    if not buckets:
+        return _empty_fig("ULF Power  (< 0.003 Hz)  ·  needs ≥ 30 min data")
+
+    ts   = list(buckets.keys())
+    vals = [float(np.mean(v)) for v in buckets.values()]
+
+    # 24 h mean — computed from ALL today's records, not just the window
+    all_ulf = [r.get("ulf", 0) for r in records if r.get("ulf", 0) > 0]
+    mean_24h = float(np.mean(all_ulf)) if all_ulf else None
+
+    fig = go.Figure(go.Scatter(
+        x=ts, y=vals, mode="lines+markers",
+        line=dict(color=C_ULF, width=1.5),
+        marker=dict(size=3, color=C_ULF),
+        hovertemplate="%{x}  ULF %{y:.1f} ms²<extra></extra>",
+    ))
+    # Physiological guidelines
+    fig.add_hline(y=800, line_dash="dash", line_color=C_GOOD, line_width=1,
+                  annotation_text="good  ≥ 800",
+                  annotation_position="bottom right")
+    fig.add_hline(y=200, line_dash="dash", line_color=C_BAD, line_width=1,
+                  annotation_text="low  < 200",
+                  annotation_position="top right")
+    # 24 h mean
+    if mean_24h is not None:
+        fig.add_hline(y=mean_24h, line_dash="dot", line_color=C_DIM, line_width=1.5,
+                      annotation_text=f"24 h mean  {mean_24h:.0f}",
+                      annotation_position="top left",
+                      annotation_font=dict(color=C_DIM, size=10))
+    fig.update_layout(
+        **_PLOT_LAYOUT,
+        uirevision=f"ulf-live-{minutes}",
+        title=dict(text=f"ULF Power  (< 0.003 Hz)  ·  last {_range_label(minutes)}  ·  1 min avg",
+                   font=dict(color=C_ULF, size=12), x=0.01),
         xaxis=_ax("time"),
         yaxis=_ax("ms²", rangemode="tozero"),
     )
@@ -1172,7 +1853,11 @@ app.layout = html.Div([
     dcc.Interval(id="tick-today", interval=5000, n_intervals=0),
     dcc.Interval(id="tick-scan",   interval=500,   n_intervals=0, disabled=True),
     dcc.Interval(id="tick-minute", interval=1000,  n_intervals=0),
-    dcc.Store(id="measure-store", data="recording"),
+    dcc.Store(id="measure-store",     data="recording"),
+    dcc.Store(id="eye-track-store",   data="on"),
+    dcc.Store(id="info-modal-key",    data=None),
+    dcc.Store(id="log-cat-store",     data=None),
+    dcc.Store(id="log-refresh-store", data=0),
 
     # ── Navigation bar ────────────────────────────────────────────────────────
     html.Div([
@@ -1194,6 +1879,8 @@ app.layout = html.Div([
                         style=_nav_pill(False)),
             html.Button("WEEK",  id="nav-week",  n_clicks=0,
                         style=_nav_pill(False)),
+            html.Button("LOG",   id="nav-log",   n_clicks=0,
+                        style=_nav_pill(False)),
         ], style={"display": "flex", "gap": "4px",
                   "backgroundColor": C_BORDER,
                   "borderRadius": "20px", "padding": "4px"}),
@@ -1202,6 +1889,8 @@ app.layout = html.Div([
         html.Div([
             html.Span(id="status-label", children="Searching for Polar H10…",
                       style={"color": C_DIM, "fontSize": "12px"}),
+            html.Span(id="battery-label", children="",
+                      style={"fontSize": "12px", "marginLeft": "6px"}),
             html.Span("  ·  ", style={"color": C_BORDER}),
             html.Span(id="timer-label", children="00:00",
                       style={"color": C_DIM, "fontSize": "12px",
@@ -1212,6 +1901,34 @@ app.layout = html.Div([
                             "backgroundColor": "transparent",
                             "color": C_BAD,
                             "border": f"1px solid {C_BAD}",
+                            "borderRadius": "12px",
+                            "padding": "4px 14px",
+                            "fontSize": "10px",
+                            "fontWeight": "700",
+                            "letterSpacing": "1px",
+                            "cursor": "pointer",
+                            "fontFamily": "'JetBrains Mono', monospace",
+                        }),
+            html.Span("  ·  ", style={"color": C_BORDER}),
+            html.Button("👁 STOP EYE", id="btn-eye-toggle", n_clicks=0,
+                        style={
+                            "backgroundColor": "transparent",
+                            "color": C_BLINK,
+                            "border": f"1px solid {C_BLINK}",
+                            "borderRadius": "12px",
+                            "padding": "4px 14px",
+                            "fontSize": "10px",
+                            "fontWeight": "700",
+                            "letterSpacing": "1px",
+                            "cursor": "pointer",
+                            "fontFamily": "'JetBrains Mono', monospace",
+                        }),
+            html.Span("  ·  ", style={"color": C_BORDER}),
+            html.Button("↺ RECONNECT", id="btn-reconnect", n_clicks=0,
+                        style={
+                            "backgroundColor": "transparent",
+                            "color": C_WARN,
+                            "border": f"1px solid {C_WARN}",
                             "borderRadius": "12px",
                             "padding": "4px 14px",
                             "fontSize": "10px",
@@ -1340,34 +2057,47 @@ app.layout = html.Div([
 
         # Row 1 — KPI chips
         html.Div([
-            _kpi_card("kpi-bpm",    "Heart Rate",  C_ECG,    "bpm"),
-            _kpi_card("kpi-rmssd",  "RMSSD",       C_ACC,    "ms"),
-            _kpi_card("kpi-sdnn",   "SDNN",        C_RR,     "ms"),
-            _kpi_card("kpi-breath", "Breathing",   C_PSD_HF, "br/m"),
-            _kpi_card("kpi-regularity", "Regularity", C_COH,   ""),
-            _kpi_card("kpi-lfhf",   "LF / HF",     C_CBI,    ""),
-        ], style={"display": "grid", "gridTemplateColumns": "repeat(6, 1fr)",
+            _kpi_card("kpi-bpm",       "Heart Rate",  C_ECG,    "bpm"),
+            _kpi_card("kpi-rmssd",     "RMSSD",       C_ACC,    "ms"),
+            _kpi_card("kpi-sdnn",      "SDNN",        C_SDNN,   "ms"),
+            _kpi_card("kpi-pnn50",     "pNN50",       C_PNN50,  "%"),
+            _kpi_card("kpi-breath",    "Breathing",   C_PSD_HF, "br/m"),
+            _kpi_card("kpi-regularity","Regularity",  C_COH,    ""),
+            _kpi_card("kpi-lfhf",      "LF / HF",     C_CBI,    ""),
+        ], style={"display": "grid", "gridTemplateColumns": "repeat(7, 1fr)",
                   "gap": "10px", "marginBottom": "10px"}),
 
         # Row 2 — raw waveforms
         html.Div([
-            html.Div(dcc.Graph(id="ecg-graph", style={"height": "220px"},
-                               config={"displayModeBar": False}), style=_CARD),
-            html.Div(dcc.Graph(id="acc-graph", style={"height": "220px"},
-                               config={"displayModeBar": False}), style=_CARD),
+            html.Div([
+                html.Div([_info_btn("ecg")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="ecg-graph", style={"height": "200px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
+            html.Div([
+                html.Div([_info_btn("acc")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="acc-graph", style={"height": "200px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
         ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr",
                   "gap": "10px", "marginBottom": "10px"}),
 
         # Row 3 — derived signals + LF/HF live trend
         html.Div([
-            html.Div(dcc.Graph(id="rr-graph",       style={"height": "220px"},
-                               config={"displayModeBar": False}), style=_CARD),
-            html.Div(dcc.Graph(id="psd-graph",      style={"height": "220px"},
-                               config={"displayModeBar": False}), style=_CARD),
+            html.Div([
+                html.Div([_info_btn("rr")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="rr-graph", style={"height": "200px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
+            html.Div([
+                html.Div([_info_btn("psd")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="psd-graph", style={"height": "200px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
             html.Div([
                 html.Div(_range_btn_group("lfhf-range-store",
                                          "lfhf-btn-60", "lfhf-btn-120", "lfhf-btn-720",
-                                         C_LFHF),
+                                         C_LFHF, metric="lfhf"),
                          style={"display": "flex", "justifyContent": "flex-end",
                                 "marginBottom": "4px"}),
                 dcc.Graph(id="lfhf-live-graph", style={"height": "200px"},
@@ -1376,12 +2106,31 @@ app.layout = html.Div([
         ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 1fr",
                   "gap": "10px", "marginBottom": "10px"}),
 
-        # Row 4 — coherence + VLF + extended metrics
+        # Row 4 — coherence + VLF + ULF + extended metrics
         html.Div([
-            html.Div(dcc.Graph(id="coh-graph", style={"height": "200px"},
-                               config={"displayModeBar": False}), style=_CARD),
-            html.Div(dcc.Graph(id="vlf-live-graph", style={"height": "200px"},
-                               config={"displayModeBar": False}), style=_CARD),
+            html.Div([
+                html.Div([_info_btn("coh")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="coh-graph", style={"height": "180px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
+            html.Div([
+                html.Div(_range_btn_group("vlf-range-store",
+                                         "vlf-btn-60", "vlf-btn-120", "vlf-btn-720",
+                                         C_VLF, metric="vlf"),
+                         style={"display": "flex", "justifyContent": "flex-end",
+                                "marginBottom": "4px"}),
+                dcc.Graph(id="vlf-live-graph", style={"height": "170px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
+            html.Div([
+                html.Div(_range_btn_group("ulf-range-store",
+                                         "ulf-btn-60", "ulf-btn-120", "ulf-btn-720",
+                                         C_ULF, metric="ulf"),
+                         style={"display": "flex", "justifyContent": "flex-end",
+                                "marginBottom": "4px"}),
+                dcc.Graph(id="ulf-live-graph", style={"height": "170px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
             html.Div([
                 html.Div("Extended Metrics",
                          style={"color": C_DIM, "fontSize": "11px",
@@ -1392,15 +2141,21 @@ app.layout = html.Div([
                                 "fontSize": "12px", "color": C_TEXT, "lineHeight": "1.8",
                                 "whiteSpace": "pre-wrap", "margin": "0"}),
             ], style=_CARD),
-        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 1fr",
+        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 1fr 1fr",
                   "gap": "10px", "marginBottom": "10px"}),
 
         # Row 5 — Breathing phases (waveform + I:E bar chart)
         html.Div([
-            html.Div(dcc.Graph(id="breath-wave-graph", style={"height": "220px"},
-                               config={"displayModeBar": False}), style=_CARD),
-            html.Div(dcc.Graph(id="ie-ratio-graph", style={"height": "220px"},
-                               config={"displayModeBar": False}), style=_CARD),
+            html.Div([
+                html.Div([_info_btn("breath_wave")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="breath-wave-graph", style={"height": "200px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
+            html.Div([
+                html.Div([_info_btn("ie_ratio")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="ie-ratio-graph", style={"height": "200px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
         ], style={"display": "grid", "gridTemplateColumns": "2fr 1fr",
                   "gap": "10px", "marginBottom": "10px"}),
 
@@ -1408,25 +2163,83 @@ app.layout = html.Div([
         html.Div([
             html.Div(_range_btn_group("ie-range-store",
                                      "ie-btn-60", "ie-btn-120", "ie-btn-720",
-                                     C_ACC),
+                                     C_ACC, metric="ie_trend"),
                      style={"display": "flex", "justifyContent": "flex-end",
                             "marginBottom": "4px"}),
             dcc.Graph(id="ie-trend-graph", style={"height": "185px"},
                       config={"displayModeBar": False}),
         ], style={**_CARD, "marginBottom": "10px"}),
 
-        # Row 7 — VTI live trend (full width)
+        # Row 7 — VTI (ln RMSSD) + RMSSD live trends (side by side)
         html.Div([
-            html.Div(_range_btn_group("vti-range-store",
-                                     "vti-btn-60", "vti-btn-120", "vti-btn-720",
-                                     C_VTI),
-                     style={"display": "flex", "justifyContent": "flex-end",
-                            "marginBottom": "4px"}),
-            dcc.Graph(id="vti-live-graph", style={"height": "220px"},
+            html.Div([
+                html.Div(_range_btn_group("vti-range-store",
+                                         "vti-btn-60", "vti-btn-120", "vti-btn-720",
+                                         C_VTI, metric="vti"),
+                         style={"display": "flex", "justifyContent": "flex-end",
+                                "marginBottom": "4px"}),
+                dcc.Graph(id="vti-live-graph", style={"height": "220px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
+            html.Div([
+                html.Div([
+                    dcc.Store(id="rmssd-range-store", data="60"),
+                    html.Button("60 m", id="rmssd-btn-60",   n_clicks=0,
+                                style=_rbtn_style(True,  C_ACC)),
+                    html.Button("2 h",  id="rmssd-btn-120",  n_clicks=0,
+                                style=_rbtn_style(False, C_ACC)),
+                    html.Button("24 h", id="rmssd-btn-1440", n_clicks=0,
+                                style=_rbtn_style(False, C_ACC)),
+                    _info_btn("rmssd"),
+                ], style={"display": "flex", "gap": "4px",
+                          "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="rmssd-live-graph", style={"height": "220px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
+        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr",
+                  "gap": "10px", "marginBottom": "10px"}),
+
+        # Row 8 — SDNN + pNN50 live trends (side by side)
+        html.Div([
+            html.Div([
+                html.Div(_range_btn_group("sdnn-range-store",
+                                         "sdnn-btn-60", "sdnn-btn-120", "sdnn-btn-720",
+                                         C_SDNN, metric="sdnn"),
+                         style={"display": "flex", "justifyContent": "flex-end",
+                                "marginBottom": "4px"}),
+                dcc.Graph(id="sdnn-live-graph", style={"height": "200px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
+            html.Div([
+                html.Div(_range_btn_group("pnn50-range-store",
+                                         "pnn50-btn-60", "pnn50-btn-120", "pnn50-btn-720",
+                                         C_PNN50, metric="pnn50"),
+                         style={"display": "flex", "justifyContent": "flex-end",
+                                "marginBottom": "4px"}),
+                dcc.Graph(id="pnn50-live-graph", style={"height": "200px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
+        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr",
+                  "gap": "10px", "marginBottom": "10px"}),
+
+        # Row 9 — Heart Rate live trend (full width)
+        html.Div([
+            html.Div([
+                dcc.Store(id="hr-range-store", data="60"),
+                html.Button("60 m", id="hr-btn-60",   n_clicks=0,
+                            style=_rbtn_style(True,  C_ECG)),
+                html.Button("2 h",  id="hr-btn-120",  n_clicks=0,
+                            style=_rbtn_style(False, C_ECG)),
+                html.Button("24 h", id="hr-btn-1440", n_clicks=0,
+                            style=_rbtn_style(False, C_ECG)),
+                _info_btn("hr"),
+            ], style={"display": "flex", "gap": "4px",
+                      "justifyContent": "flex-end", "marginBottom": "4px"}),
+            dcc.Graph(id="hr-live-graph", style={"height": "200px"},
                       config={"displayModeBar": False}),
         ], style={**_CARD, "marginBottom": "10px"}),
 
-        # Row 8 — index gauges
+        # Row 10 — index gauges (CBI + VTI)
         html.Div([
             html.Div([
                 html.Div("Conscious Breathing Index",
@@ -1435,7 +2248,8 @@ app.layout = html.Div([
                                 "marginBottom": "2px"}),
                 html.Div("Peak coherence 35% · regularity 25% · frequency 25% · RMSSD 15%",
                          style={"color": C_DIM, "fontSize": "10px", "marginBottom": "4px"}),
-                dcc.Graph(id="cbi-gauge", style={"height": "200px"},
+                html.Div([_info_btn("cbi")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="cbi-gauge", style={"height": "180px"},
                           config={"displayModeBar": False}),
             ], style=_CARD),
             html.Div([
@@ -1445,13 +2259,13 @@ app.layout = html.Div([
                                 "marginBottom": "2px"}),
                 html.Div("Parasympathetic nervous system activity · >3.5 = good · <2.5 = low",
                          style={"color": C_DIM, "fontSize": "10px", "marginBottom": "4px"}),
-                dcc.Graph(id="vti-gauge", style={"height": "200px"},
+                dcc.Graph(id="vti-gauge", style={"height": "180px"},
                           config={"displayModeBar": False}),
             ], style=_CARD),
         ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "10px"}),
 
         # ── Eye Blink Monitoring ──────────────────────────────────────────────
-        html.Div([
+        html.Div(id="eye-section-wrapper", children=[html.Div([
 
             # Sub-header
             html.Div([
@@ -1506,20 +2320,22 @@ app.layout = html.Div([
                 html.Div([
                     html.Div(_range_btn_group("blink-range-store",
                                              "blink-btn-60", "blink-btn-120",
-                                             "blink-btn-720", C_BLINK),
+                                             "blink-btn-720", C_BLINK, metric="blink_rate"),
                              style={"display": "flex", "justifyContent": "flex-end",
                                     "marginBottom": "4px"}),
                     dcc.Graph(id="blink-rate-graph", style={"height": "200px"},
                               config={"displayModeBar": False}),
                 ], style=_CARD),
-                html.Div(dcc.Graph(id="blink-ibi-graph", style={"height": "220px"},
-                                   config={"displayModeBar": False}),
-                         style=_CARD),
+                html.Div([
+                    html.Div([_info_btn("blink_ibi")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                    dcc.Graph(id="blink-ibi-graph", style={"height": "200px"},
+                              config={"displayModeBar": False}),
+                ], style=_CARD),
             ], style={"display": "grid", "gridTemplateColumns": "2fr 1fr",
                       "gap": "10px"}),
 
         ], style={**_CARD, "marginTop": "10px",
-                  "borderTop": f"3px solid {C_BLINK}"}),
+                  "borderTop": f"3px solid {C_BLINK}"})]),
 
     ], id="content-live"),
 
@@ -1538,40 +2354,89 @@ app.layout = html.Div([
 
         # Summary stat cards
         html.Div([
+            _today_stat("today-avg-hr",     "Avg Heart Rate",  C_ECG,    "bpm"),
             _today_stat("today-avg-vti",    "Avg Vagal Tone",  C_VTI),
             _today_stat("today-peak-cbi",   "Peak CBI",        C_CBI),
             _today_stat("today-avg-rmssd",  "Avg RMSSD",       C_ACC,    "ms"),
+            _today_stat("today-avg-sdnn",   "Avg SDNN",        C_SDNN,   "ms"),
+            _today_stat("today-avg-pnn50",  "Avg pNN50",       C_PNN50,  "%"),
             _today_stat("today-avg-breath", "Avg Breathing",   C_PSD_HF, "br/m"),
             _today_stat("today-avg-lfhf",   "Avg LF / HF",     C_LFHF),
-        ], style={"display": "grid", "gridTemplateColumns": "repeat(5, 1fr)",
+        ], style={"display": "grid", "gridTemplateColumns": "repeat(8, 1fr)",
                   "gap": "10px", "marginBottom": "14px"}),
 
         # VTI trend (full width)
-        html.Div(
-            dcc.Graph(id="today-vti", style={"height": "240px"},
+        html.Div([
+            html.Div([_info_btn("vti", "today")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+            dcc.Graph(id="today-vti", style={"height": "220px"},
                       config={"displayModeBar": False}),
-            style={**_CARD, "marginBottom": "10px"}),
+        ], style={**_CARD, "marginBottom": "10px"}),
 
         # CBI trend (full width)
-        html.Div(
-            dcc.Graph(id="today-cbi", style={"height": "240px"},
+        html.Div([
+            html.Div([_info_btn("cbi", "today")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+            dcc.Graph(id="today-cbi", style={"height": "220px"},
                       config={"displayModeBar": False}),
-            style={**_CARD, "marginBottom": "10px"}),
+        ], style={**_CARD, "marginBottom": "10px"}),
 
         # RMSSD + Breathing side by side
         html.Div([
-            html.Div(dcc.Graph(id="today-rmssd",  style={"height": "210px"},
-                               config={"displayModeBar": False}), style=_CARD),
-            html.Div(dcc.Graph(id="today-breath", style={"height": "210px"},
-                               config={"displayModeBar": False}), style=_CARD),
+            html.Div([
+                html.Div([_info_btn("rmssd", "today")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="today-rmssd",  style={"height": "190px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
+            html.Div([
+                html.Div([_info_btn("acc", "today")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="today-breath", style={"height": "190px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
         ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr",
                   "gap": "10px", "marginBottom": "10px"}),
 
         # LF/HF trend (full width)
-        html.Div(
-            dcc.Graph(id="today-lfhf", style={"height": "230px"},
+        html.Div([
+            html.Div([_info_btn("lfhf", "today")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+            dcc.Graph(id="today-lfhf", style={"height": "210px"},
                       config={"displayModeBar": False}),
-            style=_CARD),
+        ], style={**_CARD, "marginBottom": "10px"}),
+
+        # SDNN + pNN50 side by side
+        html.Div([
+            html.Div([
+                html.Div([_info_btn("sdnn", "today")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="today-sdnn",  style={"height": "210px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
+            html.Div([
+                html.Div([_info_btn("pnn50", "today")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="today-pnn50", style={"height": "210px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
+        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr",
+                  "gap": "10px", "marginBottom": "10px"}),
+
+        # VLF + ULF side by side
+        html.Div([
+            html.Div([
+                html.Div([_info_btn("vlf", "today")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="today-vlf", style={"height": "190px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
+            html.Div([
+                html.Div([_info_btn("ulf", "today")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="today-ulf", style={"height": "190px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
+        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr",
+                  "gap": "10px", "marginBottom": "10px"}),
+
+        # Heart Rate trend (full width)
+        html.Div([
+            html.Div([_info_btn("hr", "today")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+            dcc.Graph(id="today-hr", style={"height": "200px"},
+                      config={"displayModeBar": False}),
+        ], style={**_CARD}),
 
     ], id="content-today", style={"display": "none"}),
 
@@ -1588,20 +2453,289 @@ app.layout = html.Div([
                      style={"color": C_DIM, "fontSize": "12px", "marginTop": "2px"}),
         ], style={"marginBottom": "14px"}),
 
-        # 2×2 bar chart grid
+        # 3×2 bar chart grid
         html.Div([
-            html.Div(dcc.Graph(id="week-vti",   style={"height": "260px"},
-                               config={"displayModeBar": False}), style=_CARD),
-            html.Div(dcc.Graph(id="week-cbi",   style={"height": "260px"},
-                               config={"displayModeBar": False}), style=_CARD),
-            html.Div(dcc.Graph(id="week-rmssd", style={"height": "260px"},
-                               config={"displayModeBar": False}), style=_CARD),
-            html.Div(dcc.Graph(id="week-lfhf",  style={"height": "260px"},
-                               config={"displayModeBar": False}), style=_CARD),
+            html.Div([
+                html.Div([_info_btn("vti", "week")],   style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="week-vti",   style={"height": "240px"}, config={"displayModeBar": False}),
+            ], style=_CARD),
+            html.Div([
+                html.Div([_info_btn("cbi", "week")],   style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="week-cbi",   style={"height": "240px"}, config={"displayModeBar": False}),
+            ], style=_CARD),
+            html.Div([
+                html.Div([_info_btn("rmssd", "week")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="week-rmssd", style={"height": "240px"}, config={"displayModeBar": False}),
+            ], style=_CARD),
+            html.Div([
+                html.Div([_info_btn("lfhf", "week")],  style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="week-lfhf",  style={"height": "240px"}, config={"displayModeBar": False}),
+            ], style=_CARD),
+            html.Div([
+                html.Div([_info_btn("sdnn", "week")],  style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="week-sdnn",  style={"height": "240px"}, config={"displayModeBar": False}),
+            ], style=_CARD),
+            html.Div([
+                html.Div([_info_btn("pnn50", "week")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="week-pnn50", style={"height": "240px"}, config={"displayModeBar": False}),
+            ], style=_CARD),
         ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr",
-                  "gap": "10px"}),
+                  "gap": "10px", "marginBottom": "10px"}),
+
+        # VLF + ULF side by side
+        html.Div([
+            html.Div([
+                html.Div([_info_btn("vlf", "week")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="week-vlf", style={"height": "220px"}, config={"displayModeBar": False}),
+            ], style=_CARD),
+            html.Div([
+                html.Div([_info_btn("ulf", "week")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="week-ulf", style={"height": "220px"}, config={"displayModeBar": False}),
+            ], style=_CARD),
+        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr",
+                  "gap": "10px", "marginBottom": "10px"}),
+
+        # Heart Rate daily average (full width)
+        html.Div([
+            html.Div([_info_btn("hr", "week")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+            dcc.Graph(id="week-hr", style={"height": "220px"}, config={"displayModeBar": False}),
+        ], style=_CARD),
+
+        # ── WEEK: activity frequency + impact (populated by update_week) ────────
+        html.Div(id="week-activity-freq-wrap", children=[
+            html.Div("Activity Frequency  —  Last 7 Days", style={
+                "color": C_TEXT, "fontSize": "13px", "fontWeight": "700",
+                "letterSpacing": "1px", "fontFamily": "'JetBrains Mono', monospace",
+                "marginBottom": "10px", "marginTop": "14px",
+            }),
+            dcc.Graph(id="week-activity-freq", style={"height": "220px"},
+                      config={"displayModeBar": False}),
+        ], style={**_CARD, "marginTop": "10px"}),
+
+        html.Div(id="week-impact-table", style={"marginTop": "10px"}),
 
     ], id="content-week", style={"display": "none"}),
+
+    # ══════════════════════════ LOG view ═══════════════════════════════════════
+    html.Div([
+
+        # Section header + auto-detect banner
+        html.Div([
+            html.Div("Activity Log", style={
+                "color": C_TEXT, "fontSize": "16px", "fontWeight": "700",
+                "letterSpacing": "1px", "fontFamily": "'JetBrains Mono', monospace",
+            }),
+            html.Div(id="today-log-count",
+                     style={"color": C_DIM, "fontSize": "12px", "marginTop": "2px"}),
+        ], style={"marginBottom": "14px"}),
+
+        # Auto-detect banner (hidden unless movement/HR detected)
+        html.Div(id="auto-detect-banner", style={"display": "none"}),
+
+        # ── 4A: Quick-Log Panel ────────────────────────────────────────────────
+        html.Div([
+            # Header
+            html.Div("LOG ACTIVITY", style={
+                "color": C_DIM, "fontSize": "11px", "fontWeight": "700",
+                "letterSpacing": "1.5px", "textTransform": "uppercase",
+                "marginBottom": "12px",
+            }),
+
+            # Category row
+            html.Div("CATEGORY", style={
+                "color": C_DIM, "fontSize": "10px", "letterSpacing": "1px",
+                "textTransform": "uppercase", "marginBottom": "8px",
+            }),
+            html.Div([
+                html.Button(
+                    f"{info['icon']} {cat.upper()}",
+                    id={"type": "cat-btn", "cat": cat},
+                    n_clicks=0,
+                    style={
+                        "backgroundColor": "transparent",
+                        "color": C_DIM,
+                        "border": f"1px solid {C_BORDER}",
+                        "borderRadius": "12px",
+                        "padding": "4px 12px",
+                        "fontSize": "10px",
+                        "fontWeight": "700",
+                        "letterSpacing": "1px",
+                        "cursor": "pointer",
+                        "fontFamily": "'JetBrains Mono', monospace",
+                    },
+                )
+                for cat, info in _ACTIVITY_CATS.items()
+            ], style={"display": "flex", "flexWrap": "wrap", "gap": "6px",
+                      "marginBottom": "14px"}),
+
+            html.Hr(style={"border": f"1px solid {C_BORDER}", "margin": "8px 0"}),
+
+            # Preset chips (rendered dynamically)
+            html.Div([
+                html.Div("ACTIVITY", style={
+                    "color": C_DIM, "fontSize": "10px", "letterSpacing": "1px",
+                    "textTransform": "uppercase", "marginBottom": "6px",
+                }),
+                html.Div(id="log-preset-chips",
+                         children=[html.Span("← select a category",
+                                             style={"color": C_DIM, "fontSize": "11px"})]),
+            ], style={"marginBottom": "12px"}),
+
+            # Custom name input
+            dcc.Input(
+                id="log-custom-name",
+                placeholder="custom name (or pick a preset above)",
+                type="text",
+                debounce=True,
+                style={
+                    "backgroundColor": C_BG,
+                    "color": C_TEXT,
+                    "border": f"1px solid {C_BORDER}",
+                    "borderRadius": "6px",
+                    "padding": "7px 12px",
+                    "fontSize": "11px",
+                    "fontFamily": "'JetBrains Mono', monospace",
+                    "width": "100%",
+                    "boxSizing": "border-box",
+                    "marginBottom": "12px",
+                },
+            ),
+
+            # Time + duration + notes row
+            html.Div([
+                html.Div([
+                    html.Div("TIME", style={"color": C_DIM, "fontSize": "10px",
+                                           "letterSpacing": "1px", "marginBottom": "4px"}),
+                    dcc.Input(
+                        id="log-time-input", type="text",
+                        placeholder="HH:MM",
+                        style={
+                            "backgroundColor": C_BG, "color": C_TEXT,
+                            "border": f"1px solid {C_BORDER}", "borderRadius": "6px",
+                            "padding": "7px 10px", "fontSize": "11px", "width": "100px",
+                            "fontFamily": "'JetBrains Mono', monospace",
+                        },
+                    ),
+                ]),
+                html.Div([
+                    html.Div("DURATION (min)", style={"color": C_DIM, "fontSize": "10px",
+                                                      "letterSpacing": "1px", "marginBottom": "4px"}),
+                    dcc.Input(
+                        id="log-duration", type="number", min=0, placeholder="0",
+                        style={
+                            "backgroundColor": C_BG, "color": C_TEXT,
+                            "border": f"1px solid {C_BORDER}", "borderRadius": "6px",
+                            "padding": "7px 10px", "fontSize": "11px", "width": "100px",
+                            "fontFamily": "'JetBrains Mono', monospace",
+                        },
+                    ),
+                ]),
+                html.Div([
+                    html.Div("NOTES", style={"color": C_DIM, "fontSize": "10px",
+                                            "letterSpacing": "1px", "marginBottom": "4px"}),
+                    dcc.Textarea(
+                        id="log-notes",
+                        placeholder="optional notes…",
+                        style={
+                            "backgroundColor": C_BG, "color": C_TEXT,
+                            "border": f"1px solid {C_BORDER}", "borderRadius": "6px",
+                            "padding": "7px 10px", "fontSize": "11px",
+                            "fontFamily": "'JetBrains Mono', monospace",
+                            "height": "38px", "resize": "none", "width": "100%",
+                        },
+                    ),
+                ], style={"flex": "1"}),
+            ], style={"display": "flex", "gap": "14px", "alignItems": "flex-start",
+                      "marginBottom": "12px"}),
+
+            # Action buttons + feedback
+            html.Div([
+                html.Button("＋ LOG", id="btn-log-submit", n_clicks=0, style={
+                    "backgroundColor": C_GOOD, "color": C_BG,
+                    "border": "none", "borderRadius": "10px",
+                    "padding": "8px 22px", "fontSize": "11px", "fontWeight": "700",
+                    "letterSpacing": "1.5px", "cursor": "pointer",
+                    "fontFamily": "'JetBrains Mono', monospace",
+                }),
+                html.Button("✕ CLEAR", id="btn-log-clear", n_clicks=0, style={
+                    "backgroundColor": "transparent", "color": C_DIM,
+                    "border": f"1px solid {C_BORDER}", "borderRadius": "10px",
+                    "padding": "8px 18px", "fontSize": "11px", "fontWeight": "700",
+                    "letterSpacing": "1.5px", "cursor": "pointer",
+                    "fontFamily": "'JetBrains Mono', monospace",
+                }),
+                html.Div(id="log-feedback",
+                         style={"color": C_GOOD, "fontSize": "11px", "marginLeft": "10px",
+                                "fontFamily": "'JetBrains Mono', monospace"}),
+            ], style={"display": "flex", "alignItems": "center", "gap": "8px",
+                      "marginBottom": "10px"}),
+
+            # Smart suggestions
+            html.Div(id="log-suggestions"),
+
+        ], style={**_CARD, "marginBottom": "10px"}),
+
+        # ── 4B: Activity timeline chart ────────────────────────────────────────
+        html.Div([
+            dcc.Graph(id="activity-timeline-graph", style={"height": "220px"},
+                      config={"displayModeBar": False}),
+        ], style={**_CARD, "marginBottom": "10px"}),
+
+        # ── 4C: Today's activity list ──────────────────────────────────────────
+        html.Div([
+            html.Div("TODAY'S ACTIVITIES", style={
+                "color": C_DIM, "fontSize": "11px", "fontWeight": "700",
+                "letterSpacing": "1.5px", "textTransform": "uppercase",
+                "marginBottom": "10px",
+            }),
+            html.Div(id="activity-list",
+                     style={"maxHeight": "260px", "overflowY": "auto"}),
+        ], style={**_CARD, "marginBottom": "10px"}),
+
+        # ── 4D: Impact analysis table ──────────────────────────────────────────
+        html.Div([
+            html.Div("IMPACT ANALYSIS  —  30 min before vs after", style={
+                "color": C_DIM, "fontSize": "11px", "fontWeight": "700",
+                "letterSpacing": "1.5px", "textTransform": "uppercase",
+                "marginBottom": "10px",
+            }),
+            html.Div(id="impact-table"),
+        ], style={**_CARD}),
+
+    ], id="content-log", style={"display": "none"}),
+
+    # ── Info modal overlay ─────────────────────────────────────────────────────
+    html.Div(id="info-modal-overlay", children=[
+        html.Div([
+            # Header
+            html.Div([
+                html.Span(id="info-modal-title",
+                          style={"color": C_TEXT, "fontSize": "13px",
+                                 "fontWeight": "700", "letterSpacing": "1px",
+                                 "fontFamily": "'JetBrains Mono', monospace"}),
+                html.Button("×", id="info-close-btn", n_clicks=0,
+                            style={"backgroundColor": "transparent", "color": C_DIM,
+                                   "border": "none", "fontSize": "20px", "cursor": "pointer",
+                                   "lineHeight": "1", "padding": "0"}),
+            ], style={"display": "flex", "justifyContent": "space-between",
+                      "alignItems": "center", "marginBottom": "18px",
+                      "borderBottom": f"1px solid {C_BORDER}", "paddingBottom": "12px"}),
+            # Body
+            html.Div(id="info-modal-body"),
+        ], style={
+            "backgroundColor": C_CARD,
+            "border": f"1px solid {C_BORDER}",
+            "borderRadius": "12px",
+            "padding": "24px",
+            "maxWidth": "620px",
+            "width": "90%",
+            "maxHeight": "80vh",
+            "overflowY": "auto",
+        }),
+    ], style={"display": "none", "position": "fixed", "top": "0", "left": "0",
+              "width": "100%", "height": "100%",
+              "backgroundColor": "rgba(0,0,0,0.75)",
+              "zIndex": "9999", "justifyContent": "center", "alignItems": "center"}),
 
 ], style={"backgroundColor": C_BG, "padding": "14px",
           "fontFamily": "'JetBrains Mono', 'Courier New', monospace",
@@ -1613,23 +2747,28 @@ app.layout = html.Div([
     Output("content-live",  "style"),
     Output("content-today", "style"),
     Output("content-week",  "style"),
+    Output("content-log",   "style"),
     Output("nav-live",  "style"),
     Output("nav-today", "style"),
     Output("nav-week",  "style"),
+    Output("nav-log",   "style"),
     Input("nav-live",  "n_clicks"),
     Input("nav-today", "n_clicks"),
     Input("nav-week",  "n_clicks"),
+    Input("nav-log",   "n_clicks"),
     prevent_initial_call=True,
 )
-def switch_page(_nl, _nt, _nw):
-    tab = ctx.triggered_id   # "nav-live" | "nav-today" | "nav-week"
+def switch_page(_nl, _nt, _nw, _nlog):
+    tab = ctx.triggered_id   # "nav-live" | "nav-today" | "nav-week" | "nav-log"
     return (
         {"display": "block"} if tab == "nav-live"  else {"display": "none"},
         {"display": "block"} if tab == "nav-today" else {"display": "none"},
         {"display": "block"} if tab == "nav-week"  else {"display": "none"},
+        {"display": "block"} if tab == "nav-log"   else {"display": "none"},
         _nav_pill(tab == "nav-live"),
         _nav_pill(tab == "nav-today"),
         _nav_pill(tab == "nav-week"),
+        _nav_pill(tab == "nav-log"),
     )
 
 
@@ -1638,15 +2777,19 @@ def switch_page(_nl, _nt, _nw):
     Output("ecg-graph",    "figure"),
     Output("acc-graph",    "figure"),
     Output("rr-graph",     "figure"),
-    Output("kpi-bpm",      "children"),
-    Output("kpi-rmssd",    "children"),
-    Output("kpi-sdnn",     "children"),
-    Output("kpi-breath",   "children"),
+    Output("kpi-bpm",        "children"),
+    Output("kpi-rmssd",      "children"),
+    Output("kpi-sdnn",       "children"),
+    Output("kpi-pnn50",      "children"),
+    Output("kpi-breath",     "children"),
     Output("kpi-regularity", "children"),
-    Output("kpi-lfhf",     "children"),
-    Output("status-dot",   "style"),
-    Output("status-label", "children"),
-    Output("timer-label",  "children"),
+    Output("kpi-lfhf",       "children"),
+    Output("status-dot",     "style"),
+    Output("status-label",   "children"),
+    Output("battery-label",  "children"),
+    Output("battery-label",  "style"),
+    Output("timer-label",    "children"),
+    Output("btn-reconnect",  "style"),
     Input("tick-fast", "n_intervals"),
 )
 def update_fast(_n: int):
@@ -1654,15 +2797,46 @@ def update_fast(_n: int):
 
     # ── connection status (dict read only — no computation) ──────────────────
     state = _sensor_status["state"]
+    _reconnect_base = {
+        "backgroundColor": "transparent",
+        "borderRadius": "12px",
+        "padding": "4px 14px",
+        "fontSize": "10px",
+        "fontWeight": "700",
+        "letterSpacing": "1px",
+        "cursor": "pointer",
+        "fontFamily": "'JetBrains Mono', monospace",
+    }
     if state == "connected":
-        dot_style  = {"color": C_GOOD, "fontSize": "18px"}
-        status_lbl = f"Connected · {_sensor_status['device']}"
-    elif state == "searching":
-        dot_style  = {"color": C_WARN, "fontSize": "18px"}
-        status_lbl = "Searching for Polar H10…"
+        dot_style      = {"color": C_GOOD, "fontSize": "18px"}
+        status_lbl     = f"Connected · {_sensor_status['device']}"
+        reconnect_style = {**_reconnect_base, "color": C_DIM,
+                           "border": f"1px solid {C_BORDER}"}
+    elif "reconnect" in state:
+        dot_style      = {"color": C_WARN, "fontSize": "18px"}
+        status_lbl     = state
+        reconnect_style = {**_reconnect_base, "color": C_WARN,
+                           "border": f"1px solid {C_WARN}"}
     else:
-        dot_style  = {"color": C_BAD, "fontSize": "18px"}
-        status_lbl = state
+        dot_style      = {"color": C_BAD, "fontSize": "18px"}
+        status_lbl     = state
+        reconnect_style = {**_reconnect_base, "color": C_BAD,
+                           "border": f"1px solid {C_BAD}"}
+
+    # ── battery indicator ─────────────────────────────────────────────────────
+    battery = _sensor_status.get("battery")
+    if battery is not None:
+        if battery >= 60:
+            bat_color = C_GOOD
+        elif battery >= 25:
+            bat_color = C_WARN
+        else:
+            bat_color = C_BAD
+        bat_text  = f"🔋 {battery}%"
+        bat_style = {"color": bat_color, "fontSize": "12px", "marginLeft": "6px"}
+    else:
+        bat_text  = ""
+        bat_style = {"display": "none"}
 
     elapsed = int(time.time() - _sensor_status["since"])
     timer   = f"{elapsed // 60:02d}:{elapsed % 60:02d}"
@@ -1675,8 +2849,8 @@ def update_fast(_n: int):
     # ── KPI chips — read last values written by the slow callback ────────────
     k = _kpi_cache
     return (ecg_fig, acc_fig, rr_fig,
-            k["bpm"], k["rmssd"], k["sdnn"], k["breath"], k["regularity"], k["lfhf"],
-            dot_style, status_lbl, timer)
+            k["bpm"], k["rmssd"], k["sdnn"], k["pnn50"], k["breath"], k["regularity"], k["lfhf"],
+            dot_style, status_lbl, bat_text, bat_style, timer, reconnect_style)
 
 
 _SAFE_FIG: dict = {
@@ -1694,7 +2868,6 @@ _SAFE_FIG: dict = {
     Output("cbi-gauge",         "figure"),
     Output("vti-gauge",         "figure"),
     Output("ext-metrics",       "children"),
-    Output("vlf-live-graph",    "figure"),
     Output("breath-wave-graph", "figure"),
     Output("ie-ratio-graph",    "figure"),
     Input("tick-slow", "n_intervals"),
@@ -1735,12 +2908,21 @@ def update_slow(_n: int):
         _kpi_cache["bpm"]        = f"{hrv['mean_bpm']:.0f}"         if hrv       else "—"
         _kpi_cache["rmssd"]      = f"{hrv['rmssd']:.1f}"            if hrv       else "—"
         _kpi_cache["sdnn"]       = f"{hrv['sdnn']:.1f}"             if hrv       else "—"
+        _kpi_cache["pnn50"]      = f"{hrv['pnn50']:.1f}"            if hrv       else "—"
         _kpi_cache["breath"]     = f"{breathing['bpm']:.1f}"        if breathing else "—"
         _kpi_cache["regularity"] = f"{breathing['regularity']:.2f}" if breathing else "—"
         _kpi_cache["lfhf"]       = (f"{hrv['lf_hf']:.2f}"
                                     if hrv and hrv["lf_hf"] is not None else "—")
 
         lfhf_val = hrv["lf_hf"] if hrv and hrv["lf_hf"] is not None else None
+
+        pnn50_val = hrv["pnn50"] if hrv else None
+        sdnn_val  = hrv["sdnn"]  if hrv else None
+
+        # ULF: computed from full accumulated bpm series (needs ≥ 30 min of data)
+        hist_rows  = _history.snapshot()
+        bpm_series = [r["bpm"] for r in hist_rows if r.get("bpm", 0) > 20]
+        ulf_val    = metrics.compute_ulf_power(bpm_series)
 
         # ── persist to SQLite + history (only when recording is active) ─────────
         if _measuring["active"]:
@@ -1755,6 +2937,9 @@ def update_slow(_n: int):
                         lfhf=lfhf_val               if lfhf_val  else 0.0,
                         vlf=vlf_val                 if vlf_val   else 0.0,
                         mean_ie=phases["mean_ie"]   if phases    else 0.0,
+                        pnn50=pnn50_val             if pnn50_val else 0.0,
+                        sdnn=sdnn_val               if sdnn_val  else 0.0,
+                        ulf=ulf_val,
                     ))
             except Exception:
                 pass
@@ -1768,7 +2953,28 @@ def update_slow(_n: int):
                 lfhf=lfhf_val,
                 vlf=vlf_val,
                 mean_ie=phases["mean_ie"]   if phases    else None,
+                pnn50=pnn50_val,
+                sdnn=sdnn_val,
+                ulf=ulf_val,
             )
+
+        # ── Auto-detect exercise from ACC RMS ────────────────────────────────
+        acc_rms = float(np.sqrt(np.mean(np.array(list(acc)) ** 2))) if acc else 0.0
+        if acc_rms > 800:
+            _auto_detect["exercise_streak"] += 1
+        else:
+            _auto_detect["exercise_streak"] = 0
+        if _auto_detect["exercise_streak"] == 30:  # 30 × 2 s = 60 s sustained
+            _auto_detect["pending_exercise_ts"] = datetime.now().strftime("%H:%M")
+
+        # ── Auto-detect high-HR exercise ─────────────────────────────────────
+        mean_bpm = hrv["mean_bpm"] if hrv else 0.0
+        if mean_bpm > 130:
+            _auto_detect["hr_streak"] += 1
+        else:
+            _auto_detect["hr_streak"] = 0
+        if _auto_detect["hr_streak"] == 5:  # 5 × 2 s = 10 s sustained high HR
+            _auto_detect["pending_hr_ts"] = datetime.now().strftime("%H:%M")
 
         psd_fig = (_psd_figure(hrv)
                    if hrv and hrv["psd_freqs"] is not None
@@ -1809,19 +3015,17 @@ def update_slow(_n: int):
             f"CBI              {cbi:.3f}"
         )
 
-        snap            = _history.snapshot()
-        vlf_live_fig    = _vlf_live_fig(snap)
         breath_wave_fig = _breath_wave_fig(phases)
         ie_ratio_fig    = _ie_ratio_fig(phases)
 
         return (psd_fig, coh_fig, cbi_fig, vti_fig, ext,
-                vlf_live_fig, breath_wave_fig, ie_ratio_fig)
+                breath_wave_fig, ie_ratio_fig)
 
     except Exception:
         tb = traceback.format_exc()
         print(f"\n[slow ERROR]\n{tb}", flush=True)
         sf = _SAFE_FIG
-        return sf, sf, sf, sf, tb[-600:], sf, sf, sf
+        return sf, sf, sf, sf, tb[-600:], sf, sf
 
 
 # ── VTI range button group ────────────────────────────────────────────────────
@@ -1888,6 +3092,204 @@ def update_lfhf_live(_n, minutes_str):
     with _db_lock:
         rows = _load_today(_db)
     return _lfhf_live_fig(rows, minutes=minutes)
+
+
+# ── VLF range button group ────────────────────────────────────────────────────
+@callback(
+    Output("vlf-range-store", "data"),
+    Output("vlf-btn-60",  "style"),
+    Output("vlf-btn-120", "style"),
+    Output("vlf-btn-720", "style"),
+    Input("vlf-btn-60",   "n_clicks"),
+    Input("vlf-btn-120",  "n_clicks"),
+    Input("vlf-btn-720",  "n_clicks"),
+    prevent_initial_call=True,
+)
+def handle_vlf_range(_60, _120, _720):
+    val = {"vlf-btn-60": "60", "vlf-btn-120": "120", "vlf-btn-720": "720"}.get(
+        ctx.triggered_id, "60")
+    return (val,
+            _rbtn_style(val == "60",  C_VLF),
+            _rbtn_style(val == "120", C_VLF),
+            _rbtn_style(val == "720", C_VLF))
+
+
+# ── VLF live chart ─────────────────────────────────────────────────────────────
+@callback(
+    Output("vlf-live-graph",  "figure"),
+    Input("tick-slow",        "n_intervals"),
+    Input("vlf-range-store",  "data"),
+)
+def update_vlf_live(_n, minutes_str):
+    minutes = int(minutes_str or 60)
+    with _db_lock:
+        rows = _load_today(_db)
+    return _vlf_live_fig(rows, minutes=minutes)
+
+
+# ── ULF range button group ────────────────────────────────────────────────────
+@callback(
+    Output("ulf-range-store", "data"),
+    Output("ulf-btn-60",  "style"),
+    Output("ulf-btn-120", "style"),
+    Output("ulf-btn-720", "style"),
+    Input("ulf-btn-60",   "n_clicks"),
+    Input("ulf-btn-120",  "n_clicks"),
+    Input("ulf-btn-720",  "n_clicks"),
+    prevent_initial_call=True,
+)
+def handle_ulf_range(_60, _120, _720):
+    val = {"ulf-btn-60": "60", "ulf-btn-120": "120", "ulf-btn-720": "720"}.get(
+        ctx.triggered_id, "60")
+    return (val,
+            _rbtn_style(val == "60",  C_ULF),
+            _rbtn_style(val == "120", C_ULF),
+            _rbtn_style(val == "720", C_ULF))
+
+
+# ── ULF live chart ─────────────────────────────────────────────────────────────
+@callback(
+    Output("ulf-live-graph",  "figure"),
+    Input("tick-slow",        "n_intervals"),
+    Input("ulf-range-store",  "data"),
+)
+def update_ulf_live(_n, minutes_str):
+    minutes = int(minutes_str or 60)
+    with _db_lock:
+        rows = _load_today(_db)
+    return _ulf_live_fig(rows, minutes=minutes)
+
+
+# ── SDNN range button group ───────────────────────────────────────────────────
+@callback(
+    Output("sdnn-range-store", "data"),
+    Output("sdnn-btn-60",  "style"),
+    Output("sdnn-btn-120", "style"),
+    Output("sdnn-btn-720", "style"),
+    Input("sdnn-btn-60",   "n_clicks"),
+    Input("sdnn-btn-120",  "n_clicks"),
+    Input("sdnn-btn-720",  "n_clicks"),
+    prevent_initial_call=True,
+)
+def handle_sdnn_range(_60, _120, _720):
+    val = {"sdnn-btn-60": "60", "sdnn-btn-120": "120", "sdnn-btn-720": "720"}.get(
+        ctx.triggered_id, "60")
+    return (val,
+            _rbtn_style(val == "60",  C_SDNN),
+            _rbtn_style(val == "120", C_SDNN),
+            _rbtn_style(val == "720", C_SDNN))
+
+
+# ── SDNN live chart ────────────────────────────────────────────────────────────
+@callback(
+    Output("sdnn-live-graph",  "figure"),
+    Input("tick-slow",         "n_intervals"),
+    Input("sdnn-range-store",  "data"),
+)
+def update_sdnn_live(_n, minutes_str):
+    minutes = int(minutes_str or 60)
+    with _db_lock:
+        rows = _load_today(_db)
+    return _sdnn_live_fig(rows, minutes=minutes)
+
+
+# ── pNN50 range button group ───────────────────────────────────────────────────
+@callback(
+    Output("pnn50-range-store", "data"),
+    Output("pnn50-btn-60",  "style"),
+    Output("pnn50-btn-120", "style"),
+    Output("pnn50-btn-720", "style"),
+    Input("pnn50-btn-60",   "n_clicks"),
+    Input("pnn50-btn-120",  "n_clicks"),
+    Input("pnn50-btn-720",  "n_clicks"),
+    prevent_initial_call=True,
+)
+def handle_pnn50_range(_60, _120, _720):
+    val = {"pnn50-btn-60": "60", "pnn50-btn-120": "120", "pnn50-btn-720": "720"}.get(
+        ctx.triggered_id, "60")
+    return (val,
+            _rbtn_style(val == "60",  C_PNN50),
+            _rbtn_style(val == "120", C_PNN50),
+            _rbtn_style(val == "720", C_PNN50))
+
+
+# ── pNN50 live chart ───────────────────────────────────────────────────────────
+@callback(
+    Output("pnn50-live-graph",  "figure"),
+    Input("tick-slow",          "n_intervals"),
+    Input("pnn50-range-store",  "data"),
+)
+def update_pnn50_live(_n, minutes_str):
+    minutes = int(minutes_str or 60)
+    with _db_lock:
+        rows = _load_today(_db)
+    return _pnn50_live_fig(rows, minutes=minutes)
+
+
+# ── RMSSD range button group ───────────────────────────────────────────────────
+@callback(
+    Output("rmssd-range-store", "data"),
+    Output("rmssd-btn-60",   "style"),
+    Output("rmssd-btn-120",  "style"),
+    Output("rmssd-btn-1440", "style"),
+    Input("rmssd-btn-60",    "n_clicks"),
+    Input("rmssd-btn-120",   "n_clicks"),
+    Input("rmssd-btn-1440",  "n_clicks"),
+    prevent_initial_call=True,
+)
+def handle_rmssd_range(_60, _120, _1440):
+    val = {"rmssd-btn-60": "60", "rmssd-btn-120": "120", "rmssd-btn-1440": "1440"}.get(
+        ctx.triggered_id, "60")
+    return (val,
+            _rbtn_style(val == "60",   C_ACC),
+            _rbtn_style(val == "120",  C_ACC),
+            _rbtn_style(val == "1440", C_ACC))
+
+
+# ── RMSSD live chart ────────────────────────────────────────────────────────────
+@callback(
+    Output("rmssd-live-graph",  "figure"),
+    Input("tick-slow",          "n_intervals"),
+    Input("rmssd-range-store",  "data"),
+)
+def update_rmssd_live(_n, minutes_str):
+    minutes = int(minutes_str or 60)
+    with _db_lock:
+        rows = _load_today(_db)
+    return _rmssd_live_fig(rows, minutes=minutes)
+
+
+# ── Heart Rate range button group ─────────────────────────────────────────────
+@callback(
+    Output("hr-range-store", "data"),
+    Output("hr-btn-60",   "style"),
+    Output("hr-btn-120",  "style"),
+    Output("hr-btn-1440", "style"),
+    Input("hr-btn-60",    "n_clicks"),
+    Input("hr-btn-120",   "n_clicks"),
+    Input("hr-btn-1440",  "n_clicks"),
+    prevent_initial_call=True,
+)
+def handle_hr_range(_60, _120, _1440):
+    val = {"hr-btn-60": "60", "hr-btn-120": "120", "hr-btn-1440": "1440"}.get(
+        ctx.triggered_id, "60")
+    return (val,
+            _rbtn_style(val == "60",   C_ECG),
+            _rbtn_style(val == "120",  C_ECG),
+            _rbtn_style(val == "1440", C_ECG))
+
+
+# ── Heart Rate live chart ──────────────────────────────────────────────────────
+@callback(
+    Output("hr-live-graph",  "figure"),
+    Input("tick-slow",       "n_intervals"),
+    Input("hr-range-store",  "data"),
+)
+def update_hr_live(_n, minutes_str):
+    minutes = int(minutes_str or 60)
+    with _db_lock:
+        rows = _load_today(_db)
+    return _hr_live_fig(rows, minutes=minutes)
 
 
 # ── I:E trend range button group ─────────────────────────────────────────────
@@ -1993,9 +3395,12 @@ def update_eye_images(_n):
 
 # ── today view callback (5 000 ms) ────────────────────────────────────────────
 @callback(
+    Output("today-avg-hr",       "children"),
     Output("today-avg-vti",      "children"),
     Output("today-peak-cbi",     "children"),
     Output("today-avg-rmssd",    "children"),
+    Output("today-avg-sdnn",     "children"),
+    Output("today-avg-pnn50",    "children"),
     Output("today-avg-breath",   "children"),
     Output("today-avg-lfhf",     "children"),
     Output("today-session-time", "children"),
@@ -2004,61 +3409,251 @@ def update_eye_images(_n):
     Output("today-rmssd",        "figure"),
     Output("today-breath",       "figure"),
     Output("today-lfhf",         "figure"),
+    Output("today-sdnn",         "figure"),
+    Output("today-pnn50",        "figure"),
+    Output("today-vlf",          "figure"),
+    Output("today-ulf",          "figure"),
+    Output("today-hr",           "figure"),
     Input("tick-today", "n_intervals"),
 )
 def update_today(_n: int):
     # Always read from SQLite so Today shows all data for the day,
     # including from earlier sessions and across restarts.
     with _db_lock:
-        records = _load_today(_db)
+        records    = _load_today(_db)
+        activities = _load_activities_today(_db)
 
     if not records:
         ef = _empty_fig
-        return ("—", "—", "—", "—", "—", "No data yet — start recording",
+        return ("—", "—", "—", "—", "—", "—", "—", "—",
+                "No data yet — start recording",
                 ef("Vagal Tone Index  —  ln(RMSSD)"),
                 ef("Conscious Breathing Index"),
                 ef("RMSSD"),
                 ef("Breathing Rate"),
-                ef("LF / HF Ratio  (sympathetic balance)"))
+                ef("LF / HF Ratio  (sympathetic balance)"),
+                ef("SDNN  (overall HRV)"),
+                ef("pNN50  (parasympathetic activity)"),
+                ef("VLF Power  (0.003–0.04 Hz)"),
+                ef("ULF Power  (< 0.003 Hz)  ·  needs ≥ 30 min"),
+                ef("Heart Rate"))
 
     # Summary aggregates (exclude zero-padded gaps)
+    hr_vals     = [r["bpm"]        for r in records if r["bpm"]        > 0]
     vti_vals    = [r["vti"]        for r in records if r["vti"]        > 0]
     cbi_vals    = [r["cbi"]        for r in records]
     rmssd_vals  = [r["rmssd"]      for r in records if r["rmssd"]      > 0]
+    sdnn_vals   = [r["sdnn"]       for r in records if r["sdnn"]       > 0]
+    pnn50_vals  = [r["pnn50"]      for r in records if r["pnn50"]      > 0]
     breath_vals = [r["breath_bpm"] for r in records if r["breath_bpm"] > 0]
     lfhf_vals   = [r["lfhf"]       for r in records if r["lfhf"]       > 0]
 
+    avg_hr     = f"{np.mean(hr_vals):.0f}"     if hr_vals     else "—"
     avg_vti    = f"{np.mean(vti_vals):.2f}"    if vti_vals    else "—"
     peak_cbi   = f"{max(cbi_vals):.2f}"         if cbi_vals    else "—"
     avg_rmssd  = f"{np.mean(rmssd_vals):.1f}"  if rmssd_vals  else "—"
+    avg_sdnn   = f"{np.mean(sdnn_vals):.1f}"   if sdnn_vals   else "—"
+    avg_pnn50  = f"{np.mean(pnn50_vals):.1f}"  if pnn50_vals  else "—"
     avg_breath = f"{np.mean(breath_vals):.1f}" if breath_vals else "—"
     avg_lfhf   = f"{np.mean(lfhf_vals):.2f}"  if lfhf_vals   else "—"
 
     dur_s   = len(records) * 2
     session = f"Duration  {dur_s // 60} min {dur_s % 60} s  ·  {len(records)} data points"
 
-    return (avg_vti, peak_cbi, avg_rmssd, avg_breath, avg_lfhf, session,
-            _vti_trend(records), _cbi_trend(records),
-            _rmssd_trend(records), _breath_trend(records),
-            _lfhf_trend(records))
+    vti_fig   = _add_activity_overlays(_vti_trend(records),   activities)
+    cbi_fig   = _add_activity_overlays(_cbi_trend(records),   activities)
+    rmssd_fig = _add_activity_overlays(_rmssd_trend(records), activities)
+    lfhf_fig  = _add_activity_overlays(_lfhf_trend(records),  activities)
+    hr_fig    = _add_activity_overlays(_hr_trend(records),     activities)
+
+    return (avg_hr, avg_vti, peak_cbi, avg_rmssd, avg_sdnn, avg_pnn50,
+            avg_breath, avg_lfhf, session,
+            vti_fig, cbi_fig,
+            rmssd_fig, _breath_trend(records),
+            lfhf_fig, _sdnn_trend(records), _pnn50_trend(records),
+            _vlf_trend(records), _ulf_trend(records),
+            hr_fig)
+
+
+def _compute_impact(activity: dict, records: list[dict],
+                    window_min: int = 30) -> dict | None:
+    """Return {metric: (before, after, delta)} for vti/rmssd/bpm/lfhf.
+    Returns None if < 5 records in either window."""
+    t_act = activity["ts_time"]  # "HH:MM"
+    before, after = [], []
+    for r in records:
+        t = r["t"]  # "HH:MM"
+        diff_min = (int(t[:2]) * 60 + int(t[3:])) - (int(t_act[:2]) * 60 + int(t_act[3:]))
+        if -window_min <= diff_min < 0:
+            before.append(r)
+        elif 0 < diff_min <= window_min:
+            after.append(r)
+    if len(before) < 5 or len(after) < 5:
+        return None
+    result = {}
+    for key, higher_is_good in [("vti", True), ("rmssd", True), ("bpm", False), ("lfhf", False)]:
+        b_vals = [r[key] for r in before if r.get(key, 0) > 0]
+        a_vals = [r[key] for r in after  if r.get(key, 0) > 0]
+        if b_vals and a_vals:
+            b_mean = float(np.mean(b_vals))
+            a_mean = float(np.mean(a_vals))
+            delta  = a_mean - b_mean
+            result[key] = (b_mean, a_mean, delta, higher_is_good)
+    return result if result else None
+
+
+def _week_activity_freq_fig(week_acts: list[dict]) -> go.Figure:
+    """Horizontal bar chart of activity frequency over the past 7 days."""
+    if not week_acts:
+        fig = go.Figure()
+        fig.update_layout(**_PLOT_LAYOUT,
+                          title=dict(text="Activity Frequency  —  Last 7 Days",
+                                     font=dict(color=C_DIM, size=12), x=0.01))
+        fig.add_annotation(text="no activities logged in the last 7 days",
+                           x=0.5, y=0.5, showarrow=False, xref="paper", yref="paper",
+                           font=dict(color=C_DIM, size=13))
+        return fig
+
+    from collections import Counter
+    counts = Counter((a["category"], a["name"]) for a in week_acts)
+    items  = sorted(counts.items(), key=lambda x: x[1])
+    labels = [f"{_ACTIVITY_CATS.get(c, _ACTIVITY_CATS['other'])['icon']} {n}" for (c, n), _ in items]
+    values = [v for _, v in items]
+    colors = [_ACTIVITY_CATS.get(c, _ACTIVITY_CATS["other"])["color"] for (c, _), _ in items]
+
+    fig = go.Figure(go.Bar(
+        x=values, y=labels, orientation="h",
+        marker_color=colors, marker_line_width=0,
+        hovertemplate="%{y}: %{x} times<extra></extra>",
+    ))
+    fig.update_layout(
+        **_PLOT_LAYOUT,
+        title=dict(text="Activity Frequency  —  Last 7 Days",
+                   font=dict(color=C_DIM, size=12), x=0.01),
+        xaxis=_ax("count", rangemode="tozero"),
+        yaxis=dict(showgrid=False, tickfont=dict(color=C_TEXT, size=10)),
+        bargap=0.35,
+        height=max(200, 30 * len(labels)),
+    )
+    return fig
+
+
+def _week_impact_table_html(week_acts: list[dict], week_records: list[dict]) -> html.Div:
+    """Average impact table for activities logged >= 2 times in last 7 days."""
+    if not week_acts or not week_records:
+        return html.Div()
+
+    from collections import defaultdict
+    grouped: dict[tuple, list] = defaultdict(list)
+    for act in week_acts:
+        grouped[(act["category"], act["name"])].append(act)
+
+    rows = []
+    _th = {"color": C_DIM, "fontSize": "10px", "fontWeight": "700",
+           "letterSpacing": "1px", "textTransform": "uppercase",
+           "padding": "4px 10px", "textAlign": "right",
+           "fontFamily": "'JetBrains Mono', monospace"}
+    _td_base = {"fontSize": "11px", "padding": "4px 10px", "textAlign": "right",
+                "fontFamily": "'JetBrains Mono', monospace"}
+
+    for (cat, name), acts in grouped.items():
+        if len(acts) < 2:
+            continue
+        deltas: dict[str, list] = {"vti": [], "rmssd": [], "bpm": []}
+        for act in acts:
+            imp = _compute_impact(act, week_records)
+            if imp:
+                for key in deltas:
+                    if key in imp:
+                        deltas[key].append(imp[key][2])
+
+        if not any(deltas.values()):
+            continue
+
+        cat_info = _ACTIVITY_CATS.get(cat, _ACTIVITY_CATS["other"])
+        cells = [html.Td(
+            f"{cat_info['icon']} {name}  ×{len(acts)}",
+            style={**_td_base, "textAlign": "left", "color": cat_info["color"],
+                   "borderLeft": f"3px solid {cat_info['color']}", "paddingLeft": "8px"},
+        )]
+        for key, higher_is_good in [("vti", True), ("rmssd", True), ("bpm", False)]:
+            vs = deltas[key]
+            if vs:
+                mean_d = float(np.mean(vs))
+                good   = (mean_d > 0) == higher_is_good
+                color  = C_GOOD if good else C_BAD
+                sign   = "+" if mean_d > 0 else ""
+                cells.append(html.Td(f"{sign}{mean_d:.2f}",
+                                     style={**_td_base, "color": color}))
+            else:
+                cells.append(html.Td("—", style={**_td_base, "color": C_DIM}))
+        rows.append(html.Tr(cells))
+
+    if not rows:
+        return html.Div()
+
+    return html.Div([
+        html.Div("AVERAGE IMPACT  —  Before vs After (30 min windows)", style={
+            "color": C_DIM, "fontSize": "11px", "fontWeight": "700",
+            "letterSpacing": "1.5px", "textTransform": "uppercase",
+            "marginBottom": "10px", "marginTop": "14px",
+        }),
+        html.Table([
+            html.Thead(html.Tr([
+                html.Th("Activity", style={**_th, "textAlign": "left"}),
+                html.Th("VTI Δ",   style=_th),
+                html.Th("RMSSD Δ", style=_th),
+                html.Th("HR Δ",    style=_th),
+            ])),
+            html.Tbody(rows),
+        ], style={"width": "100%", "borderCollapse": "collapse",
+                  "color": C_TEXT, "fontFamily": "'JetBrains Mono', monospace"}),
+    ], style={**_CARD, "marginTop": "10px"})
 
 
 # ── week view callback (5 000 ms) ─────────────────────────────────────────────
 @callback(
-    Output("week-vti",   "figure"),
-    Output("week-cbi",   "figure"),
-    Output("week-rmssd", "figure"),
-    Output("week-lfhf",  "figure"),
-    Input("tick-today",  "n_intervals"),
+    Output("week-vti",              "figure"),
+    Output("week-cbi",              "figure"),
+    Output("week-rmssd",            "figure"),
+    Output("week-lfhf",             "figure"),
+    Output("week-sdnn",             "figure"),
+    Output("week-pnn50",            "figure"),
+    Output("week-vlf",              "figure"),
+    Output("week-ulf",              "figure"),
+    Output("week-hr",               "figure"),
+    Output("week-activity-freq",    "figure"),
+    Output("week-impact-table",     "children"),
+    Input("tick-today",             "n_intervals"),
 )
 def update_week(_n: int):
     with _db_lock:
-        days = _load_week(_db)
+        days      = _load_week(_db)
+        week_acts = _load_activities_week(_db)
+        week_recs = _load_today(_db)   # use today's records for same-day impact; week records need full date
+    # Build a pseudo week_records list with correct "t" field for _compute_impact
+    with _db_lock:
+        cur = _db.execute(
+            "SELECT ts, vti, rmssd, bpm, lfhf FROM biometric_metrics "
+            "WHERE ts_date >= date('now','-6 days') ORDER BY ts"
+        )
+        all_week_rows = [
+            dict(t=r[0][11:16], vti=r[1] or 0.0, rmssd=r[2] or 0.0,
+                 bpm=r[3] or 0.0, lfhf=r[4] or 0.0)
+            for r in cur.fetchall()
+        ]
     return (
-        _week_bar(days, "vti",   "Vagal Tone Index — Daily Average",       C_VTI,  ""),
-        _week_bar(days, "cbi",   "Conscious Breathing Index — Daily Average", C_CBI, ""),
-        _week_bar(days, "rmssd", "RMSSD — Daily Average",                   C_ACC,  "ms"),
-        _week_bar(days, "lfhf",  "LF / HF Ratio — Daily Average",           C_LFHF, ""),
+        _week_bar(days, "vti",   "Vagal Tone Index — Daily Average",          C_VTI,   ""),
+        _week_bar(days, "cbi",   "Conscious Breathing Index — Daily Average",  C_CBI,   ""),
+        _week_bar(days, "rmssd", "RMSSD — Daily Average",                      C_ACC,   "ms"),
+        _week_bar(days, "lfhf",  "LF / HF Ratio — Daily Average",              C_LFHF,  ""),
+        _week_bar(days, "sdnn",  "SDNN — Daily Average",                       C_SDNN,  "ms"),
+        _week_bar(days, "pnn50", "pNN50 — Daily Average",                      C_PNN50, "%"),
+        _week_bar(days, "vlf",   "VLF Power — Daily Average",                  C_VLF,   "ms²"),
+        _week_bar(days, "ulf",   "ULF Power — Daily Average",                  C_ULF,   "ms²"),
+        _week_bar(days, "bpm",   "Heart Rate — Daily Average",                 C_ECG,   "bpm"),
+        _week_activity_freq_fig(week_acts),
+        _week_impact_table_html(week_acts, all_week_rows),
     )
 
 
@@ -2092,6 +3687,41 @@ def toggle_measuring(_, state):
         return ("recording",
                 "⏹ STOP REC",
                 {**_btn, "color": C_BAD, "border": f"1px solid {C_BAD}"})
+
+
+# ── eye tracking toggle ────────────────────────────────────────────────────────
+@callback(
+    Output("eye-track-store",     "data"),
+    Output("btn-eye-toggle",      "children"),
+    Output("btn-eye-toggle",      "style"),
+    Output("eye-section-wrapper", "style"),
+    Input("btn-eye-toggle",       "n_clicks"),
+    State("eye-track-store",      "data"),
+    prevent_initial_call=True,
+)
+def toggle_eye_tracking(_, state):
+    _btn = {
+        "backgroundColor": "transparent",
+        "borderRadius": "12px",
+        "padding": "4px 14px",
+        "fontSize": "10px",
+        "fontWeight": "700",
+        "letterSpacing": "1px",
+        "cursor": "pointer",
+        "fontFamily": "'JetBrains Mono', monospace",
+    }
+    if state == "on":
+        _blink.stop()
+        return ("off",
+                "👁 START EYE",
+                {**_btn, "color": C_DIM, "border": f"1px solid {C_BORDER}"},
+                {"display": "none"})
+    else:
+        _blink.start()
+        return ("on",
+                "👁 STOP EYE",
+                {**_btn, "color": C_BLINK, "border": f"1px solid {C_BLINK}"},
+                {"display": "block"})
 
 
 # ── device panel toggle ────────────────────────────────────────────────────────
@@ -2189,6 +3819,472 @@ def reset_device(_):
     _target_device["name"]    = "Polar H10"
     _ble_reconnect.set()
     return "Searching for Polar H10 by name…"
+
+
+# ── quick navbar reconnect ─────────────────────────────────────────────────────
+@callback(
+    Output("connect-feedback", "children", allow_duplicate=True),
+    Input("btn-reconnect",     "n_clicks"),
+    prevent_initial_call=True,
+)
+def reconnect_now(_):
+    """Trigger immediate reconnect to the last known device (or scan by name)."""
+    _sensor_status["state"] = "reconnecting…"
+    _ble_reconnect.set()
+    name = _target_device.get("name") or "Polar H10"
+    addr = _target_device.get("address")
+    if addr:
+        return f"Reconnecting to {name} ({addr[:17]})…"
+    return f"Reconnecting — scanning for {name}…"
+
+
+# ── Info modal callbacks ───────────────────────────────────────────────────────
+@callback(
+    Output("info-modal-key", "data"),
+    Input({"type": "info-btn", "metric": dash.ALL, "section": dash.ALL}, "n_clicks"),
+    prevent_initial_call=True,
+)
+def open_info_modal(n_clicks_list):
+    triggered = ctx.triggered_id
+    if triggered and isinstance(triggered, dict):
+        return triggered["metric"]
+    return dash.no_update
+
+
+@callback(
+    Output("info-modal-key", "data", allow_duplicate=True),
+    Input("info-close-btn", "n_clicks"),
+    prevent_initial_call=True,
+)
+def close_info_modal(_):
+    return None
+
+
+def _info_section(icon: str, heading: str, text: str) -> html.Div:
+    return html.Div([
+        html.Div(f"{icon}  {heading}", style={
+            "color": C_DIM, "fontSize": "10px", "fontWeight": "700",
+            "textTransform": "uppercase", "letterSpacing": "1.5px",
+            "marginBottom": "6px", "marginTop": "14px",
+        }),
+        html.Div(text, style={
+            "color": C_TEXT, "fontSize": "12px", "lineHeight": "1.7",
+            "fontFamily": "'JetBrains Mono', monospace",
+        }),
+    ])
+
+
+@callback(
+    Output("info-modal-overlay", "style"),
+    Output("info-modal-title",   "children"),
+    Output("info-modal-body",    "children"),
+    Input("info-modal-key", "data"),
+)
+def render_info_modal(key):
+    _hidden = {"display": "none"}
+    _visible = {
+        "display": "flex", "position": "fixed", "top": "0", "left": "0",
+        "width": "100%", "height": "100%",
+        "backgroundColor": "rgba(0,0,0,0.75)",
+        "zIndex": "9999", "justifyContent": "center", "alignItems": "center",
+    }
+    if not key or key not in _METRIC_INFO:
+        return _hidden, "", []
+    info = _METRIC_INFO[key]
+    body = html.Div([
+        _info_section("🧠", "Nervous System",        info["nervous"]),
+        _info_section("🧘", "Psychological Activity", info["psychological"]),
+        _info_section("🏃", "Exercise Activity",      info["exercise"]),
+        _info_section("💡", "How to Improve",         info["improve"]),
+    ])
+    return _visible, info["title"], body
+
+
+# ── LOG tab: category selection ───────────────────────────────────────────────
+def _cat_btn_style(cat: str, selected: str | None) -> dict:
+    info    = _ACTIVITY_CATS.get(cat, _ACTIVITY_CATS["other"])
+    active  = selected == cat
+    return {
+        "backgroundColor": info["color"] if active else "transparent",
+        "color": C_BG if active else C_DIM,
+        "border": f"1px solid {info['color'] if active else C_BORDER}",
+        "borderRadius": "12px",
+        "padding": "4px 12px",
+        "fontSize": "10px",
+        "fontWeight": "700",
+        "letterSpacing": "1px",
+        "cursor": "pointer",
+        "fontFamily": "'JetBrains Mono', monospace",
+    }
+
+
+@callback(
+    Output("log-cat-store",     "data"),
+    Output("log-preset-chips",  "children"),
+    Input({"type": "cat-btn", "cat": dash.ALL}, "n_clicks"),
+    State("log-cat-store", "data"),
+    prevent_initial_call=True,
+)
+def select_category(n_clicks_list, current_cat):
+    triggered = ctx.triggered_id
+    if not triggered or not isinstance(triggered, dict):
+        return dash.no_update, dash.no_update
+    cat = triggered["cat"]
+    info = _ACTIVITY_CATS.get(cat, _ACTIVITY_CATS["other"])
+    chips = []
+    for preset in info["presets"]:
+        chips.append(html.Button(
+            preset,
+            id={"type": "preset-btn", "name": preset},
+            n_clicks=0,
+            style={
+                "backgroundColor": "transparent",
+                "color": info["color"],
+                "border": f"1px solid {info['color']}",
+                "borderRadius": "10px",
+                "padding": "3px 10px",
+                "fontSize": "10px",
+                "cursor": "pointer",
+                "fontFamily": "'JetBrains Mono', monospace",
+                "margin": "2px",
+            },
+        ))
+    if not chips:
+        chips = [html.Span("no presets — type a custom name below",
+                           style={"color": C_DIM, "fontSize": "11px"})]
+    return cat, chips
+
+
+@callback(
+    Output("log-custom-name", "value"),
+    Input({"type": "preset-btn", "name": dash.ALL}, "n_clicks"),
+    prevent_initial_call=True,
+)
+def select_preset(n_clicks_list):
+    triggered = ctx.triggered_id
+    if triggered and isinstance(triggered, dict):
+        return triggered["name"]
+    return dash.no_update
+
+
+@callback(
+    Output("log-time-input", "value"),
+    Input("tick-minute", "n_intervals"),
+)
+def fill_log_time(_n):
+    return datetime.now().strftime("%H:%M")
+
+
+@callback(
+    Output("log-feedback",      "children"),
+    Output("log-feedback",      "style"),
+    Output("log-refresh-store", "data"),
+    Input("btn-log-submit",   "n_clicks"),
+    State("log-cat-store",    "data"),
+    State("log-custom-name",  "value"),
+    State("log-time-input",   "value"),
+    State("log-duration",     "value"),
+    State("log-notes",        "value"),
+    State("log-refresh-store", "data"),
+    prevent_initial_call=True,
+)
+def submit_log(_, cat, name, time_str, duration, notes, refresh_count):
+    _feedback_style = {"fontSize": "11px", "marginLeft": "10px",
+                       "fontFamily": "'JetBrains Mono', monospace"}
+    if not cat:
+        return ("⚠ select a category first",
+                {**_feedback_style, "color": C_WARN},
+                dash.no_update)
+    if not name or not name.strip():
+        return ("⚠ enter an activity name",
+                {**_feedback_style, "color": C_WARN},
+                dash.no_update)
+    time_str = (time_str or "").strip()
+    if not time_str:
+        time_str = datetime.now().strftime("%H:%M")
+    now   = datetime.now()
+    today = now.strftime("%Y-%m-%d")
+    ts    = f"{today}T{time_str}:00"
+    rec = dict(
+        ts=ts, ts_date=today, ts_time=time_str,
+        category=cat, name=name.strip(),
+        notes=notes or "",
+        duration_min=int(duration) if duration else 0,
+        intensity=0,
+        source="manual",
+    )
+    try:
+        with _db_lock:
+            _save_activity(_db, rec)
+    except Exception as exc:
+        return (f"⚠ DB error: {str(exc)[:60]}",
+                {**_feedback_style, "color": C_BAD},
+                dash.no_update)
+    return (f"✓ logged {name.strip()} at {time_str}",
+            {**_feedback_style, "color": C_GOOD},
+            (refresh_count or 0) + 1)
+
+
+@callback(
+    Output("log-cat-store",   "data",     allow_duplicate=True),
+    Output("log-custom-name", "value",    allow_duplicate=True),
+    Output("log-time-input",  "value",    allow_duplicate=True),
+    Output("log-duration",    "value",    allow_duplicate=True),
+    Output("log-notes",       "value",    allow_duplicate=True),
+    Output("log-feedback",    "children", allow_duplicate=True),
+    Output("log-preset-chips","children", allow_duplicate=True),
+    Input("btn-log-clear", "n_clicks"),
+    prevent_initial_call=True,
+)
+def clear_log_form(_):
+    return (None, "", datetime.now().strftime("%H:%M"), None, "",
+            "", [html.Span("← select a category",
+                           style={"color": C_DIM, "fontSize": "11px"})])
+
+
+@callback(
+    Output("log-refresh-store", "data", allow_duplicate=True),
+    Input({"type": "del-act", "id": dash.ALL}, "n_clicks"),
+    State("log-refresh-store", "data"),
+    prevent_initial_call=True,
+)
+def delete_activity(n_clicks_list, refresh_count):
+    triggered = ctx.triggered_id
+    if not triggered or not isinstance(triggered, dict):
+        return dash.no_update
+    if not any(n_clicks_list):
+        return dash.no_update
+    act_id = triggered["id"]
+    try:
+        with _db_lock:
+            _delete_activity(_db, act_id)
+    except Exception:
+        pass
+    return (refresh_count or 0) + 1
+
+
+@callback(
+    Output("auto-detect-banner",  "style",    allow_duplicate=True),
+    Input("btn-dismiss-detect",   "n_clicks"),
+    prevent_initial_call=True,
+)
+def dismiss_autodetect(_):
+    _auto_detect["pending_exercise_ts"] = None
+    _auto_detect["pending_hr_ts"]       = None
+    _auto_detect["exercise_streak"]     = 0
+    _auto_detect["hr_streak"]           = 0
+    return {"display": "none"}
+
+
+@callback(
+    Output("log-cat-store",   "data",     allow_duplicate=True),
+    Output("log-custom-name", "value",    allow_duplicate=True),
+    Output("auto-detect-banner", "style", allow_duplicate=True),
+    Input("btn-confirm-detect", "n_clicks"),
+    prevent_initial_call=True,
+)
+def confirm_autodetect(_):
+    _auto_detect["pending_exercise_ts"] = None
+    _auto_detect["pending_hr_ts"]       = None
+    _auto_detect["exercise_streak"]     = 0
+    _auto_detect["hr_streak"]           = 0
+    return "exercise", "Exercise", {"display": "none"}
+
+
+# ── LOG tab view callback (5 000 ms + refresh store) ─────────────────────────
+@callback(
+    Output("activity-timeline-graph", "figure"),
+    Output("activity-list",           "children"),
+    Output("impact-table",            "children"),
+    Output("log-suggestions",         "children"),
+    Output("auto-detect-banner",      "children"),
+    Output("auto-detect-banner",      "style"),
+    Output("today-log-count",         "children"),
+    Input("tick-today",        "n_intervals"),
+    Input("log-refresh-store", "data"),
+)
+def update_log_view(_n, _refresh):
+    with _db_lock:
+        activities = _load_activities_today(_db)
+        records    = _load_today(_db)
+        hist14     = _load_activities_14d(_db)
+
+    # ── 4B: timeline figure ───────────────────────────────────────────────────
+    timeline_fig = _activity_timeline_fig(activities, records)
+
+    # ── 4C: activity list ─────────────────────────────────────────────────────
+    if not activities:
+        act_list = [html.Div("No activities logged today.",
+                             style={"color": C_DIM, "fontSize": "12px"})]
+    else:
+        act_list = []
+        for act in activities:   # already newest-first from DB query
+            cat_info = _ACTIVITY_CATS.get(act["category"], _ACTIVITY_CATS["other"])
+            dur_str  = f"  ·  {act['duration_min']} min" if act["duration_min"] else ""
+            act_list.append(html.Div([
+                html.Div([
+                    html.Span(f"{cat_info['icon']} {act['category'].upper()}",
+                              style={"color": cat_info["color"], "fontSize": "10px",
+                                     "fontWeight": "700", "letterSpacing": "1px",
+                                     "marginRight": "10px"}),
+                    html.Span(act["name"],
+                              style={"color": C_TEXT, "fontSize": "12px", "fontWeight": "600"}),
+                    html.Span(f"  {act['ts_time']}{dur_str}  ·  {act['source']}",
+                              style={"color": C_DIM, "fontSize": "11px", "marginLeft": "8px"}),
+                ], style={"flex": "1"}),
+                html.Button("✕", id={"type": "del-act", "id": act["id"]}, n_clicks=0,
+                            style={
+                                "backgroundColor": "transparent", "color": C_DIM,
+                                "border": "none", "fontSize": "14px", "cursor": "pointer",
+                                "padding": "0 4px",
+                            }),
+            ], style={
+                "display": "flex", "alignItems": "center", "justifyContent": "space-between",
+                "padding": "8px 10px", "marginBottom": "6px",
+                "borderLeft": f"3px solid {cat_info['color']}",
+                "backgroundColor": C_BG, "borderRadius": "4px",
+            }))
+
+    # ── 4D: impact table ──────────────────────────────────────────────────────
+    if not activities or not records:
+        impact_div = html.Div("No impact data yet — need ≥ 5 biometric records on each side of an activity.",
+                              style={"color": C_DIM, "fontSize": "12px"})
+    else:
+        _th = {"color": C_DIM, "fontSize": "10px", "fontWeight": "700",
+               "letterSpacing": "1px", "textTransform": "uppercase",
+               "padding": "4px 10px", "textAlign": "right",
+               "fontFamily": "'JetBrains Mono', monospace"}
+        _td_base = {"fontSize": "11px", "padding": "4px 10px", "textAlign": "right",
+                    "fontFamily": "'JetBrains Mono', monospace"}
+        rows = []
+        for act in reversed(activities):  # chronological order
+            imp = _compute_impact(act, records)
+            if not imp:
+                continue
+            cat_info = _ACTIVITY_CATS.get(act["category"], _ACTIVITY_CATS["other"])
+            cells = [html.Td(
+                f"{cat_info['icon']} {act['name']}",
+                style={**_td_base, "textAlign": "left", "color": cat_info["color"],
+                       "borderLeft": f"3px solid {cat_info['color']}", "paddingLeft": "8px"},
+            ), html.Td(act["ts_time"], style={**_td_base, "color": C_DIM})]
+            for key, higher_is_good in [("vti", True), ("rmssd", True), ("bpm", False), ("lfhf", False)]:
+                if key in imp:
+                    _, _, delta, hig = imp[key]
+                    good  = (delta > 0) == hig
+                    color = C_GOOD if good else C_BAD
+                    sign  = "+" if delta > 0 else ""
+                    cells.append(html.Td(f"{sign}{delta:.2f}",
+                                         style={**_td_base, "color": color}))
+                else:
+                    cells.append(html.Td("—", style={**_td_base, "color": C_DIM}))
+            rows.append(html.Tr(cells))
+
+        if rows:
+            impact_div = html.Table([
+                html.Thead(html.Tr([
+                    html.Th("Activity", style={**_th, "textAlign": "left"}),
+                    html.Th("Time",     style=_th),
+                    html.Th("VTI Δ",   style=_th),
+                    html.Th("RMSSD Δ", style=_th),
+                    html.Th("HR Δ",    style=_th),
+                    html.Th("LF/HF Δ", style=_th),
+                ])),
+                html.Tbody(rows),
+            ], style={"width": "100%", "borderCollapse": "collapse",
+                      "color": C_TEXT, "fontFamily": "'JetBrains Mono', monospace"})
+        else:
+            impact_div = html.Div("Not enough data yet (need 30+ min of biometrics on each side of an activity).",
+                                  style={"color": C_DIM, "fontSize": "12px"})
+
+    # ── Smart suggestions from last 14 days ───────────────────────────────────
+    suggestions_div = html.Div()
+    if hist14:
+        from collections import Counter
+        now_hour = datetime.now().hour
+        nearby = [a for a in hist14
+                  if abs(int(a["ts_time"][:2]) - now_hour) <= 1]
+        if nearby:
+            top3 = Counter((a["category"], a["name"]) for a in nearby).most_common(3)
+            chips = []
+            for (cat, name), _ in top3:
+                cat_info = _ACTIVITY_CATS.get(cat, _ACTIVITY_CATS["other"])
+                chips.append(html.Button(
+                    f"{cat_info['icon']} {name}",
+                    id={"type": "suggest-btn", "cat": cat, "name": name},
+                    n_clicks=0,
+                    style={
+                        "backgroundColor": "transparent",
+                        "color": cat_info["color"],
+                        "border": f"1px solid {cat_info['color']}",
+                        "borderRadius": "10px", "padding": "3px 10px",
+                        "fontSize": "10px", "cursor": "pointer",
+                        "fontFamily": "'JetBrains Mono', monospace", "margin": "2px",
+                    },
+                ))
+            if chips:
+                suggestions_div = html.Div([
+                    html.Span("💡 Typical at this time:  ",
+                              style={"color": C_DIM, "fontSize": "11px"}),
+                    *chips,
+                ], style={"marginTop": "8px"})
+
+    # ── Auto-detect banner ────────────────────────────────────────────────────
+    ex_ts = _auto_detect.get("pending_exercise_ts")
+    hr_ts = _auto_detect.get("pending_hr_ts")
+    banner_ts   = ex_ts or hr_ts
+    banner_src  = "ACC movement" if ex_ts else "elevated HR"
+    banner_style = {"display": "none"}
+    banner_children = []
+    if banner_ts:
+        banner_style = {
+            **_CARD,
+            "backgroundColor": "#1a1f2e",
+            "border": f"1px solid {C_WARN}",
+            "display": "flex", "alignItems": "center", "gap": "14px",
+            "marginBottom": "10px", "padding": "10px 14px",
+        }
+        banner_children = [
+            html.Span(f"⚡ High {banner_src} detected at {banner_ts}",
+                      style={"color": C_WARN, "fontSize": "12px", "flex": "1",
+                             "fontFamily": "'JetBrains Mono', monospace"}),
+            html.Button("Log as Exercise ▼", id="btn-confirm-detect", n_clicks=0,
+                        style={
+                            "backgroundColor": C_WARN, "color": C_BG,
+                            "border": "none", "borderRadius": "10px",
+                            "padding": "5px 14px", "fontSize": "10px", "fontWeight": "700",
+                            "cursor": "pointer", "fontFamily": "'JetBrains Mono', monospace",
+                        }),
+            html.Button("Dismiss", id="btn-dismiss-detect", n_clicks=0,
+                        style={
+                            "backgroundColor": "transparent", "color": C_DIM,
+                            "border": f"1px solid {C_BORDER}", "borderRadius": "10px",
+                            "padding": "5px 12px", "fontSize": "10px",
+                            "cursor": "pointer", "fontFamily": "'JetBrains Mono', monospace",
+                        }),
+        ]
+
+    # ── log count label ───────────────────────────────────────────────────────
+    n = len(activities)
+    count_label = f"{n} activit{'ies' if n != 1 else 'y'} logged today" if n else "No activities logged today"
+
+    return (timeline_fig, act_list, impact_div, suggestions_div,
+            banner_children, banner_style, count_label)
+
+
+# ── LOG suggestion chip pre-fill ──────────────────────────────────────────────
+@callback(
+    Output("log-cat-store",   "data",  allow_duplicate=True),
+    Output("log-custom-name", "value", allow_duplicate=True),
+    Input({"type": "suggest-btn", "cat": dash.ALL, "name": dash.ALL}, "n_clicks"),
+    prevent_initial_call=True,
+)
+def fill_from_suggestion(n_clicks_list):
+    triggered = ctx.triggered_id
+    if not triggered or not isinstance(triggered, dict):
+        return dash.no_update, dash.no_update
+    if not any(n_clicks_list):
+        return dash.no_update, dash.no_update
+    return triggered["cat"], triggered["name"]
 
 
 # ── entry point ───────────────────────────────────────────────────────────────

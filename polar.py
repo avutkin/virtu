@@ -6,10 +6,11 @@ from datetime import datetime, timezone
 from bleak import BleakScanner, BleakClient
 
 # --- UUIDs ---
-PMD_SERVICE = "FB005C80-02E7-F387-1CAD-8ACD2D8DF0C8"
-PMD_CONTROL = "FB005C81-02E7-F387-1CAD-8ACD2D8DF0C8"
-PMD_DATA    = "FB005C82-02E7-F387-1CAD-8ACD2D8DF0C8"
-HR_MEAS     = "00002A37-0000-1000-8000-00805F9B34FB"
+PMD_SERVICE     = "FB005C80-02E7-F387-1CAD-8ACD2D8DF0C8"
+PMD_CONTROL     = "FB005C81-02E7-F387-1CAD-8ACD2D8DF0C8"
+PMD_DATA        = "FB005C82-02E7-F387-1CAD-8ACD2D8DF0C8"
+HR_MEAS         = "00002A37-0000-1000-8000-00805F9B34FB"
+BATTERY_LEVEL   = "00002A19-0000-1000-8000-00805F9B34FB"
 
 # --- PMD commands ---
 CMD_ECG_START = bytearray([0x02, 0x00, 0x00, 0x01, 0x82, 0x00, 0x01, 0x01, 0x0E, 0x00])
@@ -62,20 +63,20 @@ class PolarH10:
         if os.path.exists(self._ADDR_CACHE):
             cached = open(self._ADDR_CACHE).read().strip()
             if cached:
-                print(f"Trying cached address: {cached}")
+                print(f"Trying cached address: {cached}", flush=True)
                 try:
                     client = BleakClient(cached,
                                         disconnected_callback=self._on_disconnect)
                     await client.connect(timeout=10.0)
                     self._client = client
                     self._device_label = self.device_name
-                    print(f"Connected via cached address ({cached}).")
+                    print(f"Connected via cached address ({cached}).", flush=True)
                     return
                 except Exception as exc:
-                    print(f"Cached address failed ({exc}), falling back to scan.")
+                    print(f"Cached address failed ({exc}), falling back to scan.", flush=True)
 
         # --- Primary scan: filter by name ---
-        print(f"Scanning for '{self.device_name}' (filter scan, {timeout:.0f}s)…")
+        print(f"Scanning for '{self.device_name}' (filter scan, {timeout:.0f}s)…", flush=True)
         try:
             device = await BleakScanner.find_device_by_filter(
                 lambda d, _: d.name and self.device_name in d.name,
@@ -86,13 +87,13 @@ class PolarH10:
 
         # --- Fallback: full discovery + log everything visible ---
         if device is None:
-            print("Filter scan found nothing. Running full BLE discovery (10 s)…")
+            print("Filter scan found nothing. Running full BLE discovery (10 s)…", flush=True)
             try:
                 found = await BleakScanner.discover(timeout=10.0)
                 if found:
-                    print(f"Discovered {len(found)} device(s):")
+                    print(f"Discovered {len(found)} device(s):", flush=True)
                     for d in sorted(found, key=lambda x: x.name or ""):
-                        print(f"  {d.address}  name={d.name!r}  rssi={d.rssi}")
+                        print(f"  {d.address}  name={d.name!r}  rssi={d.rssi}", flush=True)
                     # pick any device whose name contains our target
                     for d in found:
                         if d.name and self.device_name in d.name:
@@ -100,9 +101,9 @@ class PolarH10:
                             break
                 else:
                     print("Full discovery returned zero devices — "
-                          "check macOS Bluetooth permission for Terminal/Python.")
+                          "check macOS Bluetooth permission for Terminal/Python.", flush=True)
             except Exception as exc:
-                print(f"Full discovery error: {exc}")
+                print(f"Full discovery error: {exc}", flush=True)
 
         if device is None:
             raise RuntimeError(
@@ -113,11 +114,11 @@ class PolarH10:
             )
 
         self._device_label = device.name or self.device_name
-        print(f"Found: {self._device_label} ({device.address})")
+        print(f"Found: {self._device_label} ({device.address})", flush=True)
 
         self._client = BleakClient(device, disconnected_callback=self._on_disconnect)
         await self._client.connect()
-        print("Connected.")
+        print("Connected.", flush=True)
 
         # Cache the address for fast reconnection next time
         try:
@@ -131,7 +132,7 @@ class PolarH10:
             await self._client.disconnect()
 
     def _on_disconnect(self, _client: BleakClient) -> None:
-        print("Device disconnected.")
+        print("Device disconnected.", flush=True)
 
     # ------------------------------------------------------------------
     # Streaming
@@ -143,16 +144,37 @@ class PolarH10:
         try:
             await c.start_notify(HR_MEAS, self._hr_handler)
         except Exception as exc:
-            print(f"HR notification unavailable: {exc}")
+            print(f"HR notification unavailable: {exc}", flush=True)
 
         # ECG + ACC via Polar PMD — Polar H10 / OH1 / Verity Sense only
         try:
+            # Pre-stop any PMD streams the device firmware still considers active
+            # (avoids CMD_ECG_START hanging on reconnect waiting for a NAK/ACK
+            # that never arrives because ECG was never cleanly stopped last time).
+            try:
+                await c.write_gatt_char(PMD_CONTROL, CMD_ECG_STOP, response=True)
+                await c.write_gatt_char(PMD_CONTROL, CMD_ACC_STOP, response=True)
+            except Exception:
+                pass  # device may reject stop if streams weren't active
+            await asyncio.sleep(0.3)  # let firmware settle between stop and start
+
             await c.start_notify(PMD_DATA, self._pmd_handler)
             await c.write_gatt_char(PMD_CONTROL, CMD_ECG_START, response=True)
             await c.write_gatt_char(PMD_CONTROL, CMD_ACC_START, response=True)
-            print("Streaming ECG, accelerometer, and pulse.")
+            print("Streaming ECG, accelerometer, and pulse.", flush=True)
         except Exception as exc:
-            print(f"Polar PMD unavailable — HR-only mode ({exc})")
+            print(f"Polar PMD unavailable — HR-only mode ({exc})", flush=True)
+
+    async def read_battery(self) -> int | None:
+        """Read the BLE battery level (0–100 %). Returns None if unavailable."""
+        try:
+            data = await self._client.read_gatt_char(BATTERY_LEVEL)
+            level = data[0]
+            print(f"Battery: {level}%", flush=True)
+            return level
+        except Exception as exc:
+            print(f"Battery level unavailable: {exc}", flush=True)
+            return None
 
     async def stop_streams(self) -> None:
         c = self._client

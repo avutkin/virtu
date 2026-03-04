@@ -38,6 +38,10 @@ _MIN_ACC_BREATH = int(ACC_FS * 6)   # 6 s
 _MIN_ACC_COH    = int(ACC_FS * 15)  # 15 s for coherence
 _MIN_ACC_PHASES = int(ACC_FS * 20)  # 20 s — need ≥ 2 complete cycles
 
+# ULF constants (< 0.003 Hz — computed from long bpm time series)
+_ULF_FS          = 0.5   # Hz — one bpm record per 2 s
+_ULF_MIN_SAMPLES = 900   # 30 min at 0.5 Hz → freq resolution ≤ 0.0011 Hz
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -380,3 +384,36 @@ def compute_breath_phases(acc_z: list) -> dict | None:
         filtered    =sig_slice.tolist(),
         filtered_t  =t_rel.tolist(),
     )
+
+
+def compute_ulf_power(bpm_series: list[float]) -> float | None:
+    """
+    Estimate ULF HRV power (< 0.003 Hz) from a uniformly-sampled BPM series.
+
+    The series should consist of BPM values recorded at ~0.5 Hz (one per 2 s).
+    Requires at least 900 samples (~30 min) for meaningful frequency resolution.
+    Values ≤ 20 bpm (gaps / zeroes) are excluded before analysis.
+
+    Returns power in ms² (via trapezoidal integration of Welch PSD), or None
+    if there are insufficient samples.
+    """
+    bpm = np.asarray([b for b in bpm_series if b > 20], dtype=float)
+    if len(bpm) < _ULF_MIN_SAMPLES:
+        return None
+
+    rr = 60_000.0 / bpm          # convert bpm → RR intervals in ms
+    detrended = rr - np.mean(rr)
+
+    nperseg = min(1024, len(detrended) // 2)
+    if nperseg < 64:
+        return None
+
+    freqs, psd = spsig.welch(
+        detrended, fs=_ULF_FS, nperseg=nperseg,
+        noverlap=nperseg // 2, window="hann",
+    )
+    ulf_m = freqs < 0.003
+    if not ulf_m.any():
+        return None
+
+    return float(np.trapezoid(psd[ulf_m], freqs[ulf_m]))
