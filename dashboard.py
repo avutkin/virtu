@@ -333,6 +333,19 @@ CREATE TABLE IF NOT EXISTS activities (
     source       TEXT DEFAULT 'manual'
 );
 CREATE INDEX IF NOT EXISTS idx_act_date ON activities(ts_date);
+CREATE TABLE IF NOT EXISTS custom_categories (
+    id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    key    TEXT UNIQUE NOT NULL,
+    icon   TEXT NOT NULL DEFAULT '📌',
+    color  TEXT NOT NULL DEFAULT '#6b7280',
+    label  TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS custom_presets (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    category TEXT NOT NULL,
+    name     TEXT NOT NULL,
+    UNIQUE(category, name)
+);
 """
 
 def _open_db() -> sqlite3.Connection:
@@ -482,6 +495,83 @@ def _load_activities_14d(conn: sqlite3.Connection) -> list[dict]:
 def _delete_activity(conn: sqlite3.Connection, activity_id: int) -> None:
     conn.execute("DELETE FROM activities WHERE id=?", (activity_id,))
     conn.commit()
+
+
+def _load_custom_categories(conn: sqlite3.Connection) -> list[dict]:
+    cur = conn.execute(
+        "SELECT id, key, icon, color, label FROM custom_categories ORDER BY label"
+    )
+    return [dict(id=r[0], key=r[1], icon=r[2], color=r[3], label=r[4])
+            for r in cur.fetchall()]
+
+
+def _load_custom_presets(conn: sqlite3.Connection) -> list[dict]:
+    cur = conn.execute(
+        "SELECT id, category, name FROM custom_presets ORDER BY category, name"
+    )
+    return [dict(id=r[0], category=r[1], name=r[2]) for r in cur.fetchall()]
+
+
+def _save_custom_category(conn: sqlite3.Connection, key: str, icon: str,
+                           color: str, label: str) -> None:
+    conn.execute(
+        "INSERT OR IGNORE INTO custom_categories (key, icon, color, label) VALUES (?,?,?,?)",
+        (key, icon, color, label),
+    )
+    conn.commit()
+
+
+def _save_custom_preset(conn: sqlite3.Connection, category: str, name: str) -> None:
+    conn.execute(
+        "INSERT OR IGNORE INTO custom_presets (category, name) VALUES (?,?)",
+        (category, name),
+    )
+    conn.commit()
+
+
+def _delete_custom_category(conn: sqlite3.Connection, cat_id: int) -> None:
+    # Cascade-delete its custom presets too
+    conn.execute(
+        "DELETE FROM custom_presets WHERE category = "
+        "(SELECT key FROM custom_categories WHERE id=?)", (cat_id,)
+    )
+    conn.execute("DELETE FROM custom_categories WHERE id=?", (cat_id,))
+    conn.commit()
+
+
+def _delete_custom_preset(conn: sqlite3.Connection, preset_id: int) -> None:
+    conn.execute("DELETE FROM custom_presets WHERE id=?", (preset_id,))
+    conn.commit()
+
+
+import re as _re
+
+
+def _slugify(text: str) -> str:
+    return _re.sub(r"[^a-z0-9_]", "_", text.lower().strip())[:32].strip("_") or "custom"
+
+
+def _get_all_cats(conn: sqlite3.Connection) -> dict:
+    """Return merged dict of built-in _ACTIVITY_CATS + DB custom categories/presets."""
+    merged = {k: dict(v) for k, v in _ACTIVITY_CATS.items()}
+    # Collect custom presets for all categories (built-in + custom)
+    extra_presets: dict[str, list[str]] = {}
+    for p in _load_custom_presets(conn):
+        extra_presets.setdefault(p["category"], []).append(p["name"])
+    # Append custom presets to built-in categories
+    for key in list(_ACTIVITY_CATS.keys()):
+        if key in extra_presets:
+            merged[key] = dict(merged[key])
+            merged[key]["presets"] = list(_ACTIVITY_CATS[key]["presets"]) + extra_presets[key]
+    # Add custom categories
+    for cat in _load_custom_categories(conn):
+        key = cat["key"]
+        merged[key] = {
+            "icon":    cat["icon"],
+            "color":   cat["color"],
+            "presets": extra_presets.get(key, []),
+        }
+    return merged
 
 
 # ── thread-safe data buffer ───────────────────────────────────────────────────
@@ -1270,10 +1360,12 @@ def _range_label(minutes: int) -> str:
     return f"{minutes // 60} h" if minutes >= 60 else f"{minutes} min"
 
 
-def _add_activity_overlays(fig: go.Figure, activities: list[dict]) -> go.Figure:
+def _add_activity_overlays(fig: go.Figure, activities: list[dict],
+                           cats: dict = _ACTIVITY_CATS) -> go.Figure:
     """Add dotted vertical lines for each logged activity onto a time-series figure."""
+    _fallback = cats.get("other", _ACTIVITY_CATS["other"])
     for act in activities:
-        cat_info = _ACTIVITY_CATS.get(act["category"], _ACTIVITY_CATS["other"])
+        cat_info = cats.get(act["category"], _fallback)
         color = cat_info["color"]
         icon  = cat_info["icon"]
         fig.add_vline(
@@ -1286,8 +1378,10 @@ def _add_activity_overlays(fig: go.Figure, activities: list[dict]) -> go.Figure:
     return fig
 
 
-def _activity_timeline_fig(activities: list[dict], records: list[dict]) -> go.Figure:
+def _activity_timeline_fig(activities: list[dict], records: list[dict],
+                           cats: dict = _ACTIVITY_CATS) -> go.Figure:
     """Swim-lane activity markers with VTI overlay on secondary y-axis."""
+    _fallback = cats.get("other", _ACTIVITY_CATS["other"])
     fig = go.Figure()
 
     if not activities and not records:
@@ -1306,7 +1400,7 @@ def _activity_timeline_fig(activities: list[dict], records: list[dict]) -> go.Fi
 
     for cat in cats_present:
         acts = [a for a in activities if a["category"] == cat]
-        info = _ACTIVITY_CATS.get(cat, _ACTIVITY_CATS["other"])
+        info = cats.get(cat, _fallback)
         fig.add_trace(go.Scatter(
             x=[a["ts_time"] for a in acts],
             y=[cat_y[cat]] * len(acts),
@@ -1348,8 +1442,7 @@ def _activity_timeline_fig(activities: list[dict], records: list[dict]) -> go.Fi
         yaxis=dict(
             tickmode="array",
             tickvals=list(cat_y.values()),
-            ticktext=[f"{_ACTIVITY_CATS.get(c, _ACTIVITY_CATS['other'])['icon']} {c}"
-                      for c in cats_present],
+            ticktext=[f"{cats.get(c, _fallback)['icon']} {c}" for c in cats_present],
             showgrid=True, gridcolor=C_BORDER, zeroline=False,
             tickfont=dict(color=C_DIM, size=10),
         ),
@@ -1856,8 +1949,9 @@ app.layout = html.Div([
     dcc.Store(id="measure-store",     data="recording"),
     dcc.Store(id="eye-track-store",   data="on"),
     dcc.Store(id="info-modal-key",    data=None),
-    dcc.Store(id="log-cat-store",     data=None),
-    dcc.Store(id="log-refresh-store", data=0),
+    dcc.Store(id="log-cat-store",      data=None),
+    dcc.Store(id="log-refresh-store",  data=0),
+    dcc.Store(id="manage-cats-refresh", data=0),
 
     # ── Navigation bar ────────────────────────────────────────────────────────
     html.Div([
@@ -2566,7 +2660,12 @@ app.layout = html.Div([
                 )
                 for cat, info in _ACTIVITY_CATS.items()
             ], style={"display": "flex", "flexWrap": "wrap", "gap": "6px",
-                      "marginBottom": "14px"}),
+                      "marginBottom": "6px"}),
+
+            # Custom category buttons (populated dynamically)
+            html.Div(id="custom-cat-row",
+                     style={"display": "flex", "flexWrap": "wrap", "gap": "6px",
+                            "marginBottom": "8px"}),
 
             html.Hr(style={"border": f"1px solid {C_BORDER}", "margin": "8px 0"}),
 
@@ -2674,6 +2773,27 @@ app.layout = html.Div([
             html.Div(id="log-suggestions"),
 
         ], style={**_CARD, "marginBottom": "10px"}),
+
+        # ── Manage Categories & Activities (collapsible) ───────────────────────
+        html.Div([
+            html.Button(
+                "⚙ MANAGE CATEGORIES & ACTIVITIES",
+                id="btn-manage-toggle", n_clicks=0,
+                style={
+                    "backgroundColor": "transparent", "color": C_DIM,
+                    "border": f"1px solid {C_BORDER}", "borderRadius": "10px",
+                    "padding": "7px 18px", "fontSize": "10px", "fontWeight": "700",
+                    "letterSpacing": "1.5px", "cursor": "pointer",
+                    "fontFamily": "'JetBrains Mono', monospace", "width": "100%",
+                    "textAlign": "left",
+                },
+            ),
+            html.Div(
+                id="manage-panel",
+                children=[html.Div(id="manage-panel-content")],
+                style={"display": "none"},
+            ),
+        ], style={**_CARD, "marginBottom": "10px", "padding": "8px 16px"}),
 
         # ── 4B: Activity timeline chart ────────────────────────────────────────
         html.Div([
@@ -3422,6 +3542,7 @@ def update_today(_n: int):
     with _db_lock:
         records    = _load_today(_db)
         activities = _load_activities_today(_db)
+        all_cats   = _get_all_cats(_db)
 
     if not records:
         ef = _empty_fig
@@ -3460,11 +3581,11 @@ def update_today(_n: int):
     dur_s   = len(records) * 2
     session = f"Duration  {dur_s // 60} min {dur_s % 60} s  ·  {len(records)} data points"
 
-    vti_fig   = _add_activity_overlays(_vti_trend(records),   activities)
-    cbi_fig   = _add_activity_overlays(_cbi_trend(records),   activities)
-    rmssd_fig = _add_activity_overlays(_rmssd_trend(records), activities)
-    lfhf_fig  = _add_activity_overlays(_lfhf_trend(records),  activities)
-    hr_fig    = _add_activity_overlays(_hr_trend(records),     activities)
+    vti_fig   = _add_activity_overlays(_vti_trend(records),   activities, cats=all_cats)
+    cbi_fig   = _add_activity_overlays(_cbi_trend(records),   activities, cats=all_cats)
+    rmssd_fig = _add_activity_overlays(_rmssd_trend(records), activities, cats=all_cats)
+    lfhf_fig  = _add_activity_overlays(_lfhf_trend(records),  activities, cats=all_cats)
+    hr_fig    = _add_activity_overlays(_hr_trend(records),     activities, cats=all_cats)
 
     return (avg_hr, avg_vti, peak_cbi, avg_rmssd, avg_sdnn, avg_pnn50,
             avg_breath, avg_lfhf, session,
@@ -3502,8 +3623,10 @@ def _compute_impact(activity: dict, records: list[dict],
     return result if result else None
 
 
-def _week_activity_freq_fig(week_acts: list[dict]) -> go.Figure:
+def _week_activity_freq_fig(week_acts: list[dict],
+                            cats: dict = _ACTIVITY_CATS) -> go.Figure:
     """Horizontal bar chart of activity frequency over the past 7 days."""
+    _fallback = cats.get("other", _ACTIVITY_CATS["other"])
     if not week_acts:
         fig = go.Figure()
         fig.update_layout(**_PLOT_LAYOUT,
@@ -3517,9 +3640,9 @@ def _week_activity_freq_fig(week_acts: list[dict]) -> go.Figure:
     from collections import Counter
     counts = Counter((a["category"], a["name"]) for a in week_acts)
     items  = sorted(counts.items(), key=lambda x: x[1])
-    labels = [f"{_ACTIVITY_CATS.get(c, _ACTIVITY_CATS['other'])['icon']} {n}" for (c, n), _ in items]
+    labels = [f"{cats.get(c, _fallback)['icon']} {n}" for (c, n), _ in items]
     values = [v for _, v in items]
-    colors = [_ACTIVITY_CATS.get(c, _ACTIVITY_CATS["other"])["color"] for (c, _), _ in items]
+    colors = [cats.get(c, _fallback)["color"] for (c, _), _ in items]
 
     fig = go.Figure(go.Bar(
         x=values, y=labels, orientation="h",
@@ -3538,8 +3661,10 @@ def _week_activity_freq_fig(week_acts: list[dict]) -> go.Figure:
     return fig
 
 
-def _week_impact_table_html(week_acts: list[dict], week_records: list[dict]) -> html.Div:
+def _week_impact_table_html(week_acts: list[dict], week_records: list[dict],
+                            cats: dict = _ACTIVITY_CATS) -> html.Div:
     """Average impact table for activities logged >= 2 times in last 7 days."""
+    _fallback = cats.get("other", _ACTIVITY_CATS["other"])
     if not week_acts or not week_records:
         return html.Div()
 
@@ -3570,7 +3695,7 @@ def _week_impact_table_html(week_acts: list[dict], week_records: list[dict]) -> 
         if not any(deltas.values()):
             continue
 
-        cat_info = _ACTIVITY_CATS.get(cat, _ACTIVITY_CATS["other"])
+        cat_info = cats.get(cat, _fallback)
         cells = [html.Td(
             f"{cat_info['icon']} {name}  ×{len(acts)}",
             style={**_td_base, "textAlign": "left", "color": cat_info["color"],
@@ -3631,6 +3756,7 @@ def update_week(_n: int):
         days      = _load_week(_db)
         week_acts = _load_activities_week(_db)
         week_recs = _load_today(_db)   # use today's records for same-day impact; week records need full date
+        all_cats  = _get_all_cats(_db)
     # Build a pseudo week_records list with correct "t" field for _compute_impact
     with _db_lock:
         cur = _db.execute(
@@ -3652,8 +3778,8 @@ def update_week(_n: int):
         _week_bar(days, "vlf",   "VLF Power — Daily Average",                  C_VLF,   "ms²"),
         _week_bar(days, "ulf",   "ULF Power — Daily Average",                  C_ULF,   "ms²"),
         _week_bar(days, "bpm",   "Heart Rate — Daily Average",                 C_ECG,   "bpm"),
-        _week_activity_freq_fig(week_acts),
-        _week_impact_table_html(week_acts, all_week_rows),
+        _week_activity_freq_fig(week_acts, cats=all_cats),
+        _week_impact_table_html(week_acts, all_week_rows, cats=all_cats),
     )
 
 
@@ -3922,15 +4048,18 @@ def _cat_btn_style(cat: str, selected: str | None) -> dict:
     Output("log-cat-store",     "data"),
     Output("log-preset-chips",  "children"),
     Input({"type": "cat-btn", "cat": dash.ALL}, "n_clicks"),
-    State("log-cat-store", "data"),
+    State("log-cat-store",        "data"),
+    State("manage-cats-refresh",  "data"),
     prevent_initial_call=True,
 )
-def select_category(n_clicks_list, current_cat):
+def select_category(n_clicks_list, current_cat, _mcr):
     triggered = ctx.triggered_id
     if not triggered or not isinstance(triggered, dict):
         return dash.no_update, dash.no_update
     cat = triggered["cat"]
-    info = _ACTIVITY_CATS.get(cat, _ACTIVITY_CATS["other"])
+    with _db_lock:
+        all_cats = _get_all_cats(_db)
+    info = all_cats.get(cat, all_cats.get("other", _ACTIVITY_CATS["other"]))
     chips = []
     for preset in info["presets"]:
         chips.append(html.Button(
@@ -4100,17 +4229,20 @@ def confirm_autodetect(_):
     Output("auto-detect-banner",      "children"),
     Output("auto-detect-banner",      "style"),
     Output("today-log-count",         "children"),
-    Input("tick-today",        "n_intervals"),
-    Input("log-refresh-store", "data"),
+    Input("tick-today",          "n_intervals"),
+    Input("log-refresh-store",   "data"),
+    Input("manage-cats-refresh", "data"),
 )
-def update_log_view(_n, _refresh):
+def update_log_view(_n, _refresh, _mcr):
     with _db_lock:
         activities = _load_activities_today(_db)
         records    = _load_today(_db)
         hist14     = _load_activities_14d(_db)
+        all_cats   = _get_all_cats(_db)
+    _fallback = all_cats.get("other", _ACTIVITY_CATS["other"])
 
     # ── 4B: timeline figure ───────────────────────────────────────────────────
-    timeline_fig = _activity_timeline_fig(activities, records)
+    timeline_fig = _activity_timeline_fig(activities, records, cats=all_cats)
 
     # ── 4C: activity list ─────────────────────────────────────────────────────
     if not activities:
@@ -4119,7 +4251,7 @@ def update_log_view(_n, _refresh):
     else:
         act_list = []
         for act in activities:   # already newest-first from DB query
-            cat_info = _ACTIVITY_CATS.get(act["category"], _ACTIVITY_CATS["other"])
+            cat_info = all_cats.get(act["category"], _fallback)
             dur_str  = f"  ·  {act['duration_min']} min" if act["duration_min"] else ""
             act_list.append(html.Div([
                 html.Div([
@@ -4161,7 +4293,7 @@ def update_log_view(_n, _refresh):
             imp = _compute_impact(act, records)
             if not imp:
                 continue
-            cat_info = _ACTIVITY_CATS.get(act["category"], _ACTIVITY_CATS["other"])
+            cat_info = all_cats.get(act["category"], _fallback)
             cells = [html.Td(
                 f"{cat_info['icon']} {act['name']}",
                 style={**_td_base, "textAlign": "left", "color": cat_info["color"],
@@ -4207,7 +4339,7 @@ def update_log_view(_n, _refresh):
             top3 = Counter((a["category"], a["name"]) for a in nearby).most_common(3)
             chips = []
             for (cat, name), _ in top3:
-                cat_info = _ACTIVITY_CATS.get(cat, _ACTIVITY_CATS["other"])
+                cat_info = all_cats.get(cat, _fallback)
                 chips.append(html.Button(
                     f"{cat_info['icon']} {name}",
                     id={"type": "suggest-btn", "cat": cat, "name": name},
@@ -4285,6 +4417,317 @@ def fill_from_suggestion(n_clicks_list):
     if not any(n_clicks_list):
         return dash.no_update, dash.no_update
     return triggered["cat"], triggered["name"]
+
+
+
+# ── custom category row (renders dynamic cat buttons from DB) ─────────────────
+@callback(
+    Output("custom-cat-row", "children"),
+    Input("manage-cats-refresh", "data"),
+)
+def update_custom_cat_row(_refresh):
+    with _db_lock:
+        custom_cats = _load_custom_categories(_db)
+    if not custom_cats:
+        return []
+    btns = []
+    for cat in custom_cats:
+        key = cat["key"]
+        btns.append(
+            html.Button(
+                f"{cat['icon']} {cat['label'].upper()}",
+                id={"type": "cat-btn", "cat": key},
+                n_clicks=0,
+                style={
+                    "background": "transparent",
+                    "border": f"1px solid {cat['color']}",
+                    "color": cat["color"],
+                    "borderRadius": "4px",
+                    "padding": "4px 10px",
+                    "cursor": "pointer",
+                    "fontSize": "11px",
+                    "fontFamily": "monospace",
+                    "fontWeight": "600",
+                },
+            )
+        )
+    return btns
+
+
+# ── manage panel toggle ───────────────────────────────────────────────────────
+@callback(
+    Output("manage-panel", "style"),
+    Input("btn-manage-toggle", "n_clicks"),
+    State("manage-panel", "style"),
+    prevent_initial_call=True,
+)
+def toggle_manage_panel(n, current_style):
+    if not n:
+        return dash.no_update
+    hidden = current_style.get("display") == "none" if current_style else True
+    new_style = dict(current_style or {})
+    new_style["display"] = "block" if hidden else "none"
+    return new_style
+
+
+# ── manage panel content ──────────────────────────────────────────────────────
+@callback(
+    Output("manage-panel-content", "children"),
+    Input("manage-cats-refresh", "data"),
+)
+def update_manage_panel_content(_refresh):
+    with _db_lock:
+        custom_cats    = _load_custom_categories(_db)
+        custom_presets = _load_custom_presets(_db)
+
+    # Group custom presets by category
+    presets_by_cat: dict[str, list] = {}
+    for p in custom_presets:
+        presets_by_cat.setdefault(p["category"], []).append(p)
+
+    sections = []
+
+    # ── Add new category ──────────────────────────────────────────────────────
+    sections.append(
+        html.Div([
+            html.Div("ADD CATEGORY", style={"color": C_LABEL, "fontSize": "10px",
+                                            "fontFamily": "monospace", "fontWeight": "700",
+                                            "marginBottom": "6px"}),
+            html.Div([
+                dcc.Input(id="new-cat-icon",  placeholder="icon (emoji)",
+                          style={"width": "90px", "marginRight": "6px",
+                                 "background": C_BG_INPUT, "color": C_TEXT,
+                                 "border": f"1px solid {C_BORDER}", "borderRadius": "4px",
+                                 "padding": "4px 8px", "fontFamily": "monospace"}),
+                dcc.Input(id="new-cat-label", placeholder="category name",
+                          style={"width": "160px", "marginRight": "6px",
+                                 "background": C_BG_INPUT, "color": C_TEXT,
+                                 "border": f"1px solid {C_BORDER}", "borderRadius": "4px",
+                                 "padding": "4px 8px", "fontFamily": "monospace"}),
+                dcc.Input(id="new-cat-color", placeholder="color (#hex)",
+                          style={"width": "110px", "marginRight": "6px",
+                                 "background": C_BG_INPUT, "color": C_TEXT,
+                                 "border": f"1px solid {C_BORDER}", "borderRadius": "4px",
+                                 "padding": "4px 8px", "fontFamily": "monospace"}),
+                html.Button("＋ ADD", id="btn-save-cat", n_clicks=0,
+                            style={"background": C_GOOD, "color": "#000",
+                                   "border": "none", "borderRadius": "4px",
+                                   "padding": "4px 12px", "cursor": "pointer",
+                                   "fontFamily": "monospace", "fontWeight": "700",
+                                   "fontSize": "11px"}),
+            ], style={"display": "flex", "flexWrap": "wrap", "gap": "4px", "alignItems": "center"}),
+            html.Div(id="new-cat-feedback", style={"color": C_GOOD, "fontSize": "11px",
+                                                    "fontFamily": "monospace", "marginTop": "4px"}),
+        ], style={**_CARD, "marginBottom": "8px", "padding": "10px 14px"})
+    )
+
+    # ── Add preset to existing category ──────────────────────────────────────
+    all_cat_options = (
+        [{"label": f"{v['icon']} {k}", "value": k} for k, v in _ACTIVITY_CATS.items()] +
+        [{"label": f"{c['icon']} {c['label']}", "value": c['key']} for c in custom_cats]
+    )
+    sections.append(
+        html.Div([
+            html.Div("ADD ACTIVITY PRESET", style={"color": C_LABEL, "fontSize": "10px",
+                                                    "fontFamily": "monospace", "fontWeight": "700",
+                                                    "marginBottom": "6px"}),
+            html.Div([
+                dcc.Dropdown(
+                    id="new-preset-cat",
+                    options=all_cat_options,
+                    placeholder="select category",
+                    style={"width": "200px", "marginRight": "6px",
+                           "background": C_BG_INPUT, "color": C_TEXT,
+                           "fontFamily": "monospace", "fontSize": "12px"},
+                    className="dark-dropdown",
+                ),
+                dcc.Input(id="new-preset-name", placeholder="activity name",
+                          style={"width": "180px", "marginRight": "6px",
+                                 "background": C_BG_INPUT, "color": C_TEXT,
+                                 "border": f"1px solid {C_BORDER}", "borderRadius": "4px",
+                                 "padding": "4px 8px", "fontFamily": "monospace"}),
+                html.Button("＋ ADD", id="btn-save-preset", n_clicks=0,
+                            style={"background": C_GOOD, "color": "#000",
+                                   "border": "none", "borderRadius": "4px",
+                                   "padding": "4px 12px", "cursor": "pointer",
+                                   "fontFamily": "monospace", "fontWeight": "700",
+                                   "fontSize": "11px"}),
+            ], style={"display": "flex", "flexWrap": "wrap", "gap": "4px", "alignItems": "center"}),
+            html.Div(id="new-preset-feedback", style={"color": C_GOOD, "fontSize": "11px",
+                                                       "fontFamily": "monospace", "marginTop": "4px"}),
+        ], style={**_CARD, "marginBottom": "8px", "padding": "10px 14px"})
+    )
+
+    # ── Existing custom categories list ───────────────────────────────────────
+    if custom_cats:
+        cat_rows = []
+        for cat in custom_cats:
+            presets = presets_by_cat.get(cat["key"], [])
+            preset_chips = [
+                html.Span([
+                    preset["name"],
+                    html.Button("×",
+                                id={"type": "del-preset", "id": preset["id"]},
+                                n_clicks=0,
+                                style={"background": "transparent", "border": "none",
+                                       "color": C_BAD, "cursor": "pointer",
+                                       "fontSize": "11px", "marginLeft": "3px",
+                                       "padding": "0", "lineHeight": "1"}),
+                ], style={"background": C_BG_PANEL, "borderRadius": "4px",
+                          "padding": "2px 6px", "fontSize": "11px",
+                          "fontFamily": "monospace", "marginRight": "4px",
+                          "marginBottom": "4px", "display": "inline-flex",
+                          "alignItems": "center"})
+                for preset in presets
+            ]
+            cat_rows.append(
+                html.Div([
+                    html.Div([
+                        html.Span(f"{cat['icon']}  ", style={"fontSize": "14px"}),
+                        html.Span(cat["label"].upper(),
+                                  style={"fontWeight": "700", "fontSize": "12px",
+                                         "fontFamily": "monospace",
+                                         "color": cat["color"]}),
+                        html.Button("✕ delete category",
+                                    id={"type": "del-cat", "key": cat["key"]},
+                                    n_clicks=0,
+                                    style={"background": "transparent",
+                                           "border": f"1px solid {C_BAD}",
+                                           "color": C_BAD, "borderRadius": "4px",
+                                           "padding": "2px 8px", "cursor": "pointer",
+                                           "fontSize": "10px", "fontFamily": "monospace",
+                                           "marginLeft": "12px"}),
+                    ], style={"display": "flex", "alignItems": "center",
+                              "marginBottom": "6px"}),
+                    html.Div(preset_chips + [html.Span("no presets",
+                                                        style={"color": C_MUTED,
+                                                               "fontSize": "11px",
+                                                               "fontFamily": "monospace"})
+                                             ] if not preset_chips else preset_chips,
+                             style={"display": "flex", "flexWrap": "wrap"}),
+                ], style={"borderLeft": f"3px solid {cat['color']}",
+                           "paddingLeft": "10px", "marginBottom": "10px"})
+            )
+        sections.append(
+            html.Div([
+                html.Div("CUSTOM CATEGORIES", style={"color": C_LABEL, "fontSize": "10px",
+                                                      "fontFamily": "monospace",
+                                                      "fontWeight": "700",
+                                                      "marginBottom": "8px"}),
+                html.Div(cat_rows),
+            ], style={**_CARD, "padding": "10px 14px"})
+        )
+    else:
+        sections.append(
+            html.Div("No custom categories yet — add one above.",
+                     style={"color": C_MUTED, "fontSize": "12px",
+                            "fontFamily": "monospace", "padding": "8px"})
+        )
+
+    return sections
+
+
+# ── save new custom category ──────────────────────────────────────────────────
+@callback(
+    Output("new-cat-feedback",    "children"),
+    Output("manage-cats-refresh", "data",     allow_duplicate=True),
+    Output("new-cat-icon",        "value"),
+    Output("new-cat-label",       "value"),
+    Output("new-cat-color",       "value"),
+    Input("btn-save-cat",         "n_clicks"),
+    State("new-cat-icon",         "value"),
+    State("new-cat-label",        "value"),
+    State("new-cat-color",        "value"),
+    State("manage-cats-refresh",  "data"),
+    prevent_initial_call=True,
+)
+def save_custom_category_cb(n, icon, label, color, refresh):
+    if not n:
+        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+    icon  = (icon  or "📌").strip()
+    label = (label or "").strip()
+    color = (color or "#6b7280").strip()
+    if not label:
+        return "Category name is required.", dash.no_update, dash.no_update, dash.no_update, dash.no_update
+    key = _slugify(label)
+    if key in _ACTIVITY_CATS:
+        return f"'{label}' conflicts with a built-in category.", dash.no_update, dash.no_update, dash.no_update, dash.no_update
+    try:
+        with _db_lock:
+            _save_custom_category(_db, {"key": key, "icon": icon, "color": color, "label": label})
+        return f"✓ Category '{label}' added.", (refresh or 0) + 1, "", "", ""
+    except Exception as exc:
+        return f"Error: {exc}", dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+
+# ── save new custom preset ────────────────────────────────────────────────────
+@callback(
+    Output("new-preset-feedback",  "children"),
+    Output("manage-cats-refresh",  "data",     allow_duplicate=True),
+    Output("new-preset-name",      "value"),
+    Input("btn-save-preset",       "n_clicks"),
+    State("new-preset-cat",        "value"),
+    State("new-preset-name",       "value"),
+    State("manage-cats-refresh",   "data"),
+    prevent_initial_call=True,
+)
+def save_custom_preset_cb(n, cat_key, name, refresh):
+    if not n:
+        return dash.no_update, dash.no_update, dash.no_update
+    cat_key = (cat_key or "").strip()
+    name    = (name    or "").strip()
+    if not cat_key:
+        return "Select a category first.", dash.no_update, dash.no_update
+    if not name:
+        return "Activity name is required.", dash.no_update, dash.no_update
+    try:
+        with _db_lock:
+            _save_custom_preset(_db, {"category": cat_key, "name": name})
+        return f"✓ '{name}' added to {cat_key}.", (refresh or 0) + 1, ""
+    except Exception as exc:
+        return f"Error: {exc}", dash.no_update, dash.no_update
+
+
+# ── delete custom category ────────────────────────────────────────────────────
+@callback(
+    Output("manage-cats-refresh", "data", allow_duplicate=True),
+    Input({"type": "del-cat", "key": dash.ALL}, "n_clicks"),
+    State("manage-cats-refresh", "data"),
+    prevent_initial_call=True,
+)
+def delete_custom_cat_cb(n_clicks_list, refresh):
+    triggered = ctx.triggered_id
+    if not triggered or not isinstance(triggered, dict):
+        return dash.no_update
+    if not any(n_clicks_list):
+        return dash.no_update
+    key = triggered.get("key")
+    if not key:
+        return dash.no_update
+    with _db_lock:
+        _delete_custom_category(_db, key)
+    return (refresh or 0) + 1
+
+
+# ── delete custom preset ──────────────────────────────────────────────────────
+@callback(
+    Output("manage-cats-refresh", "data", allow_duplicate=True),
+    Input({"type": "del-preset", "id": dash.ALL}, "n_clicks"),
+    State("manage-cats-refresh", "data"),
+    prevent_initial_call=True,
+)
+def delete_custom_preset_cb(n_clicks_list, refresh):
+    triggered = ctx.triggered_id
+    if not triggered or not isinstance(triggered, dict):
+        return dash.no_update
+    if not any(n_clicks_list):
+        return dash.no_update
+    preset_id = triggered.get("id")
+    if preset_id is None:
+        return dash.no_update
+    with _db_lock:
+        _delete_custom_preset(_db, preset_id)
+    return (refresh or 0) + 1
 
 
 # ── entry point ───────────────────────────────────────────────────────────────
