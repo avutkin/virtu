@@ -729,6 +729,8 @@ _kpi_cache: dict = {
 _scan_state: dict  = {"status": "idle", "devices": [], "error": ""}
 _target_device: dict = {"address": None, "name": "Polar H10"}
 _ble_reconnect = threading.Event()  # set to interrupt keep-alive and reconnect
+_ble_stopped   = threading.Event()  # set to disconnect and stop reconnect loop
+_ble_sensor_ref: dict = {"sensor": None}  # live sensor handle for disconnect
 
 
 def _run_ble_scan() -> None:
@@ -757,16 +759,19 @@ def _start_ble(buf: DataBuffer) -> None:
 
         async def _run() -> None:
             delay = 0   # no wait on first attempt
-            while True:
+            while not _ble_stopped.is_set():
                 # Interruptible delay between retries — wakes early on reconnect request
                 for _ in range(delay * 2):
                     await asyncio.sleep(0.5)
-                    if _ble_reconnect.is_set():
+                    if _ble_reconnect.is_set() or _ble_stopped.is_set():
                         break
                 _ble_reconnect.clear()
+                if _ble_stopped.is_set():
+                    break
                 delay = 5   # default retry wait after first attempt
 
                 sensor = LivePolarH10(buf)
+                _ble_sensor_ref["sensor"] = sensor
                 addr = _target_device.get("address")
                 try:
                     _sensor_status["state"] = (
@@ -2035,6 +2040,20 @@ app.layout = html.Div([
                             "backgroundColor": "transparent",
                             "color": C_WARN,
                             "border": f"1px solid {C_WARN}",
+                            "borderRadius": "12px",
+                            "padding": "4px 14px",
+                            "fontSize": "10px",
+                            "fontWeight": "700",
+                            "letterSpacing": "1px",
+                            "cursor": "pointer",
+                            "fontFamily": "'JetBrains Mono', monospace",
+                        }),
+            html.Span("  ·  ", style={"color": C_BORDER}),
+            html.Button("⊗ DISCONNECT", id="btn-disconnect", n_clicks=0,
+                        style={
+                            "backgroundColor": "transparent",
+                            "color": C_BAD,
+                            "border": f"1px solid {C_BAD}",
                             "borderRadius": "12px",
                             "padding": "4px 14px",
                             "fontSize": "10px",
@@ -3942,6 +3961,7 @@ def do_connect(_, addr):
         addr,
     )
     _target_device["name"] = name or addr
+    _ble_stopped.clear()
     _ble_reconnect.set()
     return f"Connecting to {_target_device['name']}…"
 
@@ -3955,8 +3975,37 @@ def do_connect(_, addr):
 def reset_device(_):
     _target_device["address"] = None
     _target_device["name"]    = "Polar H10"
+    _ble_stopped.clear()
     _ble_reconnect.set()
     return "Searching for Polar H10 by name…"
+
+
+# ── disconnect from device ────────────────────────────────────────────────────
+@callback(
+    Output("connect-feedback", "children", allow_duplicate=True),
+    Input("btn-disconnect",    "n_clicks"),
+    prevent_initial_call=True,
+)
+def disconnect_device(_):
+    """Stop streams, disconnect, and halt the reconnect loop."""
+    _ble_stopped.set()
+    _ble_reconnect.set()   # wake the retry delay so the loop can exit promptly
+    sensor = _ble_sensor_ref.get("sensor")
+    if sensor:
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(asyncio.wait_for(sensor.stop_streams(), timeout=3.0))
+        except Exception:
+            pass
+        try:
+            loop.run_until_complete(asyncio.wait_for(sensor.disconnect(), timeout=3.0))
+        except Exception:
+            pass
+        finally:
+            loop.close()
+        _ble_sensor_ref["sensor"] = None
+    _sensor_status.update(state="disconnected", device="", battery=None)
+    return "Disconnected."
 
 
 # ── quick navbar reconnect ─────────────────────────────────────────────────────
@@ -3968,6 +4017,7 @@ def reset_device(_):
 def reconnect_now(_):
     """Trigger immediate reconnect to the last known device (or scan by name)."""
     _sensor_status["state"] = "reconnecting…"
+    _ble_stopped.clear()
     _ble_reconnect.set()
     name = _target_device.get("name") or "Polar H10"
     addr = _target_device.get("address")
