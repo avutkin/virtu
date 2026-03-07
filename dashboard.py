@@ -759,7 +759,11 @@ def _start_ble(buf: DataBuffer) -> None:
 
         async def _run() -> None:
             delay = 0   # no wait on first attempt
-            while not _ble_stopped.is_set():
+            while True:
+                # If intentionally disconnected, wait here until reconnect is requested.
+                while _ble_stopped.is_set():
+                    await asyncio.sleep(0.5)
+
                 # Interruptible delay between retries — wakes early on reconnect request
                 for _ in range(delay * 2):
                     await asyncio.sleep(0.5)
@@ -767,7 +771,7 @@ def _start_ble(buf: DataBuffer) -> None:
                         break
                 _ble_reconnect.clear()
                 if _ble_stopped.is_set():
-                    break
+                    continue   # go back to the stopped-wait loop above
                 delay = 5   # default retry wait after first attempt
 
                 sensor = LivePolarH10(buf)
@@ -785,8 +789,8 @@ def _start_ble(buf: DataBuffer) -> None:
                     await asyncio.wait_for(sensor.start_streams(), timeout=15.0)
                     # Read battery once after streams are up
                     _sensor_status["battery"] = await sensor.read_battery()
-                    # keep-alive: poll every 0.5 s; exit on disconnect or user request
-                    while not _ble_reconnect.is_set():
+                    # keep-alive: exit on disconnect, user reconnect, or stop request
+                    while not _ble_reconnect.is_set() and not _ble_stopped.is_set():
                         await asyncio.sleep(0.5)
                         # Belt-and-suspenders: detect silent drop if callback didn't fire
                         if sensor._client and not sensor._client.is_connected:
@@ -3987,23 +3991,9 @@ def reset_device(_):
     prevent_initial_call=True,
 )
 def disconnect_device(_):
-    """Stop streams, disconnect, and halt the reconnect loop."""
+    """Halt the reconnect loop; BLE thread's finally block cleans up streams/disconnect."""
     _ble_stopped.set()
-    _ble_reconnect.set()   # wake the retry delay so the loop can exit promptly
-    sensor = _ble_sensor_ref.get("sensor")
-    if sensor:
-        loop = asyncio.new_event_loop()
-        try:
-            loop.run_until_complete(asyncio.wait_for(sensor.stop_streams(), timeout=3.0))
-        except Exception:
-            pass
-        try:
-            loop.run_until_complete(asyncio.wait_for(sensor.disconnect(), timeout=3.0))
-        except Exception:
-            pass
-        finally:
-            loop.close()
-        _ble_sensor_ref["sensor"] = None
+    _ble_reconnect.set()   # wake the retry delay so the loop sees _ble_stopped promptly
     _sensor_status.update(state="disconnected", device="", battery=None)
     return "Disconnected."
 
