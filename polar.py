@@ -67,7 +67,7 @@ class PolarH10:
                 try:
                     client = BleakClient(cached,
                                         disconnected_callback=self._on_disconnect)
-                    await client.connect(timeout=10.0)
+                    await client.connect(timeout=4.0)
                     self._client = client
                     self._device_label = self.device_name
                     print(f"Connected via cached address ({cached}).", flush=True)
@@ -93,7 +93,8 @@ class PolarH10:
                 if found:
                     print(f"Discovered {len(found)} device(s):", flush=True)
                     for d in sorted(found, key=lambda x: x.name or ""):
-                        print(f"  {d.address}  name={d.name!r}  rssi={d.rssi}", flush=True)
+                        rssi = getattr(d, "rssi", "n/a")
+                        print(f"  {d.address}  name={d.name!r}  rssi={rssi}", flush=True)
                     # pick any device whose name contains our target
                     for d in found:
                         if d.name and self.device_name in d.name:

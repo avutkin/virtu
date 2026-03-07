@@ -4502,23 +4502,23 @@ def update_manage_panel_content(_refresh):
     # ── Add new category ──────────────────────────────────────────────────────
     sections.append(
         html.Div([
-            html.Div("ADD CATEGORY", style={"color": C_LABEL, "fontSize": "10px",
+            html.Div("ADD CATEGORY", style={"color": C_DIM, "fontSize": "10px",
                                             "fontFamily": "monospace", "fontWeight": "700",
                                             "marginBottom": "6px"}),
             html.Div([
                 dcc.Input(id="new-cat-icon",  placeholder="icon (emoji)",
                           style={"width": "90px", "marginRight": "6px",
-                                 "background": C_BG_INPUT, "color": C_TEXT,
+                                 "background": C_CARD, "color": C_TEXT,
                                  "border": f"1px solid {C_BORDER}", "borderRadius": "4px",
                                  "padding": "4px 8px", "fontFamily": "monospace"}),
                 dcc.Input(id="new-cat-label", placeholder="category name",
                           style={"width": "160px", "marginRight": "6px",
-                                 "background": C_BG_INPUT, "color": C_TEXT,
+                                 "background": C_CARD, "color": C_TEXT,
                                  "border": f"1px solid {C_BORDER}", "borderRadius": "4px",
                                  "padding": "4px 8px", "fontFamily": "monospace"}),
                 dcc.Input(id="new-cat-color", placeholder="color (#hex)",
                           style={"width": "110px", "marginRight": "6px",
-                                 "background": C_BG_INPUT, "color": C_TEXT,
+                                 "background": C_CARD, "color": C_TEXT,
                                  "border": f"1px solid {C_BORDER}", "borderRadius": "4px",
                                  "padding": "4px 8px", "fontFamily": "monospace"}),
                 html.Button("＋ ADD", id="btn-save-cat", n_clicks=0,
@@ -4540,7 +4540,7 @@ def update_manage_panel_content(_refresh):
     )
     sections.append(
         html.Div([
-            html.Div("ADD ACTIVITY PRESET", style={"color": C_LABEL, "fontSize": "10px",
+            html.Div("ADD ACTIVITY PRESET", style={"color": C_DIM, "fontSize": "10px",
                                                     "fontFamily": "monospace", "fontWeight": "700",
                                                     "marginBottom": "6px"}),
             html.Div([
@@ -4549,13 +4549,13 @@ def update_manage_panel_content(_refresh):
                     options=all_cat_options,
                     placeholder="select category",
                     style={"width": "200px", "marginRight": "6px",
-                           "background": C_BG_INPUT, "color": C_TEXT,
+                           "background": C_CARD, "color": C_TEXT,
                            "fontFamily": "monospace", "fontSize": "12px"},
                     className="dark-dropdown",
                 ),
                 dcc.Input(id="new-preset-name", placeholder="activity name",
                           style={"width": "180px", "marginRight": "6px",
-                                 "background": C_BG_INPUT, "color": C_TEXT,
+                                 "background": C_CARD, "color": C_TEXT,
                                  "border": f"1px solid {C_BORDER}", "borderRadius": "4px",
                                  "padding": "4px 8px", "fontFamily": "monospace"}),
                 html.Button("＋ ADD", id="btn-save-preset", n_clicks=0,
@@ -4585,7 +4585,7 @@ def update_manage_panel_content(_refresh):
                                        "color": C_BAD, "cursor": "pointer",
                                        "fontSize": "11px", "marginLeft": "3px",
                                        "padding": "0", "lineHeight": "1"}),
-                ], style={"background": C_BG_PANEL, "borderRadius": "4px",
+                ], style={"background": C_BG, "borderRadius": "4px",
                           "padding": "2px 6px", "fontSize": "11px",
                           "fontFamily": "monospace", "marginRight": "4px",
                           "marginBottom": "4px", "display": "inline-flex",
@@ -4612,7 +4612,7 @@ def update_manage_panel_content(_refresh):
                     ], style={"display": "flex", "alignItems": "center",
                               "marginBottom": "6px"}),
                     html.Div(preset_chips + [html.Span("no presets",
-                                                        style={"color": C_MUTED,
+                                                        style={"color": C_DIM,
                                                                "fontSize": "11px",
                                                                "fontFamily": "monospace"})
                                              ] if not preset_chips else preset_chips,
@@ -4622,7 +4622,7 @@ def update_manage_panel_content(_refresh):
             )
         sections.append(
             html.Div([
-                html.Div("CUSTOM CATEGORIES", style={"color": C_LABEL, "fontSize": "10px",
+                html.Div("CUSTOM CATEGORIES", style={"color": C_DIM, "fontSize": "10px",
                                                       "fontFamily": "monospace",
                                                       "fontWeight": "700",
                                                       "marginBottom": "8px"}),
@@ -4632,7 +4632,7 @@ def update_manage_panel_content(_refresh):
     else:
         sections.append(
             html.Div("No custom categories yet — add one above.",
-                     style={"color": C_MUTED, "fontSize": "12px",
+                     style={"color": C_DIM, "fontSize": "12px",
                             "fontFamily": "monospace", "padding": "8px"})
         )
 
