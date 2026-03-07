@@ -416,6 +416,7 @@ def _load_week(conn: sqlite3.Connection) -> list[dict]:
                AVG(CASE WHEN pnn50      > 0 THEN pnn50      END),
                AVG(CASE WHEN sdnn       > 0 THEN sdnn       END),
                AVG(CASE WHEN bpm        > 0 THEN bpm        END),
+               AVG(CASE WHEN vlf        > 0 THEN vlf        END),
                AVG(CASE WHEN ulf        > 0 THEN ulf        END),
                COUNT(*)
         FROM biometric_metrics
@@ -425,7 +426,7 @@ def _load_week(conn: sqlite3.Connection) -> list[dict]:
     """)
     rows = []
     for r in cur.fetchall():
-        date, vti, cbi, rmssd, breath, lfhf, pnn50, sdnn, bpm, ulf, n = r
+        date, vti, cbi, rmssd, breath, lfhf, pnn50, sdnn, bpm, vlf, ulf, n = r
         label = datetime.strptime(date, "%Y-%m-%d").strftime("%a %d")
         rows.append(dict(
             date=date, label=label,
@@ -437,6 +438,7 @@ def _load_week(conn: sqlite3.Connection) -> list[dict]:
             pnn50=round(pnn50,1) if pnn50  else 0,
             sdnn=round(sdnn, 1)  if sdnn   else 0,
             bpm=round(bpm, 1)    if bpm    else 0,
+            vlf=round(vlf, 1)    if vlf    else 0,
             ulf=round(ulf, 1)    if ulf    else 0,
             n=n,
         ))
@@ -1368,12 +1370,22 @@ def _add_activity_overlays(fig: go.Figure, activities: list[dict],
         cat_info = cats.get(act["category"], _fallback)
         color = cat_info["color"]
         icon  = cat_info["icon"]
-        fig.add_vline(
-            x=act["ts_time"],
-            line_dash="dot", line_color=color, line_width=1.5, opacity=0.6,
-            annotation_text=f"{icon} {act['name'][:10]}",
-            annotation_position="top left",
-            annotation_font=dict(size=8, color=color),
+        # Use add_shape + add_annotation separately — add_vline with string x values
+        # triggers a Plotly bug where it tries to sum strings when computing annotation position.
+        fig.add_shape(
+            type="line",
+            x0=act["ts_time"], x1=act["ts_time"],
+            y0=0, y1=1, yref="paper", xref="x",
+            line=dict(color=color, width=1.5, dash="dot"),
+            opacity=0.6,
+        )
+        fig.add_annotation(
+            x=act["ts_time"], y=1, yref="paper", xref="x",
+            text=f"{icon} {act['name'][:10]}",
+            showarrow=False,
+            font=dict(size=8, color=color),
+            xanchor="left", yanchor="top",
+            bgcolor="rgba(0,0,0,0)",
         )
     return fig
 

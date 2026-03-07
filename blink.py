@@ -43,8 +43,8 @@ except ImportError:
     _DEPS_OK = False
 
 # ── EAR parameters ────────────────────────────────────────────────────────────
-EAR_THRESH       = 0.20   # fallback only; replaced by adaptive threshold at runtime
-EAR_OPEN_MIN     = 0.23   # above → eye clearly open (lower than avg because we use min(L,R))
+EAR_THRESH       = 0.17   # fallback only; replaced by adaptive threshold at runtime
+EAR_OPEN_MIN     = 0.18   # above → eye clearly open; MediaPipe landmarks yield lower EAR (~0.20–0.25)
 MIN_FRAMES       = 1      # 1 processed frame at ~15 fps ≈ 67 ms — catches fast blinks
 _OPEN_SAVE_EVERY = 15     # save open snapshot every N processed frames (~1 s @ 15 fps)
 
