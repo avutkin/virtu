@@ -386,6 +386,75 @@ def compute_breath_phases(acc_z: list) -> dict | None:
     )
 
 
+def compute_rsa(rr_ms: list, breath_hz: float | None = None) -> dict | None:
+    """
+    Respiratory Sinus Arrhythmia (RSA) amplitude and index.
+
+    RSA is the cyclic oscillation of heart-rate intervals (RR) synchronised
+    with breathing — heart speeds on inhale, slows on exhale.  Higher RSA
+    means stronger vagal-cardiac coupling.
+
+    Method (preferred, when breath_hz is known):
+        Bandpass-filter the interpolated RR tachogram in a ±0.08 Hz window
+        centred on the detected breathing frequency.  RSA amplitude (ms) is
+        computed as 2 × RMS of the filtered signal (= peak-to-trough for a
+        near-sinusoidal oscillation).
+
+    Method (fallback, when breath_hz is None):
+        Use the full HF band (0.15–0.40 Hz).  RSA_ms ≈ √(2 × HF_power).
+
+    RSA Index (Porges): ln(band power) — the same ln-transform used for VTI.
+        Typical range 1–5 ln(ms²/Hz).  Higher = stronger vagal coupling.
+
+    Requires ≥ 30 clean RR intervals.
+
+    Returns
+    -------
+    dict with: rsa_ms (amplitude, ms), rsa_idx (ln power), method
+    or None if insufficient data.
+    """
+    rr = _clean_rr(rr_ms)
+    if len(rr) < _MIN_RR_FREQ:
+        return None
+
+    interp = _interp_tachogram(rr, fs=RR_FS)
+    if interp is None or len(interp) < 16:
+        return None
+
+    detrended = interp - np.mean(interp)
+    nperseg   = min(256, len(detrended))
+    freqs, psd = spsig.welch(
+        detrended, fs=RR_FS, nperseg=nperseg,
+        noverlap=nperseg // 2, window="hann",
+    )
+
+    if breath_hz is not None and 0.05 <= breath_hz <= 0.50:
+        f_lo = max(0.04, breath_hz - 0.08)
+        f_hi = min(0.60, breath_hz + 0.08)
+        try:
+            sos      = spsig.butter(4, [f_lo, f_hi], btype="bandpass",
+                                    fs=RR_FS, output="sos")
+            filtered = spsig.sosfiltfilt(sos, detrended)
+            rsa_ms   = float(2.0 * np.sqrt(np.mean(filtered ** 2)))
+        except Exception:
+            rsa_ms = 0.0
+        band_mask = (freqs >= f_lo) & (freqs <= f_hi)
+        method    = "bandpass"
+    else:
+        # HF-band fallback
+        band_mask = (freqs >= _HF[0]) & (freqs <= _HF[1])
+        hf_p      = float(np.trapezoid(psd[band_mask], freqs[band_mask])) \
+                    if band_mask.any() else 0.0
+        rsa_ms    = float(np.sqrt(2.0 * hf_p)) if hf_p > 0 else 0.0
+        method    = "hf-band"
+
+    band_power = (float(np.trapezoid(psd[band_mask], freqs[band_mask]))
+                  if band_mask.any() else 0.0)
+    rsa_idx    = float(np.log(band_power)) if band_power > 0 else 0.0
+
+    return dict(rsa_ms=round(rsa_ms, 2), rsa_idx=round(rsa_idx, 3), method=method)
+
+
 def compute_ulf_power(bpm_series: list[float]) -> float | None:
     """
     Estimate ULF HRV power (< 0.003 Hz) from a uniformly-sampled BPM series.

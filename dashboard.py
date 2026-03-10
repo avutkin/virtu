@@ -55,6 +55,7 @@ C_BLINK     = "#2dd4bf"   # teal — eye blink
 C_PNN50     = "#f472b6"   # pink/rose — pNN50
 C_SDNN      = "#58a6ff"   # blue — SDNN (same as C_RR for KPI consistency)
 C_NAV_ACT   = "#58a6ff"   # active navigation pill
+C_RSA       = "#fb923c"   # amber — RSA amplitude
 
 # ── shared style atoms ────────────────────────────────────────────────────────
 _CARD = {
@@ -230,6 +231,20 @@ _METRIC_INFO: dict[str, dict] = {
         "exercise": "Fatigue from intense physical or cognitive work increases BRV as attentional control degrades. Skilled performance in sports requiring sustained visual attention (archery, shooting, tennis) correlates with low BRV during competition.",
         "improve": "Attention training protocols (e.g., sustained attention to response task, SART). Mindfulness meditation specifically trains the meta-awareness needed to detect and recover attention lapses. Optimised sleep significantly reduces BRV.",
     },
+    "rsa": {
+        "title": "RSA  —  Respiratory Sinus Arrhythmia (ms)",
+        "nervous": "The natural cyclic oscillation of RR intervals that is phase-locked to respiration: the heart accelerates during inhalation (sympathetic withdrawal) and decelerates during exhalation (vagal activation). RSA amplitude is the peak-to-trough swing of RR intervals within each breath cycle, in milliseconds. It is the direct time-domain signature of vagal-cardiac coupling — sometimes called 'cardiac vagal tone'. Healthy resting range: 30–120 ms.",
+        "psychological": "RSA is one of the most sensitive real-time markers of psychological state. Anxiety, rumination, and acute stress suppress RSA within seconds. Calm, mindful, or meditative states amplify it. RSA amplitude correlates strongly with emotional regulation capacity, attentional flexibility, and social engagement behaviour (Porges' polyvagal theory). Sustained RSA < 20 ms at rest is a clinical marker for autonomic dysregulation.",
+        "exercise": "RSA collapses during vigorous exercise as sympathetic drive dominates. Slow, deliberate breathing between sets or during warm-up/cool-down maximises RSA and accelerates cardiovascular recovery. Elite endurance athletes show exceptionally high resting RSA — often 100–200 ms — reflecting lifelong vagal conditioning. Post-exercise RSA recovery speed is a direct fitness marker.",
+        "improve": "Slow resonance breathing (5–6 br/min) at your personal resonance frequency produces the largest RSA amplitudes — this is the biofeedback target state. Longer exhale relative to inhale (I:E ≥ 1.5) further amplifies the vagal phase. Regular endurance training, cold immersion, and quality sleep all raise baseline RSA over weeks. Use the RSA chart during breathing sessions: maximising the amplitude directly maximises vagal activation.",
+    },
+    "rsa_idx": {
+        "title": "RSA Index  —  ln(RSA band power)  [Porges]",
+        "nervous": "Natural log of the heart-rate variability power concentrated at the detected breathing frequency — the Porges RSA index. Unlike raw amplitude, the log scale compresses outliers and normalises the skewed distribution, making it directly comparable to VTI (ln RMSSD). RSA Index > 4 indicates strong vagal-respiratory coupling. < 2 indicates poor coupling or insufficient data.",
+        "psychological": "The RSA Index is the spectral-domain counterpart of RSA amplitude and correlates with the same vagal markers: emotional regulation, social engagement, and stress resilience. The Porges polyvagal framework identifies RSA Index as a core metric of the 'ventral vagal' (safe, calm) state. Tracking it over time reveals whether mind-body practices are producing durable autonomic shifts.",
+        "exercise": "Collapses during intense effort, rises sharply with recovery breathing. The rate of RSA Index restoration after a hard set or sprint is a sensitive marker of cardiovascular fitness. Athletes in optimal training show rapid RSA Index recovery (full restoration within 2–3 minutes post-effort).",
+        "improve": "Same interventions as RSA amplitude: resonance breathing, extended exhale, aerobic conditioning, sleep. The Index responds faster than SDNN or VLF to acute breathing interventions — you can see a 0.5–1.0 point rise within a single 10-minute slow-breathing session.",
+    },
 }
 
 _ACTIVITY_CATS: dict[str, dict] = {
@@ -355,7 +370,8 @@ def _open_db() -> sqlite3.Connection:
     # Add columns to existing databases that predate them
     for col in ("vlf REAL DEFAULT 0", "mean_ie REAL DEFAULT 0",
                 "pnn50 REAL DEFAULT 0", "sdnn REAL DEFAULT 0",
-                "ulf REAL DEFAULT 0"):
+                "ulf REAL DEFAULT 0",
+                "rsa_ms REAL DEFAULT 0", "rsa_idx REAL DEFAULT 0"):
         try:
             conn.execute(f"ALTER TABLE biometric_metrics ADD COLUMN {col}")
             conn.commit()
@@ -381,19 +397,20 @@ def _save_metric(conn: sqlite3.Connection, rec: dict) -> None:
     now = datetime.now()
     conn.execute(
         "INSERT INTO biometric_metrics "
-        "(ts, ts_date, vti, cbi, rmssd, breath_bpm, bpm, lfhf, vlf, mean_ie, pnn50, sdnn, ulf) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "(ts, ts_date, vti, cbi, rmssd, breath_bpm, bpm, lfhf, vlf, mean_ie, pnn50, sdnn, ulf, rsa_ms, rsa_idx) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (now.isoformat(), now.strftime("%Y-%m-%d"),
          rec["vti"], rec["cbi"], rec["rmssd"],
          rec["breath_bpm"], rec["bpm"], rec["lfhf"], rec["vlf"], rec["mean_ie"],
-         rec["pnn50"], rec["sdnn"], rec.get("ulf") or 0.0),
+         rec["pnn50"], rec["sdnn"], rec.get("ulf") or 0.0,
+         rec.get("rsa_ms") or 0.0, rec.get("rsa_idx") or 0.0),
     )
     conn.commit()
 
 def _load_today(conn: sqlite3.Connection) -> list[dict]:
     today = datetime.now().strftime("%Y-%m-%d")
     cur = conn.execute(
-        "SELECT ts, vti, cbi, rmssd, breath_bpm, bpm, lfhf, vlf, mean_ie, pnn50, sdnn, ulf "
+        "SELECT ts, vti, cbi, rmssd, breath_bpm, bpm, lfhf, vlf, mean_ie, pnn50, sdnn, ulf, rsa_ms, rsa_idx "
         "FROM biometric_metrics WHERE ts_date=? ORDER BY ts",
         (today,),
     )
@@ -401,7 +418,7 @@ def _load_today(conn: sqlite3.Connection) -> list[dict]:
         dict(t=row[0][11:16], vti=row[1], cbi=row[2], rmssd=row[3],
              breath_bpm=row[4], bpm=row[5], lfhf=row[6], vlf=row[7] or 0.0,
              mean_ie=row[8] or 0.0, pnn50=row[9] or 0.0, sdnn=row[10] or 0.0,
-             ulf=row[11] or 0.0)
+             ulf=row[11] or 0.0, rsa_ms=row[12] or 0.0, rsa_idx=row[13] or 0.0)
         for row in cur.fetchall()
     ]
 
@@ -418,6 +435,8 @@ def _load_week(conn: sqlite3.Connection) -> list[dict]:
                AVG(CASE WHEN bpm        > 0 THEN bpm        END),
                AVG(CASE WHEN vlf        > 0 THEN vlf        END),
                AVG(CASE WHEN ulf        > 0 THEN ulf        END),
+               AVG(CASE WHEN rsa_ms     > 0 THEN rsa_ms     END),
+               AVG(CASE WHEN rsa_idx    > 0 THEN rsa_idx    END),
                COUNT(*)
         FROM biometric_metrics
         WHERE ts_date >= date('now','-6 days')
@@ -426,7 +445,7 @@ def _load_week(conn: sqlite3.Connection) -> list[dict]:
     """)
     rows = []
     for r in cur.fetchall():
-        date, vti, cbi, rmssd, breath, lfhf, pnn50, sdnn, bpm, vlf, ulf, n = r
+        date, vti, cbi, rmssd, breath, lfhf, pnn50, sdnn, bpm, vlf, ulf, rsa_ms, rsa_idx, n = r
         label = datetime.strptime(date, "%Y-%m-%d").strftime("%a %d")
         rows.append(dict(
             date=date, label=label,
@@ -438,8 +457,10 @@ def _load_week(conn: sqlite3.Connection) -> list[dict]:
             pnn50=round(pnn50,1) if pnn50  else 0,
             sdnn=round(sdnn, 1)  if sdnn   else 0,
             bpm=round(bpm, 1)    if bpm    else 0,
-            vlf=round(vlf, 1)    if vlf    else 0,
-            ulf=round(ulf, 1)    if ulf    else 0,
+            vlf=round(vlf, 1)          if vlf     else 0,
+            ulf=round(ulf, 1)          if ulf     else 0,
+            rsa_ms=round(rsa_ms, 1)   if rsa_ms  else 0,
+            rsa_idx=round(rsa_idx, 3) if rsa_idx else 0,
             n=n,
         ))
     return rows
@@ -628,7 +649,9 @@ class MetricsHistory:
                mean_ie: float | None = None,
                pnn50: float | None = None,
                sdnn: float | None = None,
-               ulf: float | None = None) -> None:
+               ulf: float | None = None,
+               rsa_ms: float | None = None,
+               rsa_idx: float | None = None) -> None:
         with self._lock:
             self._rows.append(dict(
                 t=datetime.now().strftime("%H:%M"),
@@ -643,6 +666,8 @@ class MetricsHistory:
                 pnn50=round(pnn50, 1)           if pnn50      is not None else 0.0,
                 sdnn=round(sdnn, 1)             if sdnn       is not None else 0.0,
                 ulf=round(ulf, 1)               if ulf        is not None else 0.0,
+                rsa_ms=round(rsa_ms, 2)         if rsa_ms     is not None else 0.0,
+                rsa_idx=round(rsa_idx, 3)       if rsa_idx    is not None else 0.0,
             ))
 
     def preload(self, records: list[dict]) -> None:
@@ -723,6 +748,7 @@ _auto_detect: dict = {"exercise_streak": 0, "pending_exercise_ts": None,
 _kpi_cache: dict = {
     "bpm": "—", "rmssd": "—", "sdnn": "—", "pnn50": "—",
     "breath": "—", "regularity": "—", "lfhf": "—",
+    "rsa_ms": "—", "rsa_idx": "—",
 }
 
 # ── BLE scan + device-selection state ────────────────────────────────────────
@@ -1642,6 +1668,78 @@ def _ulf_trend(records: list[dict]) -> go.Figure:
     return fig
 
 
+def _rsa_zones(fig: go.Figure) -> go.Figure:
+    """Overlay low / moderate / good / strong RSA amplitude bands."""
+    fig.add_hrect(y0=0,   y1=20,  fillcolor="rgba(248,81,73,0.10)",  line_width=0,
+                  annotation_text="low",      annotation_position="top left",
+                  annotation_font=dict(color=C_BAD,  size=10))
+    fig.add_hrect(y0=20,  y1=50,  fillcolor="rgba(210,153,34,0.10)", line_width=0,
+                  annotation_text="moderate", annotation_position="top left",
+                  annotation_font=dict(color=C_WARN, size=10))
+    fig.add_hrect(y0=50,  y1=100, fillcolor="rgba(251,146,60,0.07)", line_width=0,
+                  annotation_text="good",     annotation_position="top left",
+                  annotation_font=dict(color=C_RSA,  size=10))
+    fig.add_hrect(y0=100, y1=250, fillcolor="rgba(63,185,80,0.10)",  line_width=0,
+                  annotation_text="strong",   annotation_position="top left",
+                  annotation_font=dict(color=C_GOOD, size=10))
+    fig.add_hline(y=20,  line_dash="dash", line_color=C_BAD,  line_width=1)
+    fig.add_hline(y=50,  line_dash="dash", line_color=C_WARN, line_width=1)
+    fig.add_hline(y=100, line_dash="dash", line_color=C_GOOD, line_width=1)
+    return fig
+
+
+def _rsa_live_fig(records: list[dict], minutes: int = 60) -> go.Figure:
+    """RSA amplitude rolling chart with vagal-coupling zone bands."""
+    n      = minutes * 30
+    window = records[-n:] if len(records) > n else records
+    if not window:
+        return _rsa_zones(_empty_fig("RSA  —  Respiratory Sinus Arrhythmia (ms)"))
+
+    buckets: dict[str, list] = {}
+    for r in window:
+        v = r.get("rsa_ms", 0)
+        if v > 0:
+            buckets.setdefault(r["t"], []).append(v)
+
+    if not buckets:
+        return _rsa_zones(_empty_fig("RSA  —  Respiratory Sinus Arrhythmia (ms)"))
+
+    ts   = list(buckets.keys())
+    vals = [float(np.mean(v)) for v in buckets.values()]
+
+    fig = go.Figure(go.Scatter(
+        x=ts, y=vals, mode="lines+markers",
+        line=dict(color=C_RSA, width=2),
+        marker=dict(size=3, color=C_RSA),
+        hovertemplate="%{x}  RSA %{y:.1f} ms<extra></extra>",
+    ))
+    fig.update_layout(
+        **_PLOT_LAYOUT,
+        uirevision=f"rsa-live-{minutes}",
+        title=dict(
+            text=f"RSA  —  Respiratory Sinus Arrhythmia  ·  last {_range_label(minutes)}  ·  1 min avg",
+            font=dict(color=C_RSA, size=12), x=0.01,
+        ),
+        xaxis=_ax("time"),
+        yaxis=_ax("ms", rangemode="tozero"),
+    )
+    return _rsa_zones(fig)
+
+
+def _rsa_ms_trend(records: list[dict]) -> go.Figure:
+    fig = _trend_fig(records, "rsa_ms", "RSA  —  Respiratory Sinus Arrhythmia (ms)", C_RSA, "ms")
+    return _rsa_zones(fig)
+
+
+def _rsa_idx_trend(records: list[dict]) -> go.Figure:
+    fig = _trend_fig(records, "rsa_idx", "RSA Index  —  ln(RSA band power)  [Porges]", C_RSA, "")
+    fig.add_hline(y=4.0, line_dash="dash", line_color=C_GOOD, line_width=1,
+                  annotation_text="strong  ≥ 4", annotation_position="bottom right")
+    fig.add_hline(y=2.0, line_dash="dash", line_color=C_BAD, line_width=1,
+                  annotation_text="low  < 2", annotation_position="top right")
+    return fig
+
+
 def _sdnn_zones(fig: go.Figure) -> go.Figure:
     """Overlay low / moderate / good / strong HRV bands onto an SDNN figure."""
     fig.add_hrect(y0=0,   y1=20,  fillcolor="rgba(248,81,73,0.10)",  line_width=0,
@@ -2328,6 +2426,17 @@ app.layout = html.Div([
         ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr",
                   "gap": "10px", "marginBottom": "10px"}),
 
+        # Row 7.5 — RSA live trend (full width)
+        html.Div([
+            html.Div(_range_btn_group("rsa-range-store",
+                                     "rsa-btn-60", "rsa-btn-120", "rsa-btn-720",
+                                     C_RSA, metric="rsa"),
+                     style={"display": "flex", "justifyContent": "flex-end",
+                            "marginBottom": "4px"}),
+            dcc.Graph(id="rsa-live-graph", style={"height": "220px"},
+                      config={"displayModeBar": False}),
+        ], style={**_CARD, "marginBottom": "10px"}),
+
         # Row 8 — SDNN + pNN50 live trends (side by side)
         html.Div([
             html.Div([
@@ -2491,7 +2600,8 @@ app.layout = html.Div([
             _today_stat("today-avg-pnn50",  "Avg pNN50",       C_PNN50,  "%"),
             _today_stat("today-avg-breath", "Avg Breathing",   C_PSD_HF, "br/m"),
             _today_stat("today-avg-lfhf",   "Avg LF / HF",     C_LFHF),
-        ], style={"display": "grid", "gridTemplateColumns": "repeat(8, 1fr)",
+            _today_stat("today-avg-rsa",    "Avg RSA",         C_RSA,    "ms"),
+        ], style={"display": "grid", "gridTemplateColumns": "repeat(9, 1fr)",
                   "gap": "10px", "marginBottom": "14px"}),
 
         # VTI trend (full width)
@@ -2555,6 +2665,21 @@ app.layout = html.Div([
             html.Div([
                 html.Div([_info_btn("ulf", "today")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
                 dcc.Graph(id="today-ulf", style={"height": "190px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
+        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr",
+                  "gap": "10px", "marginBottom": "10px"}),
+
+        # RSA amplitude + RSA index side by side
+        html.Div([
+            html.Div([
+                html.Div([_info_btn("rsa", "today")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="today-rsa-ms",  style={"height": "210px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
+            html.Div([
+                html.Div([_info_btn("rsa_idx", "today")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="today-rsa-idx", style={"height": "210px"},
                           config={"displayModeBar": False}),
             ], style=_CARD),
         ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr",
@@ -3074,6 +3199,16 @@ def update_slow(_n: int):
         pnn50_val = hrv["pnn50"] if hrv else None
         sdnn_val  = hrv["sdnn"]  if hrv else None
 
+        # RSA: amplitude (ms) and Porges index from RR + detected breathing freq
+        rsa_data  = metrics.compute_rsa(
+            rr,
+            breath_hz=breathing["peak_hz"] if breathing else None,
+        )
+        rsa_ms_val  = rsa_data["rsa_ms"]  if rsa_data else None
+        rsa_idx_val = rsa_data["rsa_idx"] if rsa_data else None
+        _kpi_cache["rsa_ms"]  = f"{rsa_ms_val:.1f}"  if rsa_ms_val  is not None else "—"
+        _kpi_cache["rsa_idx"] = f"{rsa_idx_val:.3f}" if rsa_idx_val is not None else "—"
+
         # ULF: computed from full accumulated bpm series (needs ≥ 30 min of data)
         hist_rows  = _history.snapshot()
         bpm_series = [r["bpm"] for r in hist_rows if r.get("bpm", 0) > 20]
@@ -3095,6 +3230,8 @@ def update_slow(_n: int):
                         pnn50=pnn50_val             if pnn50_val else 0.0,
                         sdnn=sdnn_val               if sdnn_val  else 0.0,
                         ulf=ulf_val,
+                        rsa_ms=rsa_ms_val,
+                        rsa_idx=rsa_idx_val,
                     ))
             except Exception:
                 pass
@@ -3111,6 +3248,8 @@ def update_slow(_n: int):
                 pnn50=pnn50_val,
                 sdnn=sdnn_val,
                 ulf=ulf_val,
+                rsa_ms=rsa_ms_val,
+                rsa_idx=rsa_idx_val,
             )
 
         # ── Auto-detect exercise from ACC RMS ────────────────────────────────
@@ -3154,6 +3293,9 @@ def update_slow(_n: int):
         ie_v       = (f"1:{phases['mean_ie']:.2f}  ({phases['n_breaths']} breaths)"
                       if phases else "—")
 
+        rsa_ms_v  = f"{rsa_ms_val:.1f} ms"   if rsa_ms_val  is not None else "—"
+        rsa_idx_v = f"{rsa_idx_val:.3f}"     if rsa_idx_val is not None else "—"
+
         ext = (
             f"VTI  ln(RMSSD)   {vti_v}\n"
             f"VLF  power       {vlf_abs_v}\n"
@@ -3167,6 +3309,8 @@ def update_slow(_n: int):
             f"Regularity       {reg_v}\n"
             f"Breath           {breath_hz}\n"
             f"I:E  ratio       {ie_v}\n"
+            f"RSA  amplitude   {rsa_ms_v}\n"
+            f"RSA  index       {rsa_idx_v}\n"
             f"CBI              {cbi:.3f}"
         )
 
@@ -3181,6 +3325,39 @@ def update_slow(_n: int):
         print(f"\n[slow ERROR]\n{tb}", flush=True)
         sf = _SAFE_FIG
         return sf, sf, sf, sf, tb[-600:], sf, sf
+
+
+# ── RSA range button group ────────────────────────────────────────────────────
+@callback(
+    Output("rsa-range-store", "data"),
+    Output("rsa-btn-60",  "style"),
+    Output("rsa-btn-120", "style"),
+    Output("rsa-btn-720", "style"),
+    Input("rsa-btn-60",   "n_clicks"),
+    Input("rsa-btn-120",  "n_clicks"),
+    Input("rsa-btn-720",  "n_clicks"),
+    prevent_initial_call=True,
+)
+def handle_rsa_range(_60, _120, _720):
+    val = {"rsa-btn-60": "60", "rsa-btn-120": "120", "rsa-btn-720": "720"}.get(
+        ctx.triggered_id, "60")
+    return (val,
+            _rbtn_style(val == "60",  C_RSA),
+            _rbtn_style(val == "120", C_RSA),
+            _rbtn_style(val == "720", C_RSA))
+
+
+# ── RSA live chart ─────────────────────────────────────────────────────────────
+@callback(
+    Output("rsa-live-graph",  "figure"),
+    Input("tick-slow",        "n_intervals"),
+    Input("rsa-range-store",  "data"),
+)
+def update_rsa_live(_n, minutes_str):
+    minutes = int(minutes_str or 60)
+    with _db_lock:
+        rows = _load_today(_db)
+    return _rsa_live_fig(rows, minutes=minutes)
 
 
 # ── VTI range button group ────────────────────────────────────────────────────
@@ -3558,6 +3735,7 @@ def update_eye_images(_n):
     Output("today-avg-pnn50",    "children"),
     Output("today-avg-breath",   "children"),
     Output("today-avg-lfhf",     "children"),
+    Output("today-avg-rsa",      "children"),
     Output("today-session-time", "children"),
     Output("today-vti",          "figure"),
     Output("today-cbi",          "figure"),
@@ -3568,6 +3746,8 @@ def update_eye_images(_n):
     Output("today-pnn50",        "figure"),
     Output("today-vlf",          "figure"),
     Output("today-ulf",          "figure"),
+    Output("today-rsa-ms",       "figure"),
+    Output("today-rsa-idx",      "figure"),
     Output("today-hr",           "figure"),
     Input("tick-today", "n_intervals"),
 )
@@ -3581,7 +3761,7 @@ def update_today(_n: int):
 
     if not records:
         ef = _empty_fig
-        return ("—", "—", "—", "—", "—", "—", "—", "—",
+        return ("—", "—", "—", "—", "—", "—", "—", "—", "—",
                 "No data yet — start recording",
                 ef("Vagal Tone Index  —  ln(RMSSD)"),
                 ef("Conscious Breathing Index"),
@@ -3592,6 +3772,8 @@ def update_today(_n: int):
                 ef("pNN50  (parasympathetic activity)"),
                 ef("VLF Power  (0.003–0.04 Hz)"),
                 ef("ULF Power  (< 0.003 Hz)  ·  needs ≥ 30 min"),
+                ef("RSA  —  Respiratory Sinus Arrhythmia (ms)"),
+                ef("RSA Index  —  ln(RSA band power)  [Porges]"),
                 ef("Heart Rate"))
 
     # Summary aggregates (exclude zero-padded gaps)
@@ -3603,6 +3785,7 @@ def update_today(_n: int):
     pnn50_vals  = [r["pnn50"]      for r in records if r["pnn50"]      > 0]
     breath_vals = [r["breath_bpm"] for r in records if r["breath_bpm"] > 0]
     lfhf_vals   = [r["lfhf"]       for r in records if r["lfhf"]       > 0]
+    rsa_vals    = [r["rsa_ms"]     for r in records if r.get("rsa_ms", 0) > 0]
 
     avg_hr     = f"{np.mean(hr_vals):.0f}"     if hr_vals     else "—"
     avg_vti    = f"{np.mean(vti_vals):.2f}"    if vti_vals    else "—"
@@ -3612,6 +3795,7 @@ def update_today(_n: int):
     avg_pnn50  = f"{np.mean(pnn50_vals):.1f}"  if pnn50_vals  else "—"
     avg_breath = f"{np.mean(breath_vals):.1f}" if breath_vals else "—"
     avg_lfhf   = f"{np.mean(lfhf_vals):.2f}"  if lfhf_vals   else "—"
+    avg_rsa    = f"{np.mean(rsa_vals):.1f}"    if rsa_vals    else "—"
 
     dur_s   = len(records) * 2
     session = f"Duration  {dur_s // 60} min {dur_s % 60} s  ·  {len(records)} data points"
@@ -3623,11 +3807,12 @@ def update_today(_n: int):
     hr_fig    = _add_activity_overlays(_hr_trend(records),     activities, cats=all_cats)
 
     return (avg_hr, avg_vti, peak_cbi, avg_rmssd, avg_sdnn, avg_pnn50,
-            avg_breath, avg_lfhf, session,
+            avg_breath, avg_lfhf, avg_rsa, session,
             vti_fig, cbi_fig,
             rmssd_fig, _breath_trend(records),
             lfhf_fig, _sdnn_trend(records), _pnn50_trend(records),
             _vlf_trend(records), _ulf_trend(records),
+            _rsa_ms_trend(records), _rsa_idx_trend(records),
             hr_fig)
 
 
