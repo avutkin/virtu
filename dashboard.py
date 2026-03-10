@@ -2397,7 +2397,7 @@ app.layout = html.Div([
                       config={"displayModeBar": False}),
         ], style={**_CARD, "marginBottom": "10px"}),
 
-        # Row 7 — VTI (ln RMSSD) + RMSSD live trends (side by side)
+        # Row 7 — VTI · RMSSD · RSA  (three vagal-tone metrics side by side)
         html.Div([
             html.Div([
                 html.Div(_range_btn_group("vti-range-store",
@@ -2423,19 +2423,17 @@ app.layout = html.Div([
                 dcc.Graph(id="rmssd-live-graph", style={"height": "220px"},
                           config={"displayModeBar": False}),
             ], style=_CARD),
-        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr",
+            html.Div([
+                html.Div(_range_btn_group("rsa-range-store",
+                                         "rsa-btn-60", "rsa-btn-120", "rsa-btn-720",
+                                         C_RSA, metric="rsa"),
+                         style={"display": "flex", "justifyContent": "flex-end",
+                                "marginBottom": "4px"}),
+                dcc.Graph(id="rsa-live-graph", style={"height": "220px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
+        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 1fr",
                   "gap": "10px", "marginBottom": "10px"}),
-
-        # Row 7.5 — RSA live trend (full width)
-        html.Div([
-            html.Div(_range_btn_group("rsa-range-store",
-                                     "rsa-btn-60", "rsa-btn-120", "rsa-btn-720",
-                                     C_RSA, metric="rsa"),
-                     style={"display": "flex", "justifyContent": "flex-end",
-                            "marginBottom": "4px"}),
-            dcc.Graph(id="rsa-live-graph", style={"height": "220px"},
-                      config={"displayModeBar": False}),
-        ], style={**_CARD, "marginBottom": "10px"}),
 
         # Row 8 — SDNN + pNN50 live trends (side by side)
         html.Div([
@@ -2618,16 +2616,31 @@ app.layout = html.Div([
                       config={"displayModeBar": False}),
         ], style={**_CARD, "marginBottom": "10px"}),
 
-        # RMSSD + Breathing side by side
+        # RMSSD + RSA amplitude side by side  (both vagal-coupling time-domain metrics)
         html.Div([
             html.Div([
                 html.Div([_info_btn("rmssd", "today")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
-                dcc.Graph(id="today-rmssd",  style={"height": "190px"},
+                dcc.Graph(id="today-rmssd",  style={"height": "210px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
+            html.Div([
+                html.Div([_info_btn("rsa", "today")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="today-rsa-ms", style={"height": "210px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
+        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr",
+                  "gap": "10px", "marginBottom": "10px"}),
+
+        # RSA Index + Breathing side by side
+        html.Div([
+            html.Div([
+                html.Div([_info_btn("rsa_idx", "today")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="today-rsa-idx", style={"height": "210px"},
                           config={"displayModeBar": False}),
             ], style=_CARD),
             html.Div([
                 html.Div([_info_btn("acc", "today")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
-                dcc.Graph(id="today-breath", style={"height": "190px"},
+                dcc.Graph(id="today-breath", style={"height": "210px"},
                           config={"displayModeBar": False}),
             ], style=_CARD),
         ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr",
@@ -2665,21 +2678,6 @@ app.layout = html.Div([
             html.Div([
                 html.Div([_info_btn("ulf", "today")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
                 dcc.Graph(id="today-ulf", style={"height": "190px"},
-                          config={"displayModeBar": False}),
-            ], style=_CARD),
-        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr",
-                  "gap": "10px", "marginBottom": "10px"}),
-
-        # RSA amplitude + RSA index side by side
-        html.Div([
-            html.Div([
-                html.Div([_info_btn("rsa", "today")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
-                dcc.Graph(id="today-rsa-ms",  style={"height": "210px"},
-                          config={"displayModeBar": False}),
-            ], style=_CARD),
-            html.Div([
-                html.Div([_info_btn("rsa_idx", "today")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
-                dcc.Graph(id="today-rsa-idx", style={"height": "210px"},
                           config={"displayModeBar": False}),
             ], style=_CARD),
         ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr",
