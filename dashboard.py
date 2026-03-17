@@ -3979,17 +3979,19 @@ def load_rf_history(_n, _r):
         )
         return hist_fig, table
 
+    _th = {"color": C_DIM, "fontSize": "10px", "padding": "4px 8px",
+           "borderBottom": f"1px solid {C_BORDER}", "textAlign": "center",
+           "letterSpacing": "0.5px"}
+    _th_left = {**_th, "textAlign": "left"}
+
     rows = [html.Tr([
-        html.Th("Date",    style={"color": C_DIM, "fontSize": "10px", "padding": "4px 8px",
-                                  "borderBottom": f"1px solid {C_BORDER}", "textAlign": "left"}),
-        html.Th("Freq",    style={"color": C_DIM, "fontSize": "10px", "padding": "4px 8px",
-                                  "borderBottom": f"1px solid {C_BORDER}"}),
-        html.Th("Pattern", style={"color": C_DIM, "fontSize": "10px", "padding": "4px 8px",
-                                  "borderBottom": f"1px solid {C_BORDER}"}),
-        html.Th("Score",   style={"color": C_DIM, "fontSize": "10px", "padding": "4px 8px",
-                                  "borderBottom": f"1px solid {C_BORDER}"}),
-        html.Th("Notes",   style={"color": C_DIM, "fontSize": "10px", "padding": "4px 8px",
-                                  "borderBottom": f"1px solid {C_BORDER}"}),
+        html.Th("Date",      style=_th_left),
+        html.Th("Freq",      style=_th),
+        html.Th("Pattern",   style=_th),
+        html.Th("Score",     style={**_th, "color": C_GOOD}),
+        html.Th("RSA ms",    style={**_th, "color": C_RSA}),
+        html.Th("Coherence", style={**_th, "color": C_RF}),
+        html.Th("Notes",     style=_th_left),
     ])]
 
     for s in sessions[:20]:
@@ -3997,24 +3999,26 @@ def load_rf_history(_n, _r):
         inh  = s.get("inhale_s") or 0
         exh  = s.get("exhale_s") or 0
         sc   = s.get("best_score") or 0
+        rsa  = s.get("best_rsa_ms")
+        coh  = s.get("best_coherence")
+        _td  = {"fontSize": "11px", "padding": "4px 8px",
+                "borderBottom": f"1px solid {C_BORDER}", "textAlign": "center"}
         rows.append(html.Tr([
             html.Td(s["ts_date"][:10],
-                    style={"color": C_TEXT, "fontSize": "11px", "padding": "4px 8px",
-                           "borderBottom": f"1px solid {C_BORDER}"}),
+                    style={**_td, "color": C_TEXT, "textAlign": "left"}),
             html.Td(f"{freq:.1f} BPM" if freq else "—",
-                    style={"color": C_RF, "fontSize": "11px", "padding": "4px 8px",
-                           "borderBottom": f"1px solid {C_BORDER}", "textAlign": "center"}),
+                    style={**_td, "color": C_RF, "fontWeight": "700"}),
             html.Td(f"{inh:.1f}s / {exh:.1f}s",
-                    style={"color": C_DIM, "fontSize": "11px", "padding": "4px 8px",
-                           "borderBottom": f"1px solid {C_BORDER}", "textAlign": "center"}),
+                    style={**_td, "color": C_DIM}),
             html.Td(f"{sc:.3f}",
-                    style={"color": C_GOOD if sc >= 0.5 else C_WARN,
-                           "fontSize": "11px", "fontWeight": "700",
-                           "padding": "4px 8px",
-                           "borderBottom": f"1px solid {C_BORDER}", "textAlign": "center"}),
+                    style={**_td, "color": C_GOOD if sc >= 0.5 else C_WARN,
+                           "fontWeight": "700"}),
+            html.Td(f"{rsa:.1f}" if rsa else "—",
+                    style={**_td, "color": C_RSA}),
+            html.Td(f"{coh:.2f}" if coh else "—",
+                    style={**_td, "color": C_RF}),
             html.Td(s.get("notes", "")[:40] or "—",
-                    style={"color": C_DIM, "fontSize": "11px", "padding": "4px 8px",
-                           "borderBottom": f"1px solid {C_BORDER}"}),
+                    style={**_td, "color": C_DIM, "textAlign": "left"}),
         ]))
 
     table = html.Table(rows, style={
