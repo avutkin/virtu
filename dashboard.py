@@ -24,7 +24,7 @@ from flask import request as _flask_req
 
 import numpy as np
 import dash
-from dash import dcc, html, Input, Output, State, callback, ctx
+from dash import dcc, html, Input, Output, State, callback, ctx, ALL
 import plotly.graph_objects as go
 
 import metrics
@@ -57,6 +57,19 @@ C_SDNN      = "#58a6ff"   # blue — SDNN (same as C_RR for KPI consistency)
 C_NAV_ACT   = "#58a6ff"   # active navigation pill
 C_RSA       = "#fb923c"   # amber — RSA amplitude
 C_RSA_IDX   = "#fbbf24"   # yellow-gold — RSA Index (ln band power)
+C_RF        = "#818cf8"   # indigo/lavender — Resonance Finder accent
+
+# ── resonance finder config ───────────────────────────────────────────────────
+_RF_CANDIDATES  = [4.5, 5.0, 5.5, 6.0, 6.5, 7.0]   # BPM, auto-scan steps
+_RF_DWELL_S     = 60   # seconds at each candidate frequency (auto scan)
+_RF_IE_RATIO    = 0.40  # default inhale fraction (4:6 pattern)
+
+_RF_PRESETS = [
+    ("4:6", 0.40),   # default resonance protocol
+    ("5:5", 0.50),
+    ("4:7", 0.364),
+    ("3:7", 0.30),
+]
 
 # ── shared style atoms ────────────────────────────────────────────────────────
 _CARD = {
@@ -362,6 +375,22 @@ CREATE TABLE IF NOT EXISTS custom_presets (
     name     TEXT NOT NULL,
     UNIQUE(category, name)
 );
+CREATE TABLE IF NOT EXISTS resonance_sessions (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts             TEXT NOT NULL,
+    ts_date        TEXT NOT NULL,
+    session_type   TEXT NOT NULL DEFAULT 'scan',
+    best_freq_bpm  REAL,
+    best_rsa_ms    REAL,
+    best_coherence REAL,
+    best_score     REAL,
+    inhale_s       REAL,
+    exhale_s       REAL,
+    session_dur_s  INTEGER,
+    notes          TEXT DEFAULT '',
+    scan_data      TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_rs_date ON resonance_sessions(ts_date);
 """
 
 def _open_db() -> sqlite3.Connection:
@@ -514,6 +543,46 @@ def _load_activities_14d(conn: sqlite3.Connection) -> list[dict]:
              name=r[5], notes=r[6], duration_min=r[7], intensity=r[8], source=r[9])
         for r in cur.fetchall()
     ]
+
+
+def _save_resonance_session(conn: sqlite3.Connection, rec: dict) -> None:
+    import json
+    conn.execute(
+        "INSERT INTO resonance_sessions "
+        "(ts, ts_date, session_type, best_freq_bpm, best_rsa_ms, best_coherence, "
+        "best_score, inhale_s, exhale_s, session_dur_s, notes, scan_data) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        (rec["ts"], rec["ts_date"], rec.get("session_type", "scan"),
+         rec.get("best_freq_bpm"), rec.get("best_rsa_ms"), rec.get("best_coherence"),
+         rec.get("best_score"), rec.get("inhale_s"), rec.get("exhale_s"),
+         rec.get("session_dur_s"), rec.get("notes", ""),
+         json.dumps(rec.get("scan_data", {}))),
+    )
+    conn.commit()
+
+
+def _load_resonance_sessions(conn: sqlite3.Connection, days: int = 30) -> list[dict]:
+    import json
+    cur = conn.execute(
+        "SELECT id, ts, ts_date, session_type, best_freq_bpm, best_rsa_ms, "
+        "best_coherence, best_score, inhale_s, exhale_s, session_dur_s, notes, scan_data "
+        "FROM resonance_sessions "
+        "WHERE ts_date >= date('now', ?) ORDER BY ts DESC",
+        (f"-{days-1} days",),
+    )
+    rows = []
+    for r in cur.fetchall():
+        try:
+            scan_data = json.loads(r[12]) if r[12] else {}
+        except Exception:
+            scan_data = {}
+        rows.append(dict(
+            id=r[0], ts=r[1], ts_date=r[2], session_type=r[3],
+            best_freq_bpm=r[4], best_rsa_ms=r[5], best_coherence=r[6],
+            best_score=r[7], inhale_s=r[8], exhale_s=r[9],
+            session_dur_s=r[10], notes=r[11], scan_data=scan_data,
+        ))
+    return rows
 
 
 def _delete_activity(conn: sqlite3.Connection, activity_id: int) -> None:
@@ -750,6 +819,8 @@ _kpi_cache: dict = {
     "bpm": "—", "rmssd": "—", "sdnn": "—", "pnn50": "—",
     "breath": "—", "regularity": "—", "lfhf": "—",
     "rsa_ms": "—", "rsa_idx": "—",
+    # raw floats for resonance finder (None = not yet computed)
+    "rsa_ms_v": None, "cbi_v": None, "breath_hz_v": None,
 }
 
 # ── BLE scan + device-selection state ────────────────────────────────────────
@@ -1769,6 +1840,127 @@ def _rsa_idx_live_fig(records: list[dict], minutes: int = 60) -> go.Figure:
     return fig
 
 
+# ── resonance finder helpers ──────────────────────────────────────────────────
+# Rolling buffer for the mini live chart (last 60 s of per-tick data)
+rf_history_buf: deque = deque(maxlen=30)
+
+
+def _rf_composite_score(rsa_ms: float, peak_coherence: float, cbi: float) -> float:
+    """
+    Composite resonance quality score (0–1).
+    RSA amplitude 50%, peak coherence 35%, CBI 15%.
+    """
+    rsa_norm = min(1.0, (rsa_ms or 0) / 150.0)
+    coh      = min(1.0, max(0.0, peak_coherence or 0))
+    cbi_n    = min(1.0, max(0.0, cbi or 0))
+    return round(0.50 * rsa_norm + 0.35 * coh + 0.15 * cbi_n, 3)
+
+
+def _rf_scan_fig(scores: dict, candidates: list) -> go.Figure:
+    """Horizontal bar chart: one bar per candidate BPM, coloured by score."""
+    if not scores:
+        return _empty_fig("Scan Progress — Score by BPM")
+
+    best_bpm = max(scores, key=lambda k: scores[k].get("score", 0), default=None)
+    labels, values, colors = [], [], []
+    for bpm in candidates:
+        key = str(bpm)
+        labels.append(f"{bpm} BPM")
+        sc = scores.get(key, {}).get("score", 0)
+        values.append(sc)
+        if key not in scores:
+            colors.append(C_RF)
+        elif key == str(best_bpm):
+            colors.append(C_GOOD)
+        else:
+            colors.append(C_WARN)
+
+    fig = go.Figure(go.Bar(
+        x=values, y=labels, orientation="h",
+        marker_color=colors,
+        hovertemplate="%{y}: %{x:.3f}<extra></extra>",
+    ))
+    fig.update_layout(
+        **_PLOT_LAYOUT,
+        uirevision="rf-scan",
+        title=dict(text="Scan Progress — Score by BPM",
+                   font=dict(color=C_RF, size=12), x=0.01),
+        xaxis=dict(**_AX, range=[0, 1], title="score"),
+        yaxis=dict(**_AX),
+    )
+    return fig
+
+
+def _rf_history_fig(sessions: list[dict]) -> go.Figure:
+    """Scatter + line: resonance frequency over sessions (x=date, y=BPM)."""
+    valid = [s for s in sessions if s.get("best_freq_bpm")]
+    if not valid:
+        return _empty_fig("Resonance Frequency over time")
+
+    dates  = [s["ts_date"] for s in valid]
+    freqs  = [s["best_freq_bpm"] for s in valid]
+    scores = [s.get("best_score") or 0 for s in valid]
+    marker_colors = [
+        f"rgba(63,185,80,{max(0.3, sc)})" for sc in scores
+    ]
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=dates, y=freqs, mode="lines+markers",
+        line=dict(color=C_RF, width=1.5),
+        marker=dict(size=8, color=marker_colors,
+                    line=dict(color=C_RF, width=1)),
+        hovertemplate="%{x}  %{y:.1f} BPM<extra></extra>",
+    ))
+    fig.update_layout(
+        **_PLOT_LAYOUT,
+        uirevision="rf-history",
+        title=dict(text="Resonance Frequency over time",
+                   font=dict(color=C_RF, size=12), x=0.01),
+        xaxis=_ax("date"),
+        yaxis=_ax("BPM", range=[4.0, 8.0]),
+    )
+    return fig
+
+
+def _rf_live_chart_fig(buf: deque) -> go.Figure:
+    """Mini live chart: RSA ms (left y) + coherence (right y), last 60s."""
+    if not buf:
+        return _empty_fig("RSA ms  ·  Coherence  (last 60 s)")
+
+    pts    = list(buf)
+    xs     = list(range(len(pts)))
+    rsas   = [p.get("rsa_ms") or 0 for p in pts]
+    cohs   = [p.get("coherence") or 0 for p in pts]
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=xs, y=rsas, mode="lines",
+        line=dict(color=C_RSA, width=1.5),
+        name="RSA ms", yaxis="y",
+        hovertemplate="RSA %{y:.1f} ms<extra></extra>",
+    ))
+    fig.add_trace(go.Scatter(
+        x=xs, y=cohs, mode="lines",
+        line=dict(color=C_RF, width=1.5),
+        name="Coherence", yaxis="y2",
+        hovertemplate="Coh %{y:.2f}<extra></extra>",
+    ))
+    fig.update_layout(
+        **_PLOT_LAYOUT,
+        uirevision="rf-live",
+        title=dict(text="RSA ms  ·  Coherence  (last 60 s)",
+                   font=dict(color=C_DIM, size=11), x=0.01),
+        xaxis=_ax(""),
+        yaxis=_ax("RSA ms"),
+        yaxis2=dict(**_AX, overlaying="y", side="right",
+                    range=[0, 1], title="coherence"),
+        showlegend=False,
+        margin=dict(l=45, r=45, t=28, b=20),
+    )
+    return fig
+
+
 def _rsa_ms_trend(records: list[dict]) -> go.Figure:
     fig = _trend_fig(records, "rsa_ms", "RSA  —  Respiratory Sinus Arrhythmia (ms)", C_RSA, "ms")
     return _rsa_zones(fig)
@@ -2115,6 +2307,19 @@ app.layout = html.Div([
     dcc.Store(id="log-refresh-store",  data=0),
     dcc.Store(id="manage-cats-refresh", data=0),
 
+    # ── Resonance Finder state stores ────────────────────────────────────────
+    dcc.Store(id="rf-state",         data="idle"),
+    dcc.Store(id="rf-target-bpm",    data=6.0),
+    dcc.Store(id="rf-inhale-s",      data=4.0),
+    dcc.Store(id="rf-exhale-s",      data=6.0),
+    dcc.Store(id="rf-scan-step",     data=0),
+    dcc.Store(id="rf-scores",        data={}),
+    dcc.Store(id="rf-session-start", data=None),
+    dcc.Store(id="rf-pacer-state",   data={}),
+    dcc.Store(id="rf-sound-on",      data=True),
+    dcc.Store(id="rf-refresh",       data=0),
+    dcc.Interval(id="tick-pacer",    interval=100, n_intervals=0, disabled=True),
+
     # ── Navigation bar ────────────────────────────────────────────────────────
     html.Div([
         # Brand + status dot
@@ -2135,8 +2340,10 @@ app.layout = html.Div([
                         style=_nav_pill(False)),
             html.Button("WEEK",  id="nav-week",  n_clicks=0,
                         style=_nav_pill(False)),
-            html.Button("LOG",   id="nav-log",   n_clicks=0,
+            html.Button("LOG",     id="nav-log",     n_clicks=0,
                         style=_nav_pill(False)),
+            html.Button("RESONATE", id="nav-resonate", n_clicks=0,
+                        style={**_nav_pill(False), "color": C_RF}),
         ], style={"display": "flex", "gap": "4px",
                   "backgroundColor": C_BORDER,
                   "borderRadius": "20px", "padding": "4px"}),
@@ -3034,6 +3241,270 @@ app.layout = html.Div([
 
     ], id="content-log", style={"display": "none"}),
 
+    # ══════════════════════════ RESONATE view ══════════════════════════════════
+    html.Div([
+
+        # 4A — Header ──────────────────────────────────────────────────────────
+        html.Div([
+            html.Div("RESONANCE FINDER",
+                     style={"color": C_RF, "fontSize": "20px", "fontWeight": "700",
+                            "letterSpacing": "3px",
+                            "fontFamily": "'JetBrains Mono', monospace"}),
+            html.Div("Identify the breathing pace at which your heartbeat synchronises most strongly",
+                     style={"color": C_DIM, "fontSize": "12px", "marginTop": "4px"}),
+        ], style={**_CARD, "marginBottom": "10px"}),
+
+        # 4B — Controls Row ────────────────────────────────────────────────────
+        html.Div([
+            html.Button("▶ PLAY",      id="rf-btn-play",      n_clicks=0, style={
+                "backgroundColor": C_RF, "color": "#0d1117", "border": "none",
+                "borderRadius": "8px", "padding": "8px 18px", "fontSize": "11px",
+                "fontWeight": "700", "letterSpacing": "1px", "cursor": "pointer",
+                "fontFamily": "'JetBrains Mono', monospace",
+            }),
+            html.Button("⏸ PAUSE",     id="rf-btn-pause",     n_clicks=0, style={
+                "backgroundColor": "transparent", "color": C_TEXT,
+                "border": f"1px solid {C_BORDER}", "borderRadius": "8px",
+                "padding": "8px 18px", "fontSize": "11px", "fontWeight": "700",
+                "letterSpacing": "1px", "cursor": "pointer",
+                "fontFamily": "'JetBrains Mono', monospace",
+            }),
+            html.Button("⏹ STOP",      id="rf-btn-stop",      n_clicks=0, style={
+                "backgroundColor": "transparent", "color": C_BAD,
+                "border": f"1px solid {C_BAD}", "borderRadius": "8px",
+                "padding": "8px 18px", "fontSize": "11px", "fontWeight": "700",
+                "letterSpacing": "1px", "cursor": "pointer",
+                "fontFamily": "'JetBrains Mono', monospace",
+            }),
+            html.Button("DIAGNOSIS",   id="rf-btn-diagnosis", n_clicks=0, style={
+                "backgroundColor": "transparent", "color": C_RF,
+                "border": f"1px solid {C_RF}", "borderRadius": "8px",
+                "padding": "8px 18px", "fontSize": "11px", "fontWeight": "700",
+                "letterSpacing": "1px", "cursor": "pointer",
+                "fontFamily": "'JetBrains Mono', monospace",
+            }),
+            html.Button("MANUAL",      id="rf-btn-manual",    n_clicks=0, style={
+                "backgroundColor": "transparent", "color": C_DIM,
+                "border": f"1px solid {C_BORDER}", "borderRadius": "8px",
+                "padding": "8px 18px", "fontSize": "11px", "fontWeight": "700",
+                "letterSpacing": "1px", "cursor": "pointer",
+                "fontFamily": "'JetBrains Mono', monospace",
+            }),
+            html.Button("💾 SAVE",     id="rf-btn-save",      n_clicks=0, style={
+                "backgroundColor": "transparent", "color": C_DIM,
+                "border": f"1px solid {C_BORDER}", "borderRadius": "8px",
+                "padding": "8px 18px", "fontSize": "11px", "fontWeight": "700",
+                "letterSpacing": "1px", "cursor": "pointer",
+                "fontFamily": "'JetBrains Mono', monospace",
+            }),
+        ], style={**_CARD, "display": "flex", "gap": "8px",
+                  "flexWrap": "wrap", "marginBottom": "10px"}),
+
+        # 4C — Main Body (2-column grid) ───────────────────────────────────────
+        html.Div([
+
+            # LEFT: Breathing Pacer Card
+            html.Div([
+                # Preset chips
+                html.Div([
+                    html.Button(
+                        label,
+                        id={"type": "rf-preset", "ratio": ratio},
+                        n_clicks=0,
+                        style={
+                            "backgroundColor": "transparent",
+                            "color": C_RF if label == "4:6" else C_DIM,
+                            "border": f"1px solid {C_RF if label == '4:6' else C_BORDER}",
+                            "borderRadius": "12px", "padding": "3px 12px",
+                            "fontSize": "10px", "fontWeight": "700",
+                            "letterSpacing": "1px", "cursor": "pointer",
+                            "fontFamily": "'JetBrains Mono', monospace",
+                        },
+                    )
+                    for label, ratio in _RF_PRESETS
+                ], style={"display": "flex", "gap": "6px", "marginBottom": "14px"}),
+
+                # BPM slider row
+                html.Div([
+                    html.Div("BPM", style={"color": C_DIM, "fontSize": "10px",
+                                           "letterSpacing": "1px", "marginBottom": "4px"}),
+                    dcc.Slider(
+                        id="rf-bpm-slider",
+                        min=4.5, max=7.5, step=0.1, value=6.0,
+                        marks={v: {"label": str(v), "style": {"color": C_DIM, "fontSize": "9px"}}
+                               for v in [4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5]},
+                        tooltip={"placement": "bottom", "always_visible": False},
+                    ),
+                    html.Div(id="rf-pacer-bpm",
+                             children="6.0 BPM · 0.10 Hz",
+                             style={"color": C_RF, "fontSize": "12px", "textAlign": "center",
+                                    "fontWeight": "700", "marginTop": "4px",
+                                    "fontFamily": "'JetBrains Mono', monospace"}),
+                ], style={"marginBottom": "20px"}),
+
+                # Animated pacer circle
+                html.Div([
+                    html.Div(id="rf-pacer-ring", style={
+                        "width": "240px", "height": "240px", "borderRadius": "50%",
+                        "border": f"2px solid rgba(129,140,248,0.3)",
+                        "backgroundColor": "rgba(129,140,248,0.05)",
+                        "position": "relative", "margin": "0 auto",
+                        "transition": "transform 0.3s ease", "transform": "scale(1)",
+                    }),
+                    html.Div(id="rf-phase-label",
+                             children="READY",
+                             style={"color": C_RF, "fontSize": "18px", "fontWeight": "700",
+                                    "letterSpacing": "2px", "textAlign": "center",
+                                    "marginTop": "12px",
+                                    "fontFamily": "'JetBrains Mono', monospace"}),
+                    html.Div(id="rf-phase-countdown",
+                             children="",
+                             style={"color": C_DIM, "fontSize": "14px",
+                                    "textAlign": "center", "marginTop": "4px",
+                                    "fontFamily": "'JetBrains Mono', monospace"}),
+                ], style={"textAlign": "center", "marginBottom": "20px"}),
+
+                # Sound toggle
+                html.Div([
+                    html.Button("♪ SOUND ON", id="rf-btn-sound", n_clicks=0, style={
+                        "backgroundColor": "transparent", "color": C_RF,
+                        "border": f"1px solid {C_RF}", "borderRadius": "12px",
+                        "padding": "4px 14px", "fontSize": "10px", "fontWeight": "700",
+                        "letterSpacing": "1px", "cursor": "pointer",
+                        "fontFamily": "'JetBrains Mono', monospace",
+                    }),
+                ], style={"textAlign": "center"}),
+
+            ], style={**_CARD}),
+
+            # RIGHT: Live Metrics Card
+            html.Div([
+                # Row 1: HR | Breath | Elapsed
+                html.Div([
+                    _today_stat("rf-hr-val",      "Heart Rate",  "#58a6ff",  "bpm"),
+                    _today_stat("rf-breath-val",  "Breath Rate", C_ACC,      "bpm"),
+                    _today_stat("rf-elapsed-val", "Elapsed",     C_DIM,      ""),
+                ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 1fr",
+                          "gap": "8px", "marginBottom": "8px"}),
+
+                # Row 2: RSA | Coherence | Score
+                html.Div([
+                    _today_stat("rf-rsa-val",       "RSA",        C_RSA,  "ms"),
+                    _today_stat("rf-coherence-val", "Coherence",  C_RF,   ""),
+                    _today_stat("rf-score-val",     "Sync Score", C_GOOD, ""),
+                ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 1fr",
+                          "gap": "8px", "marginBottom": "12px"}),
+
+                # Mini live chart
+                dcc.Graph(
+                    id="rf-live-chart",
+                    figure=_empty_fig("RSA ms  ·  Coherence  (last 60 s)"),
+                    config={"displayModeBar": False},
+                    style={"height": "160px"},
+                ),
+            ], style={**_CARD}),
+
+        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr",
+                  "gap": "10px", "marginBottom": "10px"}),
+
+        # 4D — Auto-Scan Progress Panel ────────────────────────────────────────
+        html.Div([
+            html.Div(id="rf-scan-step-label",
+                     children="DIAGNOSIS not started",
+                     style={"color": C_RF, "fontSize": "12px", "fontWeight": "700",
+                            "marginBottom": "10px",
+                            "fontFamily": "'JetBrains Mono', monospace"}),
+            dcc.Graph(
+                id="rf-scan-chart",
+                figure=_empty_fig("Scan Progress — Score by BPM"),
+                config={"displayModeBar": False},
+                style={"height": "220px"},
+            ),
+            html.Div(id="rf-best-so-far",
+                     children="",
+                     style={"color": C_GOOD, "fontSize": "12px", "marginTop": "8px",
+                            "fontFamily": "'JetBrains Mono', monospace"}),
+        ], id="rf-scan-panel",
+           style={"display": "none", **_CARD, "marginBottom": "10px"}),
+
+        # 4E — Results Card ────────────────────────────────────────────────────
+        html.Div([
+            html.Div(id="rf-result-summary",
+                     children="",
+                     style={"color": C_RF, "fontSize": "14px", "fontWeight": "700",
+                            "letterSpacing": "1px", "marginBottom": "12px",
+                            "fontFamily": "'JetBrains Mono', monospace"}),
+            html.Div(id="rf-result-detail",
+                     children="",
+                     style={"color": C_DIM, "fontSize": "12px", "marginBottom": "14px"}),
+            html.Div([
+                html.Div("NOTES", style={"color": C_DIM, "fontSize": "10px",
+                                          "letterSpacing": "1px", "marginBottom": "6px"}),
+                dcc.Textarea(
+                    id="rf-notes",
+                    placeholder="Optional notes about this session…",
+                    style={
+                        "backgroundColor": C_BG, "color": C_TEXT,
+                        "border": f"1px solid {C_BORDER}", "borderRadius": "6px",
+                        "padding": "8px", "fontSize": "12px", "width": "100%",
+                        "minHeight": "60px", "resize": "vertical",
+                        "fontFamily": "'JetBrains Mono', monospace",
+                        "boxSizing": "border-box",
+                    },
+                ),
+            ], style={"marginBottom": "12px"}),
+            html.Button("SAVE TODAY'S RESULT", id="rf-btn-save-final", n_clicks=0,
+                        style={
+                            "backgroundColor": C_GOOD, "color": "#0d1117",
+                            "border": "none", "borderRadius": "8px",
+                            "padding": "8px 20px", "fontSize": "11px", "fontWeight": "700",
+                            "letterSpacing": "1px", "cursor": "pointer",
+                            "fontFamily": "'JetBrains Mono', monospace",
+                        }),
+        ], id="rf-results-card",
+           style={"display": "none", **_CARD, "marginBottom": "10px"}),
+
+        # 4F — History Section ─────────────────────────────────────────────────
+        html.Div([
+            html.Div("RESONANCE HISTORY  —  last 30 sessions",
+                     style={"color": C_DIM, "fontSize": "11px", "fontWeight": "700",
+                            "letterSpacing": "1.5px", "marginBottom": "12px",
+                            "fontFamily": "'JetBrains Mono', monospace"}),
+            dcc.Graph(
+                id="rf-history-chart",
+                figure=_empty_fig("Resonance Frequency over time"),
+                config={"displayModeBar": False},
+                style={"height": "200px", "marginBottom": "12px"},
+            ),
+            html.Div(id="rf-history-table",
+                     children=html.Div("No sessions yet — complete a scan or manual session to begin.",
+                                       style={"color": C_DIM, "fontSize": "12px",
+                                              "textAlign": "center", "padding": "20px"})),
+        ], style={**_CARD}),
+
+    ], id="content-resonate", style={"display": "none"}),
+
+    # Web Audio API helper for pacer tones
+    html.Script("""
+window._rfAudioCtx = null;
+window._rfPlayTone = function(freq, vol, dur) {
+    try {
+        if (!window._rfAudioCtx) window._rfAudioCtx = new AudioContext();
+        var ctx = window._rfAudioCtx;
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.value = freq;
+        osc.type = 'sine';
+        gain.gain.setValueAtTime(0, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(vol, ctx.currentTime + 0.15);
+        gain.gain.linearRampToValueAtTime(0, ctx.currentTime + dur);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + dur);
+    } catch(e) {}
+};
+"""),
+
     # ── Info modal overlay ─────────────────────────────────────────────────────
     html.Div(id="info-modal-overlay", children=[
         html.Div([
@@ -3074,32 +3545,459 @@ app.layout = html.Div([
 
 # ── navigation callback ───────────────────────────────────────────────────────
 @callback(
-    Output("content-live",  "style"),
-    Output("content-today", "style"),
-    Output("content-week",  "style"),
-    Output("content-log",   "style"),
-    Output("nav-live",  "style"),
-    Output("nav-today", "style"),
-    Output("nav-week",  "style"),
-    Output("nav-log",   "style"),
-    Input("nav-live",  "n_clicks"),
-    Input("nav-today", "n_clicks"),
-    Input("nav-week",  "n_clicks"),
-    Input("nav-log",   "n_clicks"),
+    Output("content-live",     "style"),
+    Output("content-today",    "style"),
+    Output("content-week",     "style"),
+    Output("content-log",      "style"),
+    Output("content-resonate", "style"),
+    Output("nav-live",     "style"),
+    Output("nav-today",    "style"),
+    Output("nav-week",     "style"),
+    Output("nav-log",      "style"),
+    Output("nav-resonate", "style"),
+    Input("nav-live",     "n_clicks"),
+    Input("nav-today",    "n_clicks"),
+    Input("nav-week",     "n_clicks"),
+    Input("nav-log",      "n_clicks"),
+    Input("nav-resonate", "n_clicks"),
     prevent_initial_call=True,
 )
-def switch_page(_nl, _nt, _nw, _nlog):
-    tab = ctx.triggered_id   # "nav-live" | "nav-today" | "nav-week" | "nav-log"
+def switch_page(_nl, _nt, _nw, _nlog, _nr):
+    tab = ctx.triggered_id
     return (
-        {"display": "block"} if tab == "nav-live"  else {"display": "none"},
-        {"display": "block"} if tab == "nav-today" else {"display": "none"},
-        {"display": "block"} if tab == "nav-week"  else {"display": "none"},
-        {"display": "block"} if tab == "nav-log"   else {"display": "none"},
+        {"display": "block"} if tab == "nav-live"     else {"display": "none"},
+        {"display": "block"} if tab == "nav-today"    else {"display": "none"},
+        {"display": "block"} if tab == "nav-week"     else {"display": "none"},
+        {"display": "block"} if tab == "nav-log"      else {"display": "none"},
+        {"display": "block"} if tab == "nav-resonate" else {"display": "none"},
         _nav_pill(tab == "nav-live"),
         _nav_pill(tab == "nav-today"),
         _nav_pill(tab == "nav-week"),
         _nav_pill(tab == "nav-log"),
+        {**_nav_pill(tab == "nav-resonate"), "color": C_RF if tab != "nav-resonate" else C_TEXT},
     )
+
+
+# ── Resonance Finder callbacks ────────────────────────────────────────────────
+
+# 6A — control buttons: play / pause / stop / diagnosis / manual
+@callback(
+    Output("rf-state",          "data"),
+    Output("rf-session-start",  "data"),
+    Output("rf-scan-step",      "data"),
+    Output("rf-scores",         "data"),
+    Output("tick-pacer",        "disabled"),
+    Output("rf-scan-panel",     "style"),
+    Output("rf-results-card",   "style"),
+    Input("rf-btn-play",      "n_clicks"),
+    Input("rf-btn-pause",     "n_clicks"),
+    Input("rf-btn-stop",      "n_clicks"),
+    Input("rf-btn-diagnosis", "n_clicks"),
+    Input("rf-btn-manual",    "n_clicks"),
+    State("rf-state",   "data"),
+    State("rf-scores",  "data"),
+    prevent_initial_call=True,
+)
+def rf_control(_play, _pause, _stop, _diag, _manual, cur_state, cur_scores):
+    trig = ctx.triggered_id
+    if trig == "rf-btn-stop":
+        return ("idle", None, 0, {}, True,
+                {"display": "none"}, {"display": "none"})
+    if trig == "rf-btn-pause":
+        return (dash.no_update, dash.no_update, dash.no_update,
+                dash.no_update, True,
+                dash.no_update, dash.no_update)
+    if trig == "rf-btn-play":
+        if cur_state in ("idle", "paused"):
+            return ("manual", dash.no_update, dash.no_update,
+                    dash.no_update, False,
+                    dash.no_update, dash.no_update)
+    if trig == "rf-btn-manual":
+        return ("manual", time.time(), dash.no_update,
+                dash.no_update, False,
+                {"display": "none"}, {"display": "none"})
+    if trig == "rf-btn-diagnosis":
+        return ("scanning", time.time(), 0, {}, False,
+                {**_CARD, "marginBottom": "10px"}, {"display": "none"})
+    return (dash.no_update,) * 7
+
+
+# 6B — BPM slider + preset chips → stores
+@callback(
+    Output("rf-target-bpm",  "data"),
+    Output("rf-inhale-s",    "data"),
+    Output("rf-exhale-s",    "data"),
+    Output("rf-pacer-bpm",   "children"),
+    Output("rf-pacer-state", "data"),
+    Input("rf-bpm-slider",  "value"),
+    Input({"type": "rf-preset", "ratio": ALL}, "n_clicks"),
+    State("rf-target-bpm",  "data"),
+    State("rf-state",       "data"),
+    prevent_initial_call=True,
+)
+def rf_update_pacer_settings(bpm_slider, preset_clicks, cur_bpm, state):
+    trig = ctx.triggered_id
+    bpm = bpm_slider if bpm_slider else cur_bpm
+    ie_ratio = _RF_IE_RATIO   # default 4:6
+
+    if isinstance(trig, dict) and trig.get("type") == "rf-preset":
+        ie_ratio = trig["ratio"]
+    else:
+        bpm = bpm_slider or cur_bpm
+
+    cycle    = 60.0 / bpm
+    inhale_s = round(cycle * ie_ratio, 2)
+    exhale_s = round(cycle * (1.0 - ie_ratio), 2)
+    is_running = state not in ("idle", "paused")
+
+    pacer_state = {
+        "inhale_s": inhale_s,
+        "exhale_s": exhale_s,
+        "start_ts": time.time(),
+        "is_running": is_running,
+    }
+    label = f"{bpm:.1f} BPM · {bpm/60:.3f} Hz"
+    return bpm, inhale_s, exhale_s, label, pacer_state
+
+
+# 6C — clientside pacer animation (10 fps via tick-pacer)
+app.clientside_callback(
+    """
+    function(n_intervals, pacer_state, is_sound_on) {
+        if (!pacer_state || !pacer_state.is_running) {
+            return [
+                {width:'240px', height:'240px', borderRadius:'50%',
+                 border:'2px solid rgba(129,140,248,0.3)',
+                 backgroundColor:'rgba(129,140,248,0.05)',
+                 position:'relative', margin:'0 auto',
+                 transition:'transform 0.3s ease', transform:'scale(1)'},
+                'READY', '',
+                {color:'#818cf8', fontSize:'18px', fontWeight:'700',
+                 letterSpacing:'2px', fontFamily:"'JetBrains Mono', monospace",
+                 textAlign:'center', marginTop:'12px'}
+            ];
+        }
+        var now     = Date.now() / 1000.0;
+        var elapsed = now - pacer_state.start_ts;
+        var cycle   = pacer_state.inhale_s + pacer_state.exhale_s;
+        var phase_t = elapsed % cycle;
+        var is_inhale = phase_t < pacer_state.inhale_s;
+        var progress, remaining, scale, glow, color;
+        if (is_inhale) {
+            progress  = phase_t / pacer_state.inhale_s;
+            remaining = (pacer_state.inhale_s - phase_t).toFixed(1);
+            scale     = 0.85 + 0.55 * progress;
+            glow      = 20 + 40 * progress;
+            color     = '#818cf8';
+            if (phase_t < 0.15 && is_sound_on) {
+                window._rfPlayTone && window._rfPlayTone(528, 0.18, 0.3);
+            }
+        } else {
+            var ep    = phase_t - pacer_state.inhale_s;
+            progress  = ep / pacer_state.exhale_s;
+            remaining = (pacer_state.exhale_s - ep).toFixed(1);
+            scale     = 1.40 - 0.55 * progress;
+            glow      = 60 - 40 * progress;
+            color     = '#56d364';
+            if (ep < 0.15 && is_sound_on) {
+                window._rfPlayTone && window._rfPlayTone(396, 0.12, 0.3);
+            }
+        }
+        var ring_style = {
+            width:'240px', height:'240px', borderRadius:'50%',
+            border:'2px solid ' + color,
+            backgroundColor: 'rgba(129,140,248,' + (0.05 + 0.15 * (is_inhale ? progress : 1-progress)) + ')',
+            boxShadow: '0 0 ' + glow + 'px ' + color,
+            position:'relative', margin:'0 auto',
+            transform:'scale(' + scale.toFixed(3) + ')',
+            transition:'transform 0.1s linear'
+        };
+        var label_style = {
+            color: color, fontSize:'18px', fontWeight:'700',
+            letterSpacing:'2px', fontFamily:"'JetBrains Mono', monospace",
+            textAlign:'center', marginTop:'12px'
+        };
+        return [ring_style, is_inhale ? 'INHALE' : 'EXHALE', remaining + 's', label_style];
+    }
+    """,
+    Output("rf-pacer-ring",      "style"),
+    Output("rf-phase-label",     "children"),
+    Output("rf-phase-countdown", "children"),
+    Output("rf-phase-label",     "style"),
+    Input("tick-pacer",          "n_intervals"),
+    State("rf-pacer-state",      "data"),
+    State("rf-sound-on",         "data"),
+)
+
+
+# 6D — live RF metrics update (2s tick)
+@callback(
+    Output("rf-hr-val",         "children"),
+    Output("rf-breath-val",     "children"),
+    Output("rf-rsa-val",        "children"),
+    Output("rf-coherence-val",  "children"),
+    Output("rf-score-val",      "children"),
+    Output("rf-elapsed-val",    "children"),
+    Output("rf-live-chart",     "figure"),
+    Output("rf-scan-chart",     "figure"),
+    Output("rf-scan-step-label","children"),
+    Output("rf-best-so-far",    "children"),
+    Output("rf-scores",         "data",  allow_duplicate=True),
+    Output("rf-scan-step",      "data",  allow_duplicate=True),
+    Output("rf-state",          "data",  allow_duplicate=True),
+    Output("rf-results-card",   "style", allow_duplicate=True),
+    Output("rf-result-summary", "children"),
+    Output("rf-result-detail",  "children"),
+    Input("tick-slow",          "n_intervals"),
+    State("rf-state",            "data"),
+    State("rf-target-bpm",       "data"),
+    State("rf-scan-step",        "data"),
+    State("rf-scores",           "data"),
+    State("rf-session-start",    "data"),
+    prevent_initial_call=True,
+)
+def update_rf_live(_n, state, target_bpm, scan_step, scores, session_start):
+    nu = dash.no_update
+    _ef = _empty_fig
+
+    # read live values from kpi_cache
+    hr_str      = _kpi_cache.get("bpm", "—")
+    breath_str  = _kpi_cache.get("breath", "—")
+    rsa_ms_v    = _kpi_cache.get("rsa_ms_v")
+    cbi_v       = _kpi_cache.get("cbi_v") or 0.0
+    rsa_str     = _kpi_cache.get("rsa_ms", "—")
+
+    # compute coherence at target frequency
+    try:
+        _, acc, rr, _ = _buf.snapshot()
+        target_hz     = (target_bpm or 6.0) / 60.0
+        coh_data      = metrics.compute_coherence(rr, acc, peak_hz=target_hz) if rr else None
+        peak_coh      = coh_data["peak_coherence"] if coh_data else 0.0
+        coh_str       = f"{peak_coh:.2f}" if coh_data else "—"
+    except Exception:
+        peak_coh = 0.0
+        coh_str  = "—"
+
+    score_v   = _rf_composite_score(rsa_ms_v or 0, peak_coh, cbi_v)
+    score_str = f"{score_v:.3f}"
+
+    # elapsed display
+    if session_start and state not in ("idle",):
+        elapsed_s = int(time.time() - session_start)
+        elapsed_str = f"{elapsed_s // 60:02d}:{elapsed_s % 60:02d}"
+    else:
+        elapsed_str = "—"
+
+    # update mini live chart buffer
+    rf_history_buf.append({"rsa_ms": rsa_ms_v or 0, "coherence": peak_coh})
+    live_fig = _rf_live_chart_fig(rf_history_buf)
+
+    # scan logic
+    new_scores    = scores if scores else {}
+    new_step      = scan_step
+    new_state     = state
+    result_style  = nu
+    result_sum    = nu
+    result_detail = nu
+    step_label    = nu
+    best_so_far   = nu
+
+    if state == "scanning":
+        candidates = _RF_CANDIDATES
+        step_idx   = int(scan_step or 0)
+        if step_idx < len(candidates):
+            bpm_key   = str(candidates[step_idx])
+            # accumulate score for this step
+            existing  = new_scores.get(bpm_key, {"rsa_ms": 0, "coherence": 0, "score": 0, "n": 0})
+            n         = existing["n"] + 1
+            new_scores = dict(new_scores)
+            new_scores[bpm_key] = {
+                "rsa_ms":    (existing["rsa_ms"] * (n-1) + (rsa_ms_v or 0)) / n,
+                "coherence": (existing["coherence"] * (n-1) + peak_coh) / n,
+                "score":     (existing["score"] * (n-1) + score_v) / n,
+                "n":          n,
+            }
+            step_elapsed = time.time() - (session_start or time.time())
+            step_time    = step_elapsed - step_idx * _RF_DWELL_S
+            remaining_s  = max(0, _RF_DWELL_S - int(step_time))
+            step_label   = (f"Step {step_idx+1} of {len(candidates)} — "
+                           f"Testing {candidates[step_idx]} BPM  ···  {remaining_s}s remaining")
+
+            # advance step after dwell time
+            if step_time >= _RF_DWELL_S:
+                new_step = step_idx + 1
+                if new_step >= len(candidates):
+                    # all steps done
+                    new_state    = "done"
+                    result_style = {**_CARD, "marginBottom": "10px"}
+                    best_bpm     = max(new_scores, key=lambda k: new_scores[k]["score"], default=None)
+                    if best_bpm:
+                        b        = new_scores[best_bpm]
+                        cycle    = 60.0 / float(best_bpm)
+                        inh      = round(cycle * _RF_IE_RATIO, 1)
+                        exh      = round(cycle * (1 - _RF_IE_RATIO), 1)
+                        result_sum    = (f"TODAY'S RESONANCE FREQUENCY: {best_bpm} BPM  ·  "
+                                        f"{inh}s inhale / {exh}s exhale")
+                        result_detail = (f"Score: {b['score']:.3f}  ·  "
+                                        f"Coherence: {b['coherence']:.2f}  ·  "
+                                        f"RSA: {b['rsa_ms']:.1f} ms")
+                        step_label    = f"Scan complete — best: {best_bpm} BPM"
+
+        # best so far
+        if new_scores:
+            best_k = max(new_scores, key=lambda k: new_scores[k]["score"])
+            best_so_far = f"Best so far: {best_k} BPM (score {new_scores[best_k]['score']:.3f})"
+
+    scan_fig = _rf_scan_fig(new_scores, _RF_CANDIDATES)
+
+    return (
+        hr_str, breath_str, rsa_str, coh_str, score_str, elapsed_str,
+        live_fig, scan_fig,
+        step_label, best_so_far,
+        new_scores, new_step, new_state, result_style,
+        result_sum, result_detail,
+    )
+
+
+# 6E — sound toggle
+@callback(
+    Output("rf-sound-on",  "data"),
+    Output("rf-btn-sound", "children"),
+    Output("rf-btn-sound", "style"),
+    Input("rf-btn-sound",  "n_clicks"),
+    State("rf-sound-on",   "data"),
+    prevent_initial_call=True,
+)
+def rf_sound_toggle(_, is_on):
+    new_on = not is_on
+    label  = "♪ SOUND ON" if new_on else "♪ SOUND OFF"
+    style  = {
+        "backgroundColor": "transparent",
+        "color": C_RF if new_on else C_DIM,
+        "border": f"1px solid {C_RF if new_on else C_BORDER}",
+        "borderRadius": "12px", "padding": "4px 14px",
+        "fontSize": "10px", "fontWeight": "700",
+        "letterSpacing": "1px", "cursor": "pointer",
+        "fontFamily": "'JetBrains Mono', monospace",
+    }
+    return new_on, label, style
+
+
+# 6F — save session
+@callback(
+    Output("rf-refresh", "data"),
+    Output("rf-notes",   "value"),
+    Input("rf-btn-save-final", "n_clicks"),
+    Input("rf-btn-save",       "n_clicks"),
+    State("rf-scores",         "data"),
+    State("rf-notes",          "value"),
+    State("rf-session-start",  "data"),
+    State("rf-state",          "data"),
+    State("rf-target-bpm",     "data"),
+    State("rf-inhale-s",       "data"),
+    State("rf-exhale-s",       "data"),
+    State("rf-refresh",        "data"),
+    prevent_initial_call=True,
+)
+def rf_save_session(_sf, _sb, scores, notes, session_start, state,
+                    target_bpm, inhale_s, exhale_s, current_refresh):
+    if not scores:
+        return dash.no_update, dash.no_update
+
+    now  = datetime.now()
+    best_bpm = max(scores, key=lambda k: scores[k].get("score", 0), default=None)
+    if not best_bpm:
+        return dash.no_update, dash.no_update
+
+    b = scores[best_bpm]
+    dur_s = int(time.time() - session_start) if session_start else 0
+
+    rec = dict(
+        ts=now.isoformat(), ts_date=now.strftime("%Y-%m-%d"),
+        session_type="scan" if state == "done" else "manual",
+        best_freq_bpm=float(best_bpm),
+        best_rsa_ms=b.get("rsa_ms"), best_coherence=b.get("coherence"),
+        best_score=b.get("score"),
+        inhale_s=inhale_s, exhale_s=exhale_s,
+        session_dur_s=dur_s, notes=notes or "",
+        scan_data=scores,
+    )
+    try:
+        with _db_lock:
+            _save_resonance_session(_db, rec)
+    except Exception:
+        pass
+
+    return (current_refresh or 0) + 1, ""
+
+
+# 6G — load history
+@callback(
+    Output("rf-history-chart", "figure"),
+    Output("rf-history-table", "children"),
+    Input("tick-today",   "n_intervals"),
+    Input("rf-refresh",   "data"),
+)
+def load_rf_history(_n, _r):
+    try:
+        with _db_lock:
+            sessions = _load_resonance_sessions(_db, days=30)
+    except Exception:
+        sessions = []
+
+    hist_fig = _rf_history_fig(sessions)
+
+    if not sessions:
+        table = html.Div(
+            "No sessions yet — complete a scan or manual session to begin.",
+            style={"color": C_DIM, "fontSize": "12px",
+                   "textAlign": "center", "padding": "20px"},
+        )
+        return hist_fig, table
+
+    rows = [html.Tr([
+        html.Th("Date",    style={"color": C_DIM, "fontSize": "10px", "padding": "4px 8px",
+                                  "borderBottom": f"1px solid {C_BORDER}", "textAlign": "left"}),
+        html.Th("Freq",    style={"color": C_DIM, "fontSize": "10px", "padding": "4px 8px",
+                                  "borderBottom": f"1px solid {C_BORDER}"}),
+        html.Th("Pattern", style={"color": C_DIM, "fontSize": "10px", "padding": "4px 8px",
+                                  "borderBottom": f"1px solid {C_BORDER}"}),
+        html.Th("Score",   style={"color": C_DIM, "fontSize": "10px", "padding": "4px 8px",
+                                  "borderBottom": f"1px solid {C_BORDER}"}),
+        html.Th("Notes",   style={"color": C_DIM, "fontSize": "10px", "padding": "4px 8px",
+                                  "borderBottom": f"1px solid {C_BORDER}"}),
+    ])]
+
+    for s in sessions[:20]:
+        freq = s.get("best_freq_bpm")
+        inh  = s.get("inhale_s") or 0
+        exh  = s.get("exhale_s") or 0
+        sc   = s.get("best_score") or 0
+        rows.append(html.Tr([
+            html.Td(s["ts_date"][:10],
+                    style={"color": C_TEXT, "fontSize": "11px", "padding": "4px 8px",
+                           "borderBottom": f"1px solid {C_BORDER}"}),
+            html.Td(f"{freq:.1f} BPM" if freq else "—",
+                    style={"color": C_RF, "fontSize": "11px", "padding": "4px 8px",
+                           "borderBottom": f"1px solid {C_BORDER}", "textAlign": "center"}),
+            html.Td(f"{inh:.1f}s / {exh:.1f}s",
+                    style={"color": C_DIM, "fontSize": "11px", "padding": "4px 8px",
+                           "borderBottom": f"1px solid {C_BORDER}", "textAlign": "center"}),
+            html.Td(f"{sc:.3f}",
+                    style={"color": C_GOOD if sc >= 0.5 else C_WARN,
+                           "fontSize": "11px", "fontWeight": "700",
+                           "padding": "4px 8px",
+                           "borderBottom": f"1px solid {C_BORDER}", "textAlign": "center"}),
+            html.Td(s.get("notes", "")[:40] or "—",
+                    style={"color": C_DIM, "fontSize": "11px", "padding": "4px 8px",
+                           "borderBottom": f"1px solid {C_BORDER}"}),
+        ]))
+
+    table = html.Table(rows, style={
+        "width": "100%", "borderCollapse": "collapse",
+        "fontFamily": "'JetBrains Mono', monospace",
+    })
+    return hist_fig, table
 
 
 # ── fast callback: waveforms + KPIs + status (100 ms) ────────────────────────
@@ -3258,6 +4156,10 @@ def update_slow(_n: int):
         rsa_idx_val = rsa_data["rsa_idx"] if rsa_data else None
         _kpi_cache["rsa_ms"]  = f"{rsa_ms_val:.1f}"  if rsa_ms_val  is not None else "—"
         _kpi_cache["rsa_idx"] = f"{rsa_idx_val:.3f}" if rsa_idx_val is not None else "—"
+        # raw floats for resonance finder
+        _kpi_cache["rsa_ms_v"]    = rsa_ms_val
+        _kpi_cache["cbi_v"]       = cbi
+        _kpi_cache["breath_hz_v"] = breathing["peak_hz"] if breathing else None
 
         # ULF: computed from full accumulated bpm series (needs ≥ 30 min of data)
         hist_rows  = _history.snapshot()
