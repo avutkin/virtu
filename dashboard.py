@@ -56,6 +56,7 @@ C_PNN50     = "#f472b6"   # pink/rose — pNN50
 C_SDNN      = "#58a6ff"   # blue — SDNN (same as C_RR for KPI consistency)
 C_NAV_ACT   = "#58a6ff"   # active navigation pill
 C_RSA       = "#fb923c"   # amber — RSA amplitude
+C_RSA_IDX   = "#fbbf24"   # yellow-gold — RSA Index (ln band power)
 
 # ── shared style atoms ────────────────────────────────────────────────────────
 _CARD = {
@@ -1726,6 +1727,48 @@ def _rsa_live_fig(records: list[dict], minutes: int = 60) -> go.Figure:
     return _rsa_zones(fig)
 
 
+def _rsa_idx_live_fig(records: list[dict], minutes: int = 60) -> go.Figure:
+    """RSA Index rolling live chart with reference lines."""
+    n      = minutes * 30
+    window = records[-n:] if len(records) > n else records
+    title  = f"RSA Index  —  ln(RSA band power)  ·  last {_range_label(minutes)}  ·  1 min avg"
+    if not window:
+        return _empty_fig(title)
+
+    buckets: dict[str, list] = {}
+    for r in window:
+        v = r.get("rsa_idx", 0)
+        if v and v != 0:
+            buckets.setdefault(r["t"], []).append(v)
+
+    if not buckets:
+        return _empty_fig(title)
+
+    ts   = list(buckets.keys())
+    vals = [float(np.mean(v)) for v in buckets.values()]
+
+    fig = go.Figure(go.Scatter(
+        x=ts, y=vals, mode="lines+markers",
+        line=dict(color=C_RSA_IDX, width=2),
+        marker=dict(size=3, color=C_RSA_IDX),
+        hovertemplate="%{x}  RSA idx %{y:.2f}<extra></extra>",
+    ))
+    fig.update_layout(
+        **_PLOT_LAYOUT,
+        uirevision=f"rsa-idx-live-{minutes}",
+        title=dict(text=title, font=dict(color=C_RSA_IDX, size=12), x=0.01),
+        xaxis=_ax("time"),
+        yaxis=_ax(""),
+    )
+    fig.add_hline(y=4.0, line_dash="dash", line_color=C_GOOD, line_width=1,
+                  annotation_text="strong  ≥ 4", annotation_position="bottom right",
+                  annotation_font=dict(color=C_GOOD, size=9))
+    fig.add_hline(y=2.0, line_dash="dash", line_color=C_BAD, line_width=1,
+                  annotation_text="low  < 2", annotation_position="top right",
+                  annotation_font=dict(color=C_BAD, size=9))
+    return fig
+
+
 def _rsa_ms_trend(records: list[dict]) -> go.Figure:
     fig = _trend_fig(records, "rsa_ms", "RSA  —  Respiratory Sinus Arrhythmia (ms)", C_RSA, "ms")
     return _rsa_zones(fig)
@@ -2397,7 +2440,7 @@ app.layout = html.Div([
                       config={"displayModeBar": False}),
         ], style={**_CARD, "marginBottom": "10px"}),
 
-        # Row 7 — VTI · RMSSD · RSA  (three vagal-tone metrics side by side)
+        # Row 7 — VTI · RMSSD · RSA amplitude · RSA Index  (four vagal metrics)
         html.Div([
             html.Div([
                 html.Div(_range_btn_group("vti-range-store",
@@ -2432,7 +2475,16 @@ app.layout = html.Div([
                 dcc.Graph(id="rsa-live-graph", style={"height": "220px"},
                           config={"displayModeBar": False}),
             ], style=_CARD),
-        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 1fr",
+            html.Div([
+                html.Div(_range_btn_group("rsa-idx-range-store",
+                                         "rsa-idx-btn-60", "rsa-idx-btn-120", "rsa-idx-btn-720",
+                                         C_RSA_IDX, metric="rsa_idx"),
+                         style={"display": "flex", "justifyContent": "flex-end",
+                                "marginBottom": "4px"}),
+                dcc.Graph(id="rsa-idx-live-graph", style={"height": "220px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
+        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 1fr 1fr",
                   "gap": "10px", "marginBottom": "10px"}),
 
         # Row 8 — SDNN + pNN50 live trends (side by side)
@@ -3356,6 +3408,39 @@ def update_rsa_live(_n, minutes_str):
     with _db_lock:
         rows = _load_today(_db)
     return _rsa_live_fig(rows, minutes=minutes)
+
+
+# ── RSA Index range button group ──────────────────────────────────────────────
+@callback(
+    Output("rsa-idx-range-store", "data"),
+    Output("rsa-idx-btn-60",  "style"),
+    Output("rsa-idx-btn-120", "style"),
+    Output("rsa-idx-btn-720", "style"),
+    Input("rsa-idx-btn-60",   "n_clicks"),
+    Input("rsa-idx-btn-120",  "n_clicks"),
+    Input("rsa-idx-btn-720",  "n_clicks"),
+    prevent_initial_call=True,
+)
+def handle_rsa_idx_range(_60, _120, _720):
+    val = {"rsa-idx-btn-60": "60", "rsa-idx-btn-120": "120", "rsa-idx-btn-720": "720"}.get(
+        ctx.triggered_id, "60")
+    return (val,
+            _rbtn_style(val == "60",  C_RSA_IDX),
+            _rbtn_style(val == "120", C_RSA_IDX),
+            _rbtn_style(val == "720", C_RSA_IDX))
+
+
+# ── RSA Index live chart ───────────────────────────────────────────────────────
+@callback(
+    Output("rsa-idx-live-graph",   "figure"),
+    Input("tick-slow",             "n_intervals"),
+    Input("rsa-idx-range-store",   "data"),
+)
+def update_rsa_idx_live(_n, minutes_str):
+    minutes = int(minutes_str or 60)
+    with _db_lock:
+        rows = _load_today(_db)
+    return _rsa_idx_live_fig(rows, minutes=minutes)
 
 
 # ── VTI range button group ────────────────────────────────────────────────────
