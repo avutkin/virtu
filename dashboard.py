@@ -1946,8 +1946,10 @@ def _rf_live_chart_fig(buf: deque) -> go.Figure:
         name="Coherence", yaxis="y2",
         hovertemplate="Coh %{y:.2f}<extra></extra>",
     ))
+    layout = dict(_PLOT_LAYOUT)
+    layout["margin"] = dict(l=45, r=45, t=28, b=20)
     fig.update_layout(
-        **_PLOT_LAYOUT,
+        **layout,
         uirevision="rf-live",
         title=dict(text="RSA ms  ·  Coherence  (last 60 s)",
                    font=dict(color=C_DIM, size=11), x=0.01),
@@ -1956,7 +1958,6 @@ def _rf_live_chart_fig(buf: deque) -> go.Figure:
         yaxis2=dict(**_AX, overlaying="y", side="right",
                     range=[0, 1], title="coherence"),
         showlegend=False,
-        margin=dict(l=45, r=45, t=28, b=20),
     )
     return fig
 
@@ -3484,27 +3485,6 @@ app.layout = html.Div([
 
     ], id="content-resonate", style={"display": "none"}),
 
-    # Web Audio API helper for pacer tones
-    html.Script("""
-window._rfAudioCtx = null;
-window._rfPlayTone = function(freq, vol, dur) {
-    try {
-        if (!window._rfAudioCtx) window._rfAudioCtx = new AudioContext();
-        var ctx = window._rfAudioCtx;
-        var osc = ctx.createOscillator();
-        var gain = ctx.createGain();
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.frequency.value = freq;
-        osc.type = 'sine';
-        gain.gain.setValueAtTime(0, ctx.currentTime);
-        gain.gain.linearRampToValueAtTime(vol, ctx.currentTime + 0.15);
-        gain.gain.linearRampToValueAtTime(0, ctx.currentTime + dur);
-        osc.start(ctx.currentTime);
-        osc.stop(ctx.currentTime + dur);
-    } catch(e) {}
-};
-"""),
-
     # ── Info modal overlay ─────────────────────────────────────────────────────
     html.Div(id="info-modal-overlay", children=[
         html.Div([
@@ -3589,37 +3569,50 @@ def switch_page(_nl, _nt, _nw, _nlog, _nr):
     Output("tick-pacer",        "disabled"),
     Output("rf-scan-panel",     "style"),
     Output("rf-results-card",   "style"),
+    Output("rf-target-bpm",     "data",  allow_duplicate=True),
+    Output("rf-pacer-state",    "data",  allow_duplicate=True),
     Input("rf-btn-play",      "n_clicks"),
     Input("rf-btn-pause",     "n_clicks"),
     Input("rf-btn-stop",      "n_clicks"),
     Input("rf-btn-diagnosis", "n_clicks"),
     Input("rf-btn-manual",    "n_clicks"),
-    State("rf-state",   "data"),
-    State("rf-scores",  "data"),
+    State("rf-state",        "data"),
+    State("rf-scores",       "data"),
+    State("rf-target-bpm",   "data"),
     prevent_initial_call=True,
 )
-def rf_control(_play, _pause, _stop, _diag, _manual, cur_state, cur_scores):
+def rf_control(_play, _pause, _stop, _diag, _manual, cur_state, cur_scores, cur_bpm):
+    nu   = dash.no_update
     trig = ctx.triggered_id
+
+    def _pacer(bpm: float) -> dict:
+        cycle = 60.0 / bpm
+        return {"inhale_s": round(cycle * _RF_IE_RATIO, 2),
+                "exhale_s": round(cycle * (1.0 - _RF_IE_RATIO), 2),
+                "start_ts": time.time(), "is_running": True}
+
     if trig == "rf-btn-stop":
+        stop_pacer = {"inhale_s": 4.0, "exhale_s": 6.0, "start_ts": 0, "is_running": False}
         return ("idle", None, 0, {}, True,
-                {"display": "none"}, {"display": "none"})
+                {"display": "none"}, {"display": "none"}, nu, stop_pacer)
     if trig == "rf-btn-pause":
-        return (dash.no_update, dash.no_update, dash.no_update,
-                dash.no_update, True,
-                dash.no_update, dash.no_update)
+        pause_pacer = {"inhale_s": 4.0, "exhale_s": 6.0, "start_ts": 0, "is_running": False}
+        return (nu, nu, nu, nu, True, nu, nu, nu, pause_pacer)
     if trig == "rf-btn-play":
         if cur_state in ("idle", "paused"):
-            return ("manual", dash.no_update, dash.no_update,
-                    dash.no_update, False,
-                    dash.no_update, dash.no_update)
+            bpm = cur_bpm or 6.0
+            return ("manual", nu, nu, nu, False, nu, nu, bpm, _pacer(bpm))
     if trig == "rf-btn-manual":
-        return ("manual", time.time(), dash.no_update,
-                dash.no_update, False,
-                {"display": "none"}, {"display": "none"})
+        bpm = cur_bpm or 6.0
+        return ("manual", time.time(), nu, nu, False,
+                {"display": "none"}, {"display": "none"}, bpm, _pacer(bpm))
     if trig == "rf-btn-diagnosis":
+        # start at first candidate
+        first_bpm = _RF_CANDIDATES[0]
         return ("scanning", time.time(), 0, {}, False,
-                {**_CARD, "marginBottom": "10px"}, {"display": "none"})
-    return (dash.no_update,) * 7
+                {**_CARD, "marginBottom": "10px"}, {"display": "none"},
+                first_bpm, _pacer(first_bpm))
+    return (nu,) * 9
 
 
 # 6B — BPM slider + preset chips → stores
@@ -3748,6 +3741,8 @@ app.clientside_callback(
     Output("rf-results-card",   "style", allow_duplicate=True),
     Output("rf-result-summary", "children"),
     Output("rf-result-detail",  "children"),
+    Output("rf-target-bpm",     "data",  allow_duplicate=True),
+    Output("rf-pacer-state",    "data",  allow_duplicate=True),
     Input("tick-slow",          "n_intervals"),
     State("rf-state",            "data"),
     State("rf-target-bpm",       "data"),
@@ -3758,22 +3753,29 @@ app.clientside_callback(
 )
 def update_rf_live(_n, state, target_bpm, scan_step, scores, session_start):
     nu = dash.no_update
-    _ef = _empty_fig
 
     # read live values from kpi_cache
-    hr_str      = _kpi_cache.get("bpm", "—")
-    breath_str  = _kpi_cache.get("breath", "—")
-    rsa_ms_v    = _kpi_cache.get("rsa_ms_v")
-    cbi_v       = _kpi_cache.get("cbi_v") or 0.0
-    rsa_str     = _kpi_cache.get("rsa_ms", "—")
+    hr_str   = _kpi_cache.get("bpm", "—")
+    breath_str = _kpi_cache.get("breath", "—")
+    rsa_ms_v = _kpi_cache.get("rsa_ms_v")
+    cbi_v    = _kpi_cache.get("cbi_v") or 0.0
+    rsa_str  = _kpi_cache.get("rsa_ms", "—")
 
-    # compute coherence at target frequency
+    # During auto-scan use the candidate's Hz; otherwise use target_bpm
+    candidates = _RF_CANDIDATES
+    step_idx   = int(scan_step or 0)
+    if state == "scanning" and step_idx < len(candidates):
+        measure_bpm = candidates[step_idx]
+    else:
+        measure_bpm = target_bpm or 6.0
+    measure_hz = measure_bpm / 60.0
+
+    # compute coherence at the correct measurement frequency
     try:
         _, acc, rr, _ = _buf.snapshot()
-        target_hz     = (target_bpm or 6.0) / 60.0
-        coh_data      = metrics.compute_coherence(rr, acc, peak_hz=target_hz) if rr else None
-        peak_coh      = coh_data["peak_coherence"] if coh_data else 0.0
-        coh_str       = f"{peak_coh:.2f}" if coh_data else "—"
+        coh_data = metrics.compute_coherence(rr, acc, peak_hz=measure_hz) if rr else None
+        peak_coh = coh_data["peak_coherence"] if coh_data else 0.0
+        coh_str  = f"{peak_coh:.2f}" if coh_data else "—"
     except Exception:
         peak_coh = 0.0
         coh_str  = "—"
@@ -3783,7 +3785,7 @@ def update_rf_live(_n, state, target_bpm, scan_step, scores, session_start):
 
     # elapsed display
     if session_start and state not in ("idle",):
-        elapsed_s = int(time.time() - session_start)
+        elapsed_s   = int(time.time() - session_start)
         elapsed_str = f"{elapsed_s // 60:02d}:{elapsed_s % 60:02d}"
     else:
         elapsed_str = "—"
@@ -3793,7 +3795,7 @@ def update_rf_live(_n, state, target_bpm, scan_step, scores, session_start):
     live_fig = _rf_live_chart_fig(rf_history_buf)
 
     # scan logic
-    new_scores    = scores if scores else {}
+    new_scores    = dict(scores) if scores else {}
     new_step      = scan_step
     new_state     = state
     result_style  = nu
@@ -3801,49 +3803,70 @@ def update_rf_live(_n, state, target_bpm, scan_step, scores, session_start):
     result_detail = nu
     step_label    = nu
     best_so_far   = nu
+    new_target_bpm   = nu
+    new_pacer_state  = nu
 
     if state == "scanning":
-        candidates = _RF_CANDIDATES
-        step_idx   = int(scan_step or 0)
         if step_idx < len(candidates):
-            bpm_key   = str(candidates[step_idx])
-            # accumulate score for this step
-            existing  = new_scores.get(bpm_key, {"rsa_ms": 0, "coherence": 0, "score": 0, "n": 0})
-            n         = existing["n"] + 1
-            new_scores = dict(new_scores)
+            bpm_key  = str(candidates[step_idx])
+            existing = new_scores.get(bpm_key, {"rsa_ms": 0, "coherence": 0, "score": 0, "n": 0})
+            n        = existing["n"] + 1
             new_scores[bpm_key] = {
                 "rsa_ms":    (existing["rsa_ms"] * (n-1) + (rsa_ms_v or 0)) / n,
                 "coherence": (existing["coherence"] * (n-1) + peak_coh) / n,
                 "score":     (existing["score"] * (n-1) + score_v) / n,
                 "n":          n,
             }
+
             step_elapsed = time.time() - (session_start or time.time())
             step_time    = step_elapsed - step_idx * _RF_DWELL_S
             remaining_s  = max(0, _RF_DWELL_S - int(step_time))
             step_label   = (f"Step {step_idx+1} of {len(candidates)} — "
                            f"Testing {candidates[step_idx]} BPM  ···  {remaining_s}s remaining")
 
-            # advance step after dwell time
+            # advance to next candidate after dwell time
             if step_time >= _RF_DWELL_S:
                 new_step = step_idx + 1
-                if new_step >= len(candidates):
-                    # all steps done
+                if new_step < len(candidates):
+                    # drive pacer to next candidate BPM
+                    next_bpm     = candidates[new_step]
+                    cycle        = 60.0 / next_bpm
+                    new_target_bpm  = next_bpm
+                    new_pacer_state = {
+                        "inhale_s":  round(cycle * _RF_IE_RATIO, 2),
+                        "exhale_s":  round(cycle * (1.0 - _RF_IE_RATIO), 2),
+                        "start_ts":  time.time(),
+                        "is_running": True,
+                    }
+                    step_label = (f"Step {new_step+1} of {len(candidates)} — "
+                                 f"Testing {next_bpm} BPM  ···  {_RF_DWELL_S}s remaining")
+                else:
+                    # all steps complete
                     new_state    = "done"
                     result_style = {**_CARD, "marginBottom": "10px"}
-                    best_bpm     = max(new_scores, key=lambda k: new_scores[k]["score"], default=None)
+                    best_bpm = max(new_scores, key=lambda k: new_scores[k]["score"], default=None)
                     if best_bpm:
-                        b        = new_scores[best_bpm]
-                        cycle    = 60.0 / float(best_bpm)
-                        inh      = round(cycle * _RF_IE_RATIO, 1)
-                        exh      = round(cycle * (1 - _RF_IE_RATIO), 1)
+                        b    = new_scores[best_bpm]
+                        cyc  = 60.0 / float(best_bpm)
+                        inh  = round(cyc * _RF_IE_RATIO, 1)
+                        exh  = round(cyc * (1 - _RF_IE_RATIO), 1)
                         result_sum    = (f"TODAY'S RESONANCE FREQUENCY: {best_bpm} BPM  ·  "
                                         f"{inh}s inhale / {exh}s exhale")
                         result_detail = (f"Score: {b['score']:.3f}  ·  "
                                         f"Coherence: {b['coherence']:.2f}  ·  "
                                         f"RSA: {b['rsa_ms']:.1f} ms")
-                        step_label    = f"Scan complete — best: {best_bpm} BPM"
+                        step_label = f"Scan complete — best: {best_bpm} BPM"
+                        # drive pacer to best frequency
+                        new_target_bpm  = float(best_bpm)
+                        cyc2 = 60.0 / float(best_bpm)
+                        new_pacer_state = {
+                            "inhale_s":  round(cyc2 * _RF_IE_RATIO, 2),
+                            "exhale_s":  round(cyc2 * (1.0 - _RF_IE_RATIO), 2),
+                            "start_ts":  time.time(),
+                            "is_running": True,
+                        }
 
-        # best so far
+        # best so far display
         if new_scores:
             best_k = max(new_scores, key=lambda k: new_scores[k]["score"])
             best_so_far = f"Best so far: {best_k} BPM (score {new_scores[best_k]['score']:.3f})"
@@ -3856,6 +3879,7 @@ def update_rf_live(_n, state, target_bpm, scan_step, scores, session_start):
         step_label, best_so_far,
         new_scores, new_step, new_state, result_style,
         result_sum, result_detail,
+        new_target_bpm, new_pacer_state,
     )
 
 
