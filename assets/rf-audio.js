@@ -75,13 +75,18 @@ window._rfPacerBreath = function(tFreq, tVol) {
             var t    = ctx.currentTime;
             var osc  = window._rfPacerOsc;
             var gain = window._rfPacerGain;
-            /* Cancel any pending ramps, anchor current value, ramp to target */
-            osc.frequency.cancelScheduledValues(t);
-            osc.frequency.setValueAtTime(osc.frequency.value, t);
-            osc.frequency.linearRampToValueAtTime(tFreq, t + 0.12);
-            gain.gain.cancelScheduledValues(t);
-            gain.gain.setValueAtTime(gain.gain.value, t);
-            gain.gain.linearRampToValueAtTime(tVol,  t + 0.12);
+            /* cancelAndHoldAtTime: cancels events after t but HOLDS the
+               current interpolated value — no frequency jump on each tick.
+               Falls back to setTargetAtTime (universal support) on failure. */
+            try {
+                osc.frequency.cancelAndHoldAtTime(t);
+                gain.gain.cancelAndHoldAtTime(t);
+            } catch(e) {
+                osc.frequency.cancelScheduledValues(t);
+                gain.gain.cancelScheduledValues(t);
+            }
+            osc.frequency.linearRampToValueAtTime(tFreq, t + 0.11);
+            gain.gain.linearRampToValueAtTime(tVol,  t + 0.11);
         }
         if (ctx.state === 'suspended') { ctx.resume().then(_update); }
         else { _update(); }

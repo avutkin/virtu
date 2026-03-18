@@ -3818,9 +3818,10 @@ def rf_control(_play, _pause, _stop, _diag, _manual, cur_state, cur_scores, cur_
     Input({"type": "rf-preset", "ratio": ALL}, "n_clicks"),
     State("rf-target-bpm",  "data"),
     State("rf-state",       "data"),
+    State("rf-pacer-state", "data"),
     prevent_initial_call=True,
 )
-def rf_update_pacer_settings(bpm_slider, preset_clicks, cur_bpm, state):
+def rf_update_pacer_settings(bpm_slider, preset_clicks, cur_bpm, state, cur_pacer):
     trig = ctx.triggered_id
     bpm = bpm_slider if bpm_slider else cur_bpm
     ie_ratio = _RF_IE_RATIO   # default 4:6
@@ -3835,10 +3836,15 @@ def rf_update_pacer_settings(bpm_slider, preset_clicks, cur_bpm, state):
     exhale_s = round(cycle * (1.0 - ie_ratio), 2)
     is_running = state not in ("idle", "paused")
 
+    # Preserve start_ts so the animation phase isn't hard-reset when BPM changes;
+    # only assign a fresh timestamp when there is no existing session running.
+    existing_ts = (cur_pacer or {}).get("start_ts")
+    start_ts = existing_ts if (existing_ts and is_running) else time.time()
+
     pacer_state = {
         "inhale_s": inhale_s,
         "exhale_s": exhale_s,
-        "start_ts": time.time(),
+        "start_ts": start_ts,
         "is_running": is_running,
     }
     label = f"{bpm:.1f} BPM · {bpm/60:.3f} Hz"
@@ -3998,7 +4004,7 @@ app.clientside_callback(
     Output("rf-pacer-center-text",  "children"),
     Output("rf-pacer-center-text",  "style"),
     Input("tick-pacer",             "n_intervals"),
-    State("rf-pacer-state",         "data"),
+    Input("rf-pacer-state",         "data"),
     State("rf-sound-on",            "data"),
 )
 
