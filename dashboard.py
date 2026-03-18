@@ -2562,7 +2562,7 @@ app.layout = html.Div([
                       config={"displayModeBar": False}),
         ], style={**_CARD, "marginBottom": "10px"}),
 
-        # Row 5 — RMSSD · pNN50  (HRV time-domain metrics)
+        # Row 5 — RMSSD · pNN50 · VTI  (HRV time-domain + vagal tone)
         html.Div([
             html.Div([
                 html.Div([
@@ -2588,7 +2588,16 @@ app.layout = html.Div([
                 dcc.Graph(id="pnn50-live-graph", style={"height": "220px"},
                           config={"displayModeBar": False}),
             ], style=_CARD),
-        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr",
+            html.Div([
+                html.Div(_range_btn_group("vti-range-store",
+                                         "vti-btn-60", "vti-btn-120", "vti-btn-720",
+                                         C_VTI, metric="vti"),
+                         style={"display": "flex", "justifyContent": "flex-end",
+                                "marginBottom": "4px"}),
+                dcc.Graph(id="vti-live-graph", style={"height": "220px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
+        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 1fr",
                   "gap": "10px", "marginBottom": "10px"}),
 
         # Row 5 — PSD + LF/HF live trend  (HRV frequency domain)
@@ -2610,15 +2619,11 @@ app.layout = html.Div([
         ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr",
                   "gap": "10px", "marginBottom": "10px"}),
 
-        # Row 6 — VTI · RSA amplitude · RSA Index  (vagal tone + RSA)
+        # Row 6 — Coherence · RSA amplitude · RSA Index  (coherence + RSA)
         html.Div([
             html.Div([
-                html.Div(_range_btn_group("vti-range-store",
-                                         "vti-btn-60", "vti-btn-120", "vti-btn-720",
-                                         C_VTI, metric="vti"),
-                         style={"display": "flex", "justifyContent": "flex-end",
-                                "marginBottom": "4px"}),
-                dcc.Graph(id="vti-live-graph", style={"height": "220px"},
+                html.Div([_info_btn("coh")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="coh-graph", style={"height": "220px"},
                           config={"displayModeBar": False}),
             ], style=_CARD),
             html.Div([
@@ -2641,13 +2646,6 @@ app.layout = html.Div([
             ], style=_CARD),
         ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 1fr",
                   "gap": "10px", "marginBottom": "10px"}),
-
-        # Row 9 — Coherence (full width)
-        html.Div([
-            html.Div([_info_btn("coh")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
-            dcc.Graph(id="coh-graph", style={"height": "180px"},
-                      config={"displayModeBar": False}),
-        ], style={**_CARD, "marginBottom": "10px"}),
 
         # Row 8 — Breathing phases (waveform + I:E bar chart)
         html.Div([
