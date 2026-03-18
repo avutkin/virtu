@@ -2551,7 +2551,18 @@ app.layout = html.Div([
                       config={"displayModeBar": False}),
         ], style={**_CARD, "marginBottom": "10px"}),
 
-        # Row 4 — RMSSD · SDNN · pNN50  (HRV time-domain metrics)
+        # Row 4 — SDNN live trend (full width)
+        html.Div([
+            html.Div(_range_btn_group("sdnn-range-store",
+                                     "sdnn-btn-60", "sdnn-btn-120", "sdnn-btn-720",
+                                     C_SDNN, metric="sdnn"),
+                     style={"display": "flex", "justifyContent": "flex-end",
+                            "marginBottom": "4px"}),
+            dcc.Graph(id="sdnn-live-graph", style={"height": "200px"},
+                      config={"displayModeBar": False}),
+        ], style={**_CARD, "marginBottom": "10px"}),
+
+        # Row 5 — RMSSD · pNN50  (HRV time-domain metrics)
         html.Div([
             html.Div([
                 html.Div([
@@ -2569,15 +2580,6 @@ app.layout = html.Div([
                           config={"displayModeBar": False}),
             ], style=_CARD),
             html.Div([
-                html.Div(_range_btn_group("sdnn-range-store",
-                                         "sdnn-btn-60", "sdnn-btn-120", "sdnn-btn-720",
-                                         C_SDNN, metric="sdnn"),
-                         style={"display": "flex", "justifyContent": "flex-end",
-                                "marginBottom": "4px"}),
-                dcc.Graph(id="sdnn-live-graph", style={"height": "220px"},
-                          config={"displayModeBar": False}),
-            ], style=_CARD),
-            html.Div([
                 html.Div(_range_btn_group("pnn50-range-store",
                                          "pnn50-btn-60", "pnn50-btn-120", "pnn50-btn-720",
                                          C_PNN50, metric="pnn50"),
@@ -2586,7 +2588,7 @@ app.layout = html.Div([
                 dcc.Graph(id="pnn50-live-graph", style={"height": "220px"},
                           config={"displayModeBar": False}),
             ], style=_CARD),
-        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 1fr",
+        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr",
                   "gap": "10px", "marginBottom": "10px"}),
 
         # Row 5 — PSD + LF/HF live trend  (HRV frequency domain)
@@ -2640,36 +2642,12 @@ app.layout = html.Div([
         ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 1fr",
                   "gap": "10px", "marginBottom": "10px"}),
 
-        # Row 7 — Coherence · CBI gauge · VTI gauge  (autonomic indices)
+        # Row 9 — Coherence (full width)
         html.Div([
-            html.Div([
-                html.Div([_info_btn("coh")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
-                dcc.Graph(id="coh-graph", style={"height": "180px"},
-                          config={"displayModeBar": False}),
-            ], style=_CARD),
-            html.Div([
-                html.Div("Conscious Breathing Index",
-                         style={"color": C_DIM, "fontSize": "11px",
-                                "textTransform": "uppercase", "letterSpacing": "1px",
-                                "marginBottom": "2px"}),
-                html.Div("Peak coherence 35% · regularity 25% · frequency 25% · RMSSD 15%",
-                         style={"color": C_DIM, "fontSize": "10px", "marginBottom": "4px"}),
-                html.Div([_info_btn("cbi")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
-                dcc.Graph(id="cbi-gauge", style={"height": "180px"},
-                          config={"displayModeBar": False}),
-            ], style=_CARD),
-            html.Div([
-                html.Div("Vagal Tone Index  —  ln(RMSSD)",
-                         style={"color": C_DIM, "fontSize": "11px",
-                                "textTransform": "uppercase", "letterSpacing": "1px",
-                                "marginBottom": "2px"}),
-                html.Div("Parasympathetic nervous system activity · >3.5 = good · <2.5 = low",
-                         style={"color": C_DIM, "fontSize": "10px", "marginBottom": "4px"}),
-                dcc.Graph(id="vti-gauge", style={"height": "180px"},
-                          config={"displayModeBar": False}),
-            ], style=_CARD),
-        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 1fr",
-                  "gap": "10px", "marginBottom": "10px"}),
+            html.Div([_info_btn("coh")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+            dcc.Graph(id="coh-graph", style={"height": "180px"},
+                      config={"displayModeBar": False}),
+        ], style={**_CARD, "marginBottom": "10px"}),
 
         # Row 8 — Breathing phases (waveform + I:E bar chart)
         html.Div([
@@ -4161,8 +4139,6 @@ _SAFE_FIG: dict = {
 @callback(
     Output("psd-graph",         "figure"),
     Output("coh-graph",         "figure"),
-    Output("cbi-gauge",         "figure"),
-    Output("vti-gauge",         "figure"),
     Output("ext-metrics",       "children"),
     Output("breath-wave-graph", "figure"),
     Output("ie-ratio-graph",    "figure"),
@@ -4296,9 +4272,6 @@ def update_slow(_n: int):
         coh_fig = (_coherence_figure(coh_data)
                    if coh_data
                    else _ef("RR–Breathing Coherence"))
-        cbi_fig = _cbi_gauge(cbi)
-        vti_fig = _vti_gauge(vti)
-
         lf_nu_v    = f"{hrv['lf_nu']:.1f} nu"       if hrv and hrv["lf_nu"]     is not None else "—"
         hf_nu_v    = f"{hrv['hf_nu']:.1f} nu"       if hrv and hrv["hf_nu"]     is not None else "—"
         lf_abs_v   = f"{hrv['lf_power']:.2f} ms²"   if hrv and hrv["lf_power"]  is not None else "—"
@@ -4337,14 +4310,14 @@ def update_slow(_n: int):
         breath_wave_fig = _breath_wave_fig(phases)
         ie_ratio_fig    = _ie_ratio_fig(phases)
 
-        return (psd_fig, coh_fig, cbi_fig, vti_fig, ext,
+        return (psd_fig, coh_fig, ext,
                 breath_wave_fig, ie_ratio_fig)
 
     except Exception:
         tb = traceback.format_exc()
         print(f"\n[slow ERROR]\n{tb}", flush=True)
         sf = _SAFE_FIG
-        return sf, sf, sf, sf, tb[-600:], sf, sf
+        return sf, sf, tb[-600:], sf, sf
 
 
 # ── RSA range button group ────────────────────────────────────────────────────
