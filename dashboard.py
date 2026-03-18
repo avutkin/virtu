@@ -1843,36 +1843,68 @@ def _rf_composite_score(rsa_ms: float, peak_coherence: float, cbi: float) -> flo
 
 
 def _rf_scan_fig(scores: dict, candidates: list) -> go.Figure:
-    """Horizontal bar chart: one bar per candidate BPM, coloured by score."""
+    """
+    Grouped horizontal bars per BPM candidate.
+    Two colour-coded traces show the two primary metrics separately:
+      Amber  (C_RSA)  — RSA amplitude, normalised 0–1  (150 ms = 1.0)
+      Indigo (C_RF)   — Peak Coherence, already 0–1
+    Best candidate is fully saturated; tested-but-not-best is muted;
+    untested slots are dim placeholders.
+    """
     if not scores:
-        return _empty_fig("Scan Progress — Score by BPM")
+        return _empty_fig("Scan Progress — RSA · Coherence by BPM")
 
     best_bpm = max(scores, key=lambda k: scores[k].get("score", 0), default=None)
-    labels, values, colors = [], [], []
+    labels, rsa_vals, coh_vals, rsa_colors, coh_colors = [], [], [], [], []
+
     for bpm in candidates:
         key = str(bpm)
         labels.append(f"{bpm} BPM")
-        sc = scores.get(key, {}).get("score", 0)
-        values.append(sc)
         if key not in scores:
-            colors.append(C_RF)
-        elif key == str(best_bpm):
-            colors.append(C_GOOD)
+            rsa_vals.append(0)
+            coh_vals.append(0)
+            rsa_colors.append("rgba(251,146,60,0.18)")
+            coh_colors.append("rgba(129,140,248,0.18)")
         else:
-            colors.append(C_WARN)
+            d     = scores[key]
+            rsa_n = min(1.0, (d.get("rsa_ms") or 0) / 150.0)
+            coh_n = min(1.0, max(0.0, d.get("coherence") or 0))
+            rsa_vals.append(rsa_n)
+            coh_vals.append(coh_n)
+            if key == str(best_bpm):
+                rsa_colors.append(C_RSA)
+                coh_colors.append(C_RF)
+            else:
+                rsa_colors.append("rgba(251,146,60,0.55)")
+                coh_colors.append("rgba(129,140,248,0.55)")
 
-    fig = go.Figure(go.Bar(
-        x=values, y=labels, orientation="h",
-        marker_color=colors,
-        hovertemplate="%{y}: %{x:.3f}<extra></extra>",
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=rsa_vals, y=labels, orientation="h",
+        name="RSA  (150 ms = 1.0)",
+        marker=dict(color=rsa_colors, line=dict(width=0)),
+        hovertemplate="%{y}  RSA %{x:.2f}<extra></extra>",
+    ))
+    fig.add_trace(go.Bar(
+        x=coh_vals, y=labels, orientation="h",
+        name="Coherence",
+        marker=dict(color=coh_colors, line=dict(width=0)),
+        hovertemplate="%{y}  Coherence %{x:.2f}<extra></extra>",
     ))
     fig.update_layout(
         **_PLOT_LAYOUT,
+        barmode="group",
         uirevision="rf-scan",
-        title=dict(text="Scan Progress — Score by BPM",
+        title=dict(text="Scan Progress — RSA · Coherence by BPM",
                    font=dict(color=C_RF, size=12), x=0.01),
-        xaxis=dict(**_AX, range=[0, 1], title="score"),
+        xaxis=dict(**_AX, range=[0, 1], title="score (0 – 1)"),
         yaxis=dict(**_AX),
+        showlegend=True,
+        legend=dict(
+            orientation="h", x=0.01, xanchor="left", y=1.14,
+            font=dict(color=C_TEXT, size=10),
+            bgcolor="rgba(0,0,0,0)",
+        ),
     )
     return fig
 
