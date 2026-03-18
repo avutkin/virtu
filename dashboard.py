@@ -3455,27 +3455,27 @@ app.layout = html.Div([
 
                 # Animated pacer circle
                 html.Div([
-                    # Positioning wrapper — everything is absolute inside here
+                    # Positioning wrapper — 264px contains 250px outer ring at slowest BPM
                     html.Div([
-                        # Outer guide ring: shows max inhale expansion limit (160×1.40=224px)
-                        html.Div(style={
+                        # Outer guide ring: max inhale expansion — BPM-adaptive (default 6 BPM = 222px)
+                        html.Div(id="rf-pacer-outer-guide", style={
                             "position": "absolute", "top": "50%", "left": "50%",
-                            "width": "224px", "height": "224px",
-                            "marginLeft": "-112px", "marginTop": "-112px",
+                            "width": "222px", "height": "222px",
+                            "marginLeft": "-111px", "marginTop": "-111px",
                             "borderRadius": "50%",
-                            "border": "1.5px dashed rgba(129,140,248,0.28)",
+                            "border": "1.5px dashed rgba(129,140,248,0.30)",
                             "pointerEvents": "none",
                         }),
-                        # Inner guide ring: shows min exhale contraction limit (160×0.85=136px)
-                        html.Div(style={
+                        # Inner guide ring: min exhale contraction — BPM-adaptive (default 6 BPM = 130px)
+                        html.Div(id="rf-pacer-inner-guide", style={
                             "position": "absolute", "top": "50%", "left": "50%",
-                            "width": "136px", "height": "136px",
-                            "marginLeft": "-68px", "marginTop": "-68px",
+                            "width": "130px", "height": "130px",
+                            "marginLeft": "-65px", "marginTop": "-65px",
                             "borderRadius": "50%",
-                            "border": "1.5px dashed rgba(86,211,100,0.28)",
+                            "border": "1.5px dashed rgba(86,211,100,0.30)",
                             "pointerEvents": "none",
                         }),
-                        # Animated inner ring — starts at 160px, scales between 0.85 and 1.40
+                        # Animated inner ring — 160px base, scaled by easing between guide limits
                         html.Div(id="rf-pacer-ring", style={
                             "position": "absolute", "top": "50%", "left": "50%",
                             "width": "160px", "height": "160px",
@@ -3488,7 +3488,7 @@ app.layout = html.Div([
                             "pointerEvents": "none",
                         }),
                     ], style={
-                        "position": "relative", "width": "240px", "height": "240px",
+                        "position": "relative", "width": "264px", "height": "264px",
                         "margin": "0 auto",
                     }),
                     html.Div(id="rf-phase-label",
@@ -3838,9 +3838,43 @@ def rf_update_pacer_settings(bpm_slider, preset_clicks, cur_bpm, state):
 app.clientside_callback(
     """
     function(n_intervals, pacer_state, is_sound_on) {
-        /* ── idle / paused ─────────────────────────────────────────────── */
+
+        /* ── BPM-adaptive guide ring sizes ──────────────────────────────────
+           Slower BPM  → rings spread further apart (long breath, big range)
+           Faster BPM  → rings close together  (short breath, small range)
+           Maps [4.5, 7.5] BPM → outer [250, 194]px, inner [108, 152]px      */
+        function ringPx(ps) {
+            var bpm = (ps && ps.inhale_s && ps.exhale_s)
+                      ? 60.0 / (ps.inhale_s + ps.exhale_s) : 6.0;
+            var t = Math.max(0, Math.min(1, (bpm - 4.5) / 3.0));
+            return {
+                outer: Math.round(250 - t * 56),
+                inner: Math.round(108 + t * 44),
+                min_s: (108 + t * 44) / 160.0,
+                max_s: (250 - t * 56) / 160.0
+            };
+        }
+
+        function guideStyle(px, border_str) {
+            var h = (px / 2).toFixed(0);
+            return {
+                position:'absolute', top:'50%', left:'50%',
+                width: px+'px', height: px+'px',
+                marginLeft: '-'+h+'px', marginTop: '-'+h+'px',
+                borderRadius:'50%', border: border_str,
+                pointerEvents:'none',
+                transition:'width 0.7s ease, height 0.7s ease, margin-left 0.7s ease, margin-top 0.7s ease'
+            };
+        }
+
+        var rings = ringPx(pacer_state);
+        var outer_style = guideStyle(rings.outer, '1.5px dashed rgba(129,140,248,0.32)');
+        var inner_style = guideStyle(rings.inner, '1.5px dashed rgba(86,211,100,0.32)');
+
+        /* ── idle / paused ──────────────────────────────────────────────── */
         if (!pacer_state || !pacer_state.is_running) {
             window._rfLastVoiceKey = null;
+            window.speechSynthesis && window.speechSynthesis.cancel();
             return [
                 {position:'absolute', top:'50%', left:'50%',
                  width:'160px', height:'160px',
@@ -3848,12 +3882,13 @@ app.clientside_callback(
                  borderRadius:'50%',
                  border:'2px solid rgba(129,140,248,0.35)',
                  backgroundColor:'rgba(129,140,248,0.06)',
-                 transform:'scale(1)', transition:'transform 0.3s ease',
+                 transform:'scale(1.0)', transition:'transform 0.4s ease',
                  pointerEvents:'none'},
                 'READY', '',
                 {color:'#818cf8', fontSize:'18px', fontWeight:'700',
                  letterSpacing:'2px', fontFamily:"'JetBrains Mono', monospace",
-                 textAlign:'center', marginTop:'14px'}
+                 textAlign:'center', marginTop:'14px'},
+                outer_style, inner_style
             ];
         }
 
@@ -3863,59 +3898,70 @@ app.clientside_callback(
         var cycle    = pacer_state.inhale_s + pacer_state.exhale_s;
         var phase_t  = elapsed % cycle;
         var is_inhale = phase_t < pacer_state.inhale_s;
-        var progress, remaining, scale, glow, color;
+        var progress, remaining, color;
 
         if (is_inhale) {
             progress  = phase_t / pacer_state.inhale_s;
             remaining = pacer_state.inhale_s - phase_t;
-            scale     = 0.85 + 0.55 * progress;
-            glow      = 18 + 36 * progress;
             color     = '#818cf8';
-            /* phase-start tone */
             if (phase_t < 0.15 && is_sound_on) {
-                window._rfPlayTone && window._rfPlayTone(528, 0.15, 0.28);
+                window._rfPlayTone && window._rfPlayTone(528, 0.11, 0.22);
             }
         } else {
-            var ep    = phase_t - pacer_state.inhale_s;
+            var ep   = phase_t - pacer_state.inhale_s;
             progress  = ep / pacer_state.exhale_s;
             remaining = pacer_state.exhale_s - ep;
-            scale     = 1.40 - 0.55 * progress;
-            glow      = 54 - 36 * progress;
             color     = '#56d364';
-            /* phase-start tone */
             if (ep < 0.15 && is_sound_on) {
-                window._rfPlayTone && window._rfPlayTone(396, 0.10, 0.28);
+                window._rfPlayTone && window._rfPlayTone(396, 0.08, 0.22);
             }
         }
 
+        /* ── sinusoidal ease-in-out (natural breathing curve) ───────────── */
+        var eased     = (1 - Math.cos(progress * Math.PI)) / 2;
+        var scale     = rings.min_s + (rings.max_s - rings.min_s) * eased;
+        var glow      = is_inhale ? (6 + 28 * eased) : (6 + 28 * (1 - eased));
+
         /* ── voice countdown ─────────────────────────────────────────────
-           Speak each integer second once per phase using Web Speech API.
-           trackKey changes on every new second AND on phase switch,
-           so the same number is spoken fresh after inhale → exhale.        */
-        var countNum  = Math.ceil(remaining);
+           For phases ≥ 4s: speak every 2 seconds  (8, 6, 4, 2 …)
+           For phases < 4s: speak every second      (3, 2, 1)
+           Lower pitch on exhale; slow, soft, calm tone.                   */
+        var secR      = Math.floor(remaining);
         var phaseKey  = is_inhale ? 'I' : 'E';
-        var trackKey  = phaseKey + countNum;
-        if (is_sound_on && countNum > 0 && window.speechSynthesis &&
-                trackKey !== window._rfLastVoiceKey) {
-            window._rfLastVoiceKey = trackKey;
-            window.speechSynthesis.cancel();
-            var utt = new SpeechSynthesisUtterance(String(countNum));
-            utt.rate   = 0.72;
-            utt.pitch  = is_inhale ? 1.1 : 0.85;
-            utt.volume = 0.48;
-            /* prefer a calm system voice */
-            var voices = window.speechSynthesis.getVoices();
-            var calm = voices.find(function(v) {
-                return /Samantha|Karen|Moira|Tessa|Ava|Victoria|Nicky/i.test(v.name);
-            }) || voices.find(function(v) {
-                return v.lang && v.lang.startsWith('en') && !v.name.includes('Compact');
-            });
-            if (calm) utt.voice = calm;
-            window.speechSynthesis.speak(utt);
+        var phaseDur  = is_inhale ? pacer_state.inhale_s : pacer_state.exhale_s;
+        var vInterval = (phaseDur >= 4.0) ? 2 : 1;
+
+        if (is_sound_on && secR > 0 && (secR % vInterval === 0) && window.speechSynthesis) {
+            var trackKey = phaseKey + '_' + secR;
+            if (trackKey !== window._rfLastVoiceKey) {
+                window._rfLastVoiceKey = trackKey;
+                /* cache voice list asynchronously on first call */
+                if (!window._rfVoices || window._rfVoices.length === 0) {
+                    window._rfVoices = window.speechSynthesis.getVoices();
+                    if (window._rfVoices.length === 0) {
+                        window.speechSynthesis.onvoiceschanged = function() {
+                            window._rfVoices = window.speechSynthesis.getVoices();
+                        };
+                    }
+                }
+                window.speechSynthesis.cancel();
+                var utt = new SpeechSynthesisUtterance(String(secR));
+                utt.rate   = 0.60;
+                utt.pitch  = is_inhale ? 0.88 : 0.70;
+                utt.volume = 0.38;
+                var voices = window._rfVoices || [];
+                var calm = voices.find(function(v) {
+                    return /Samantha|Karen|Moira|Tessa|Ava|Victoria|Nicky/i.test(v.name);
+                }) || voices.find(function(v) {
+                    return v.lang && v.lang.startsWith('en') && !v.name.includes('Compact');
+                });
+                if (calm) utt.voice = calm;
+                window.speechSynthesis.speak(utt);
+            }
         }
 
-        /* ── ring style ─────────────────────────────────────────────────── */
-        var alpha = 0.06 + 0.18 * (is_inhale ? progress : 1 - progress);
+        /* ── ring & label styles ─────────────────────────────────────────── */
+        var alpha = 0.06 + 0.18 * (is_inhale ? eased : 1 - eased);
         var ring_style = {
             position:'absolute', top:'50%', left:'50%',
             width:'160px', height:'160px',
@@ -3924,7 +3970,7 @@ app.clientside_callback(
             border:'2px solid ' + color,
             backgroundColor:'rgba(129,140,248,' + alpha.toFixed(3) + ')',
             boxShadow:'0 0 ' + glow.toFixed(0) + 'px ' + color,
-            transform:'scale(' + scale.toFixed(3) + ')',
+            transform:'scale(' + scale.toFixed(4) + ')',
             transition:'transform 0.1s linear',
             pointerEvents:'none'
         };
@@ -3936,16 +3982,19 @@ app.clientside_callback(
         return [ring_style,
                 is_inhale ? 'INHALE' : 'EXHALE',
                 remaining.toFixed(1) + 's',
-                label_style];
+                label_style,
+                outer_style, inner_style];
     }
     """,
-    Output("rf-pacer-ring",      "style"),
-    Output("rf-phase-label",     "children"),
-    Output("rf-phase-countdown", "children"),
-    Output("rf-phase-label",     "style"),
-    Input("tick-pacer",          "n_intervals"),
-    State("rf-pacer-state",      "data"),
-    State("rf-sound-on",         "data"),
+    Output("rf-pacer-ring",        "style"),
+    Output("rf-phase-label",       "children"),
+    Output("rf-phase-countdown",   "children"),
+    Output("rf-phase-label",       "style"),
+    Output("rf-pacer-outer-guide", "style"),
+    Output("rf-pacer-inner-guide", "style"),
+    Input("tick-pacer",            "n_intervals"),
+    State("rf-pacer-state",        "data"),
+    State("rf-sound-on",           "data"),
 )
 
 
