@@ -3487,6 +3487,17 @@ app.layout = html.Div([
                             "transition": "transform 0.1s linear",
                             "pointerEvents": "none",
                         }),
+                        # Countdown number — centered inside ring, above all layers
+                        html.Div(id="rf-pacer-center-text",
+                                 children="",
+                                 style={
+                                     "position": "absolute", "top": "50%", "left": "50%",
+                                     "transform": "translate(-50%,-50%)",
+                                     "textAlign": "center", "lineHeight": "1",
+                                     "pointerEvents": "none", "zIndex": "10",
+                                     "color": C_RF, "fontSize": "38px", "fontWeight": "700",
+                                     "fontFamily": "'JetBrains Mono', monospace",
+                                 }),
                     ], style={
                         "position": "relative", "width": "264px", "height": "264px",
                         "margin": "0 auto",
@@ -3840,19 +3851,16 @@ app.clientside_callback(
     function(n_intervals, pacer_state, is_sound_on) {
 
         /* ── BPM-adaptive guide ring sizes ──────────────────────────────────
-           Slower BPM  → rings spread further apart (long breath, big range)
-           Faster BPM  → rings close together  (short breath, small range)
-           Maps [4.5, 7.5] BPM → outer [250, 194]px, inner [108, 152]px      */
+           Slower BPM → rings spread apart (long breath, big swing)
+           Faster BPM → rings close together (short breath, small swing)
+           [4.5, 7.5] BPM  →  outer [250, 194] px, inner [108, 152] px      */
         function ringPx(ps) {
             var bpm = (ps && ps.inhale_s && ps.exhale_s)
                       ? 60.0 / (ps.inhale_s + ps.exhale_s) : 6.0;
             var t = Math.max(0, Math.min(1, (bpm - 4.5) / 3.0));
-            return {
-                outer: Math.round(250 - t * 56),
-                inner: Math.round(108 + t * 44),
-                min_s: (108 + t * 44) / 160.0,
-                max_s: (250 - t * 56) / 160.0
-            };
+            var o = Math.round(250 - t * 56);
+            var i = Math.round(108 + t * 44);
+            return { outer: o, inner: i, max_s: o / 160.0, min_s: i / 160.0 };
         }
 
         function guideStyle(px, border_str) {
@@ -3867,14 +3875,13 @@ app.clientside_callback(
             };
         }
 
-        var rings = ringPx(pacer_state);
+        var rings       = ringPx(pacer_state);
         var outer_style = guideStyle(rings.outer, '1.5px dashed rgba(129,140,248,0.32)');
         var inner_style = guideStyle(rings.inner, '1.5px dashed rgba(86,211,100,0.32)');
 
         /* ── idle / paused ──────────────────────────────────────────────── */
         if (!pacer_state || !pacer_state.is_running) {
-            window._rfLastVoiceKey = null;
-            window.speechSynthesis && window.speechSynthesis.cancel();
+            window._rfPacerStop && window._rfPacerStop();
             return [
                 {position:'absolute', top:'50%', left:'50%',
                  width:'160px', height:'160px',
@@ -3888,77 +3895,71 @@ app.clientside_callback(
                 {color:'#818cf8', fontSize:'18px', fontWeight:'700',
                  letterSpacing:'2px', fontFamily:"'JetBrains Mono', monospace",
                  textAlign:'center', marginTop:'14px'},
-                outer_style, inner_style
+                outer_style, inner_style,
+                '', {opacity:'0', position:'absolute', top:'50%', left:'50%',
+                     transform:'translate(-50%,-50%)'}
             ];
         }
 
         /* ── timing ─────────────────────────────────────────────────────── */
-        var now      = Date.now() / 1000.0;
-        var elapsed  = now - pacer_state.start_ts;
-        var cycle    = pacer_state.inhale_s + pacer_state.exhale_s;
-        var phase_t  = elapsed % cycle;
+        var now       = Date.now() / 1000.0;
+        var elapsed   = now - pacer_state.start_ts;
+        var cycle     = pacer_state.inhale_s + pacer_state.exhale_s;
+        var phase_t   = elapsed % cycle;
         var is_inhale = phase_t < pacer_state.inhale_s;
         var progress, remaining, color;
 
         if (is_inhale) {
             progress  = phase_t / pacer_state.inhale_s;
             remaining = pacer_state.inhale_s - phase_t;
-            color     = '#818cf8';
-            if (phase_t < 0.15 && is_sound_on) {
-                window._rfPlayTone && window._rfPlayTone(528, 0.11, 0.22);
-            }
+            color     = '#818cf8';    /* indigo — inhale */
         } else {
-            var ep   = phase_t - pacer_state.inhale_s;
+            var ep    = phase_t - pacer_state.inhale_s;
             progress  = ep / pacer_state.exhale_s;
             remaining = pacer_state.exhale_s - ep;
-            color     = '#56d364';
-            if (ep < 0.15 && is_sound_on) {
-                window._rfPlayTone && window._rfPlayTone(396, 0.08, 0.22);
-            }
+            color     = '#56d364';    /* green  — exhale */
         }
 
-        /* ── sinusoidal ease-in-out (natural breathing curve) ───────────── */
-        var eased     = (1 - Math.cos(progress * Math.PI)) / 2;
-        var scale     = rings.min_s + (rings.max_s - rings.min_s) * eased;
-        var glow      = is_inhale ? (6 + 28 * eased) : (6 + 28 * (1 - eased));
+        /* ── sinusoidal ease-in-out (organic breathing feel) ────────────── */
+        var eased = (1 - Math.cos(progress * Math.PI)) / 2;
 
-        /* ── voice countdown ─────────────────────────────────────────────
-           For phases ≥ 4s: speak every 2 seconds  (8, 6, 4, 2 …)
-           For phases < 4s: speak every second      (3, 2, 1)
-           Lower pitch on exhale; slow, soft, calm tone.                   */
-        var secR      = Math.floor(remaining);
-        var phaseKey  = is_inhale ? 'I' : 'E';
-        var phaseDur  = is_inhale ? pacer_state.inhale_s : pacer_state.exhale_s;
-        var vInterval = (phaseDur >= 4.0) ? 2 : 1;
+        /* Inhale EXPANDS (min → max), Exhale CONTRACTS (max → min) */
+        var scale = is_inhale
+            ? rings.min_s + (rings.max_s - rings.min_s) * eased
+            : rings.max_s - (rings.max_s - rings.min_s) * eased;
+        var glow  = is_inhale ? (6 + 28 * eased) : (6 + 28 * (1 - eased));
 
-        if (is_sound_on && secR > 0 && (secR % vInterval === 0) && window.speechSynthesis) {
-            var trackKey = phaseKey + '_' + secR;
-            if (trackKey !== window._rfLastVoiceKey) {
-                window._rfLastVoiceKey = trackKey;
-                /* cache voice list asynchronously on first call */
-                if (!window._rfVoices || window._rfVoices.length === 0) {
-                    window._rfVoices = window.speechSynthesis.getVoices();
-                    if (window._rfVoices.length === 0) {
-                        window.speechSynthesis.onvoiceschanged = function() {
-                            window._rfVoices = window.speechSynthesis.getVoices();
-                        };
-                    }
-                }
-                window.speechSynthesis.cancel();
-                var utt = new SpeechSynthesisUtterance(String(secR));
-                utt.rate   = 0.60;
-                utt.pitch  = is_inhale ? 0.88 : 0.70;
-                utt.volume = 0.38;
-                var voices = window._rfVoices || [];
-                var calm = voices.find(function(v) {
-                    return /Samantha|Karen|Moira|Tessa|Ava|Victoria|Nicky/i.test(v.name);
-                }) || voices.find(function(v) {
-                    return v.lang && v.lang.startsWith('en') && !v.name.includes('Compact');
-                });
-                if (calm) utt.voice = calm;
-                window.speechSynthesis.speak(utt);
-            }
+        /* ── continuous frequency sweep (breathing entrainment) ─────────────
+           Sound rises in pitch as you fill your lungs (150 → 450 Hz) and
+           descends as you release (450 → 150 Hz).  Volume mirrors fullness:
+           louder at peak inhale, softer at empty exhale.
+           A 3:1 frequency ratio (perfect fifth + octave) is naturally
+           pleasing and easy to follow subconsciously.                       */
+        if (is_sound_on) {
+            var F_LOW  = 150,  F_HIGH = 450;
+            var tFreq  = is_inhale
+                ? F_LOW  + (F_HIGH - F_LOW)  * eased   /* rising  */
+                : F_HIGH - (F_HIGH - F_LOW)  * eased;  /* falling */
+            var tVol   = is_inhale
+                ? 0.07 + 0.13 * eased                  /* louder  as lungs fill */
+                : 0.20 - 0.13 * eased;                 /* quieter as lungs empty */
+            window._rfPacerBreath && window._rfPacerBreath(tFreq, tVol);
+        } else {
+            window._rfPacerStop && window._rfPacerStop();
         }
+
+        /* ── center countdown number ─────────────────────────────────────── */
+        var secR         = Math.floor(remaining);
+        var center_text  = (secR > 0) ? String(secR) : '';
+        var center_style = {
+            position:'absolute', top:'50%', left:'50%',
+            transform:'translate(-50%,-50%)',
+            textAlign:'center', lineHeight:'1',
+            pointerEvents:'none', zIndex:'10',
+            color: color, fontSize:'38px', fontWeight:'700',
+            fontFamily:"'JetBrains Mono', monospace",
+            textShadow:'0 1px 6px rgba(0,0,0,0.55)'
+        };
 
         /* ── ring & label styles ─────────────────────────────────────────── */
         var alpha = 0.06 + 0.18 * (is_inhale ? eased : 1 - eased);
@@ -3979,22 +3980,26 @@ app.clientside_callback(
             letterSpacing:'2px', fontFamily:"'JetBrains Mono', monospace",
             textAlign:'center', marginTop:'14px'
         };
+
         return [ring_style,
                 is_inhale ? 'INHALE' : 'EXHALE',
                 remaining.toFixed(1) + 's',
                 label_style,
-                outer_style, inner_style];
+                outer_style, inner_style,
+                center_text, center_style];
     }
     """,
-    Output("rf-pacer-ring",        "style"),
-    Output("rf-phase-label",       "children"),
-    Output("rf-phase-countdown",   "children"),
-    Output("rf-phase-label",       "style"),
-    Output("rf-pacer-outer-guide", "style"),
-    Output("rf-pacer-inner-guide", "style"),
-    Input("tick-pacer",            "n_intervals"),
-    State("rf-pacer-state",        "data"),
-    State("rf-sound-on",           "data"),
+    Output("rf-pacer-ring",         "style"),
+    Output("rf-phase-label",        "children"),
+    Output("rf-phase-countdown",    "children"),
+    Output("rf-phase-label",        "style"),
+    Output("rf-pacer-outer-guide",  "style"),
+    Output("rf-pacer-inner-guide",  "style"),
+    Output("rf-pacer-center-text",  "children"),
+    Output("rf-pacer-center-text",  "style"),
+    Input("tick-pacer",             "n_intervals"),
+    State("rf-pacer-state",         "data"),
+    State("rf-sound-on",            "data"),
 )
 
 
