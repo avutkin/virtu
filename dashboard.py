@@ -30,7 +30,6 @@ import plotly.graph_objects as go
 import metrics
 from polar import PolarH10
 from bleak import BleakScanner
-from blink import BlinkDetector
 
 # ── colour palette ────────────────────────────────────────────────────────────
 C_BG        = "#0d1117"
@@ -51,7 +50,6 @@ C_WARN      = "#d29922"
 C_BAD       = "#f85149"
 C_VLF       = "#22d3ee"   # cyan — VLF power
 C_ULF       = "#a78bfa"   # violet — ULF power
-C_BLINK     = "#2dd4bf"   # teal — eye blink
 C_PNN50     = "#f472b6"   # pink/rose — pNN50
 C_SDNN      = "#58a6ff"   # blue — SDNN (same as C_RR for KPI consistency)
 C_NAV_ACT   = "#58a6ff"   # active navigation pill
@@ -237,20 +235,6 @@ _METRIC_INFO: dict[str, dict] = {
         "psychological": "This chart answers: are you maintaining your breath discipline over time, or drifting back to stress-pattern breathing? Sustained high I:E is correlated with lower cortisol, improved mood, and cognitive performance at the session level.",
         "exercise": "Monitor I:E trend during rest intervals in circuit or interval training. A rising trend during recovery indicates effective use of breath to accelerate between-set recovery.",
         "improve": "Set an I:E ratio intention at the start of each session (e.g., 1:2). Use the breath-wave chart for real-time feedback and this chart to confirm the pattern is holding over time. Nasal breathing naturally promotes longer, more controlled exhales.",
-    },
-    "blink_rate": {
-        "title": "Eye Blink Rate  —  Blinks per Minute",
-        "nervous": "Spontaneous blink rate is regulated by dopaminergic circuits in the striatum and modulated by the autonomic nervous system. Normal range 12–20 blinks/min. Very low rate (< 5) indicates strong cognitive engagement or sympathetic arousal (fight-or-flight reduces blink rate). Very high rate (> 25) indicates fatigue or emotional distress.",
-        "psychological": "< 5 blinks/min: deep focus or dry-eye strain. 5–12: focused concentration with some strain risk. 12–20: optimal alert-relaxed state. > 20: fatigue, distraction, high emotional arousal. Blink rate tracks the balance between task engagement and cognitive fatigue.",
-        "exercise": "Physical exertion can transiently reduce blink rate during focus-intensive movement (e.g., sports, climbing). Post-exercise fatigue increases blink rate. Screen-heavy cognitive work suppresses blink rate and dries the cornea — a common occupational hazard.",
-        "improve": "20-20-20 rule: every 20 minutes, look 20 feet away for 20 seconds. Optimise ambient lighting (no glare, not too bright). Conscious blink exercises. Reduce screen brightness. Lubricating eye drops if working in dry environments.",
-    },
-    "blink_ibi": {
-        "title": "Inter-Blink Intervals  —  Blink Rhythm & Attention Variability",
-        "nervous": "Time between successive blinks (seconds). Short, regular IBIs indicate relaxed baseline blink rhythm. Long IBIs indicate sustained focal attention or sympathetic activation. High BRV (blink-rate variability, equivalent of HRV for blinks) indicates attention fluctuation — the mind is switching between engagement and disengagement.",
-        "psychological": "Low BRV = sustained, stable focus. High BRV = attention is wandering or fluctuating — possibly due to fatigue, mind-wandering, or emotional distraction. Monitoring BRV alongside blink rate gives a two-dimensional view of attentional state.",
-        "exercise": "Fatigue from intense physical or cognitive work increases BRV as attentional control degrades. Skilled performance in sports requiring sustained visual attention (archery, shooting, tennis) correlates with low BRV during competition.",
-        "improve": "Attention training protocols (e.g., sustained attention to response task, SART). Mindfulness meditation specifically trains the meta-awareness needed to detect and recover attention lapses. Optimised sleep significantly reduces BRV.",
     },
     "rsa": {
         "title": "RSA  —  Respiratory Sinus Arrhythmia (ms)",
@@ -808,10 +792,6 @@ _history       = MetricsHistory()
 _history.preload(_load_today(_db))           # restore today's charts across restarts
 _sensor_status = {"state": "searching", "device": "", "since": time.time(), "battery": None}
 
-# ── eye blink detector ────────────────────────────────────────────────────────
-_blink = BlinkDetector()
-_blink_rate_history: deque[dict] = deque(maxlen=2700)  # ≈ 90 min at 2 s cadence
-
 # Recording toggle — when False, metrics are not saved to SQLite / history.
 # Live waveforms and gauges still update so you can monitor without recording.
 _measuring: dict = {"active": True}
@@ -1245,107 +1225,6 @@ def _ie_ratio_fig(phases: dict | None) -> go.Figure:
     )
     return fig
 
-
-def _blink_rate_fig(history: list[dict], minutes: int = 60) -> go.Figure:
-    """
-    Rolling blink rate trend with attention-state reference zones.
-
-    Normal range  : 12–20 blinks/min (green)
-    Focused zone  : 5–12 blinks/min  (amber — less blinking, eye strain risk)
-    Eye strain    : < 5 blinks/min   (red)
-    Elevated      : > 20 blinks/min  (amber — fatigue / irritation)
-    """
-    TITLE = f"Eye Blink Rate  ·  last {_range_label(minutes)}  ·  blinks / min"
-    n = minutes * 30
-    window = history[-n:] if len(history) > n else history
-    if not window:
-        return _empty_fig(TITLE)
-
-    buckets: dict[str, list] = {}
-    for r in window:
-        v = r.get("rate", 0)
-        if v > 0:
-            buckets.setdefault(r["t"], []).append(v)
-    if not buckets:
-        return _empty_fig(TITLE)
-
-    ts    = list(buckets.keys())
-    vals  = [float(np.mean(v)) for v in buckets.values()]
-    max_y = max(max(vals) * 1.15, 25.0)
-
-    fig = go.Figure()
-    fig.add_hrect(y0=0,    y1=5,     fillcolor="rgba(248,81,73,0.10)",  line_width=0)
-    fig.add_hrect(y0=5,    y1=12,    fillcolor="rgba(210,153,34,0.08)", line_width=0)
-    fig.add_hrect(y0=12,   y1=20,    fillcolor="rgba(63,185,80,0.08)",  line_width=0)
-    fig.add_hrect(y0=20,   y1=max_y, fillcolor="rgba(210,153,34,0.08)", line_width=0)
-
-    fig.add_trace(go.Scatter(
-        x=ts, y=vals, mode="lines+markers",
-        line=dict(color=C_BLINK, width=2),
-        marker=dict(size=3, color=C_BLINK),
-        hovertemplate="%{x}  %{y:.1f} blinks/min<extra></extra>",
-    ))
-
-    fig.add_hline(y=20, line_dash="dash", line_color=C_WARN, line_width=1,
-                  annotation_text="elevated  > 20",
-                  annotation_position="top right",
-                  annotation_font=dict(size=10, color=C_WARN))
-    fig.add_hline(y=12, line_dash="dot",  line_color=C_GOOD, line_width=1,
-                  annotation_text="normal  12–20",
-                  annotation_position="top right",
-                  annotation_font=dict(size=10, color=C_GOOD))
-    fig.add_hline(y=5,  line_dash="dash", line_color=C_BAD,  line_width=1,
-                  annotation_text="eye strain risk  < 5",
-                  annotation_position="bottom right",
-                  annotation_font=dict(size=10, color=C_BAD))
-
-    fig.update_layout(
-        **_PLOT_LAYOUT,
-        uirevision=f"blink-rate-{minutes}",
-        title=dict(text=TITLE, font=dict(color=C_BLINK, size=12), x=0.01),
-        xaxis=_ax("time"),
-        yaxis=_ax("blinks / min", range=[0, max_y]),
-    )
-    return fig
-
-
-def _blink_ibi_fig(ibis: list[float]) -> go.Figure:
-    """
-    Inter-Blink Interval tachogram — each point is the gap between two blinks.
-
-    Short IBIs = frequent blinking (relaxed / distracted).
-    Long IBIs  = infrequent blinking (deep focus / dry eyes).
-    High BRV   = irregular blink rhythm → attention fluctuation.
-    Low BRV    = steady blink rhythm → sustained focus.
-    """
-    TITLE = "Inter-Blink Intervals  ·  blink rhythm & attention variability"
-    if not ibis:
-        return _empty_fig(TITLE)
-
-    fig = go.Figure(go.Scatter(
-        x=list(range(1, len(ibis) + 1)), y=ibis,
-        mode="lines+markers",
-        line=dict(color=C_BLINK, width=1.5),
-        marker=dict(size=4, color=C_BLINK),
-        hovertemplate="blink #%{x}  IBI = %{y:.2f} s<extra></extra>",
-    ))
-
-    mean_ibi = float(np.mean(ibis))
-    brv      = float(np.std(ibis)) if len(ibis) >= 3 else 0.0
-
-    fig.add_hline(y=mean_ibi, line_dash="dot", line_color=C_DIM, line_width=1,
-                  annotation_text=f"avg {mean_ibi:.1f} s  BRV={brv:.2f}",
-                  annotation_position="top right",
-                  annotation_font=dict(size=10, color=C_DIM))
-
-    fig.update_layout(
-        **_PLOT_LAYOUT,
-        uirevision="blink-ibi",
-        title=dict(text=TITLE, font=dict(color=C_BLINK, size=12), x=0.01),
-        xaxis=_ax("blink #"),
-        yaxis=_ax("seconds", rangemode="tozero"),
-    )
-    return fig
 
 
 def _ie_trend_fig(records: list[dict], minutes: int = 60) -> go.Figure:
@@ -2409,7 +2288,6 @@ app.layout = html.Div([
     dcc.Interval(id="tick-scan",   interval=500,   n_intervals=0, disabled=True),
     dcc.Interval(id="tick-minute", interval=1000,  n_intervals=0),
     dcc.Store(id="measure-store",     data="recording"),
-    dcc.Store(id="eye-track-store",   data="on"),
     dcc.Store(id="info-modal-key",    data=None),
     dcc.Store(id="log-cat-store",      data=None),
     dcc.Store(id="log-refresh-store",  data=0),
@@ -2475,20 +2353,6 @@ app.layout = html.Div([
                             "backgroundColor": "transparent",
                             "color": C_BAD,
                             "border": f"1px solid {C_BAD}",
-                            "borderRadius": "12px",
-                            "padding": "4px 14px",
-                            "fontSize": "10px",
-                            "fontWeight": "700",
-                            "letterSpacing": "1px",
-                            "cursor": "pointer",
-                            "fontFamily": "'JetBrains Mono', monospace",
-                        }),
-            html.Span("  ·  ", style={"color": C_BORDER}),
-            html.Button("👁 STOP EYE", id="btn-eye-toggle", n_clicks=0,
-                        style={
-                            "backgroundColor": "transparent",
-                            "color": C_BLINK,
-                            "border": f"1px solid {C_BLINK}",
                             "borderRadius": "12px",
                             "padding": "4px 14px",
                             "fontSize": "10px",
@@ -2655,7 +2519,7 @@ app.layout = html.Div([
         ], style={"display": "grid", "gridTemplateColumns": "repeat(7, 1fr)",
                   "gap": "10px", "marginBottom": "10px"}),
 
-        # Row 2 — raw waveforms
+        # Row 2 — ECG + RR intervals (primary cardiac signals)
         html.Div([
             html.Div([
                 html.Div([_info_btn("ecg")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
@@ -2663,20 +2527,70 @@ app.layout = html.Div([
                           config={"displayModeBar": False}),
             ], style=_CARD),
             html.Div([
-                html.Div([_info_btn("acc")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
-                dcc.Graph(id="acc-graph", style={"height": "200px"},
+                html.Div([_info_btn("rr")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="rr-graph", style={"height": "200px"},
                           config={"displayModeBar": False}),
             ], style=_CARD),
         ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr",
                   "gap": "10px", "marginBottom": "10px"}),
 
-        # Row 3 — derived signals + LF/HF live trend
+        # Row 3 — Heart Rate live trend (full width)
         html.Div([
             html.Div([
-                html.Div([_info_btn("rr")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
-                dcc.Graph(id="rr-graph", style={"height": "200px"},
+                dcc.Store(id="hr-range-store", data="60"),
+                html.Button("60 m", id="hr-btn-60",   n_clicks=0,
+                            style=_rbtn_style(True,  C_ECG)),
+                html.Button("2 h",  id="hr-btn-120",  n_clicks=0,
+                            style=_rbtn_style(False, C_ECG)),
+                html.Button("24 h", id="hr-btn-1440", n_clicks=0,
+                            style=_rbtn_style(False, C_ECG)),
+                _info_btn("hr"),
+            ], style={"display": "flex", "gap": "4px",
+                      "justifyContent": "flex-end", "marginBottom": "4px"}),
+            dcc.Graph(id="hr-live-graph", style={"height": "200px"},
+                      config={"displayModeBar": False}),
+        ], style={**_CARD, "marginBottom": "10px"}),
+
+        # Row 4 — RMSSD · SDNN · pNN50  (HRV time-domain metrics)
+        html.Div([
+            html.Div([
+                html.Div([
+                    dcc.Store(id="rmssd-range-store", data="60"),
+                    html.Button("60 m", id="rmssd-btn-60",   n_clicks=0,
+                                style=_rbtn_style(True,  C_ACC)),
+                    html.Button("2 h",  id="rmssd-btn-120",  n_clicks=0,
+                                style=_rbtn_style(False, C_ACC)),
+                    html.Button("24 h", id="rmssd-btn-1440", n_clicks=0,
+                                style=_rbtn_style(False, C_ACC)),
+                    _info_btn("rmssd"),
+                ], style={"display": "flex", "gap": "4px",
+                          "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="rmssd-live-graph", style={"height": "220px"},
                           config={"displayModeBar": False}),
             ], style=_CARD),
+            html.Div([
+                html.Div(_range_btn_group("sdnn-range-store",
+                                         "sdnn-btn-60", "sdnn-btn-120", "sdnn-btn-720",
+                                         C_SDNN, metric="sdnn"),
+                         style={"display": "flex", "justifyContent": "flex-end",
+                                "marginBottom": "4px"}),
+                dcc.Graph(id="sdnn-live-graph", style={"height": "220px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
+            html.Div([
+                html.Div(_range_btn_group("pnn50-range-store",
+                                         "pnn50-btn-60", "pnn50-btn-120", "pnn50-btn-720",
+                                         C_PNN50, metric="pnn50"),
+                         style={"display": "flex", "justifyContent": "flex-end",
+                                "marginBottom": "4px"}),
+                dcc.Graph(id="pnn50-live-graph", style={"height": "220px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
+        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 1fr",
+                  "gap": "10px", "marginBottom": "10px"}),
+
+        # Row 5 — PSD + LF/HF live trend  (HRV frequency domain)
+        html.Div([
             html.Div([
                 html.Div([_info_btn("psd")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
                 dcc.Graph(id="psd-graph", style={"height": "200px"},
@@ -2691,74 +2605,10 @@ app.layout = html.Div([
                 dcc.Graph(id="lfhf-live-graph", style={"height": "200px"},
                           config={"displayModeBar": False}),
             ], style=_CARD),
-        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 1fr",
+        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr",
                   "gap": "10px", "marginBottom": "10px"}),
 
-        # Row 4 — coherence + VLF + ULF + extended metrics
-        html.Div([
-            html.Div([
-                html.Div([_info_btn("coh")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
-                dcc.Graph(id="coh-graph", style={"height": "180px"},
-                          config={"displayModeBar": False}),
-            ], style=_CARD),
-            html.Div([
-                html.Div(_range_btn_group("vlf-range-store",
-                                         "vlf-btn-60", "vlf-btn-120", "vlf-btn-720",
-                                         C_VLF, metric="vlf"),
-                         style={"display": "flex", "justifyContent": "flex-end",
-                                "marginBottom": "4px"}),
-                dcc.Graph(id="vlf-live-graph", style={"height": "170px"},
-                          config={"displayModeBar": False}),
-            ], style=_CARD),
-            html.Div([
-                html.Div(_range_btn_group("ulf-range-store",
-                                         "ulf-btn-60", "ulf-btn-120", "ulf-btn-720",
-                                         C_ULF, metric="ulf"),
-                         style={"display": "flex", "justifyContent": "flex-end",
-                                "marginBottom": "4px"}),
-                dcc.Graph(id="ulf-live-graph", style={"height": "170px"},
-                          config={"displayModeBar": False}),
-            ], style=_CARD),
-            html.Div([
-                html.Div("Extended Metrics",
-                         style={"color": C_DIM, "fontSize": "11px",
-                                "textTransform": "uppercase", "letterSpacing": "1px",
-                                "marginBottom": "10px"}),
-                html.Pre(id="ext-metrics",
-                         style={"fontFamily": "'JetBrains Mono', monospace",
-                                "fontSize": "12px", "color": C_TEXT, "lineHeight": "1.8",
-                                "whiteSpace": "pre-wrap", "margin": "0"}),
-            ], style=_CARD),
-        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 1fr 1fr",
-                  "gap": "10px", "marginBottom": "10px"}),
-
-        # Row 5 — Breathing phases (waveform + I:E bar chart)
-        html.Div([
-            html.Div([
-                html.Div([_info_btn("breath_wave")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
-                dcc.Graph(id="breath-wave-graph", style={"height": "200px"},
-                          config={"displayModeBar": False}),
-            ], style=_CARD),
-            html.Div([
-                html.Div([_info_btn("ie_ratio")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
-                dcc.Graph(id="ie-ratio-graph", style={"height": "200px"},
-                          config={"displayModeBar": False}),
-            ], style=_CARD),
-        ], style={"display": "grid", "gridTemplateColumns": "2fr 1fr",
-                  "gap": "10px", "marginBottom": "10px"}),
-
-        # Row 6 — I:E ratio trend (full width)
-        html.Div([
-            html.Div(_range_btn_group("ie-range-store",
-                                     "ie-btn-60", "ie-btn-120", "ie-btn-720",
-                                     C_ACC, metric="ie_trend"),
-                     style={"display": "flex", "justifyContent": "flex-end",
-                            "marginBottom": "4px"}),
-            dcc.Graph(id="ie-trend-graph", style={"height": "185px"},
-                      config={"displayModeBar": False}),
-        ], style={**_CARD, "marginBottom": "10px"}),
-
-        # Row 7 — VTI · RMSSD · RSA amplitude · RSA Index  (four vagal metrics)
+        # Row 6 — VTI · RSA amplitude · RSA Index  (vagal tone + RSA)
         html.Div([
             html.Div([
                 html.Div(_range_btn_group("vti-range-store",
@@ -2767,21 +2617,6 @@ app.layout = html.Div([
                          style={"display": "flex", "justifyContent": "flex-end",
                                 "marginBottom": "4px"}),
                 dcc.Graph(id="vti-live-graph", style={"height": "220px"},
-                          config={"displayModeBar": False}),
-            ], style=_CARD),
-            html.Div([
-                html.Div([
-                    dcc.Store(id="rmssd-range-store", data="60"),
-                    html.Button("60 m", id="rmssd-btn-60",   n_clicks=0,
-                                style=_rbtn_style(True,  C_ACC)),
-                    html.Button("2 h",  id="rmssd-btn-120",  n_clicks=0,
-                                style=_rbtn_style(False, C_ACC)),
-                    html.Button("24 h", id="rmssd-btn-1440", n_clicks=0,
-                                style=_rbtn_style(False, C_ACC)),
-                    _info_btn("rmssd"),
-                ], style={"display": "flex", "gap": "4px",
-                          "justifyContent": "flex-end", "marginBottom": "4px"}),
-                dcc.Graph(id="rmssd-live-graph", style={"height": "220px"},
                           config={"displayModeBar": False}),
             ], style=_CARD),
             html.Div([
@@ -2802,51 +2637,16 @@ app.layout = html.Div([
                 dcc.Graph(id="rsa-idx-live-graph", style={"height": "220px"},
                           config={"displayModeBar": False}),
             ], style=_CARD),
-        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 1fr 1fr",
+        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 1fr",
                   "gap": "10px", "marginBottom": "10px"}),
 
-        # Row 8 — SDNN + pNN50 live trends (side by side)
+        # Row 7 — Coherence · CBI gauge · VTI gauge  (autonomic indices)
         html.Div([
             html.Div([
-                html.Div(_range_btn_group("sdnn-range-store",
-                                         "sdnn-btn-60", "sdnn-btn-120", "sdnn-btn-720",
-                                         C_SDNN, metric="sdnn"),
-                         style={"display": "flex", "justifyContent": "flex-end",
-                                "marginBottom": "4px"}),
-                dcc.Graph(id="sdnn-live-graph", style={"height": "200px"},
+                html.Div([_info_btn("coh")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="coh-graph", style={"height": "180px"},
                           config={"displayModeBar": False}),
             ], style=_CARD),
-            html.Div([
-                html.Div(_range_btn_group("pnn50-range-store",
-                                         "pnn50-btn-60", "pnn50-btn-120", "pnn50-btn-720",
-                                         C_PNN50, metric="pnn50"),
-                         style={"display": "flex", "justifyContent": "flex-end",
-                                "marginBottom": "4px"}),
-                dcc.Graph(id="pnn50-live-graph", style={"height": "200px"},
-                          config={"displayModeBar": False}),
-            ], style=_CARD),
-        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr",
-                  "gap": "10px", "marginBottom": "10px"}),
-
-        # Row 9 — Heart Rate live trend (full width)
-        html.Div([
-            html.Div([
-                dcc.Store(id="hr-range-store", data="60"),
-                html.Button("60 m", id="hr-btn-60",   n_clicks=0,
-                            style=_rbtn_style(True,  C_ECG)),
-                html.Button("2 h",  id="hr-btn-120",  n_clicks=0,
-                            style=_rbtn_style(False, C_ECG)),
-                html.Button("24 h", id="hr-btn-1440", n_clicks=0,
-                            style=_rbtn_style(False, C_ECG)),
-                _info_btn("hr"),
-            ], style={"display": "flex", "gap": "4px",
-                      "justifyContent": "flex-end", "marginBottom": "4px"}),
-            dcc.Graph(id="hr-live-graph", style={"height": "200px"},
-                      config={"displayModeBar": False}),
-        ], style={**_CARD, "marginBottom": "10px"}),
-
-        # Row 10 — index gauges (CBI + VTI)
-        html.Div([
             html.Div([
                 html.Div("Conscious Breathing Index",
                          style={"color": C_DIM, "fontSize": "11px",
@@ -2868,80 +2668,72 @@ app.layout = html.Div([
                 dcc.Graph(id="vti-gauge", style={"height": "180px"},
                           config={"displayModeBar": False}),
             ], style=_CARD),
-        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "10px"}),
+        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 1fr",
+                  "gap": "10px", "marginBottom": "10px"}),
 
-        # ── Eye Blink Monitoring ──────────────────────────────────────────────
-        html.Div(id="eye-section-wrapper", children=[html.Div([
-
-            # Sub-header
+        # Row 8 — Breathing phases (waveform + I:E bar chart)
+        html.Div([
             html.Div([
-                html.Span("👁  EYE BLINK MONITORING",
-                          style={"color": C_BLINK, "fontSize": "11px",
-                                 "fontWeight": "700", "letterSpacing": "2px",
-                                 "fontFamily": "'JetBrains Mono', monospace"}),
-                html.Span(id="blink-status",
-                          children="initializing…",
-                          style={"color": C_DIM, "fontSize": "11px",
-                                 "fontStyle": "italic"}),
-            ], style={"display": "flex", "justifyContent": "space-between",
-                      "alignItems": "center", "marginBottom": "10px"}),
-
-            # KPI row
+                html.Div([_info_btn("breath_wave")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="breath-wave-graph", style={"height": "200px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
             html.Div([
-                _kpi_card("kpi-blink-rate", "Blink Rate",       C_BLINK, "/min"),
-                _kpi_card("kpi-brv",        "Blink Variability", C_BLINK, "s BRV"),
-                _kpi_card("kpi-ear",        "Eye Aspect Ratio",  C_DIM,   ""),
-            ], style={"display": "grid", "gridTemplateColumns": "repeat(3, 1fr)",
-                      "gap": "10px", "marginBottom": "10px"}),
+                html.Div([_info_btn("ie_ratio")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="ie-ratio-graph", style={"height": "200px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
+        ], style={"display": "grid", "gridTemplateColumns": "2fr 1fr",
+                  "gap": "10px", "marginBottom": "10px"}),
 
-            # Camera previews (updated once per minute)
+        # Row 9 — I:E ratio trend (full width)
+        html.Div([
+            html.Div(_range_btn_group("ie-range-store",
+                                     "ie-btn-60", "ie-btn-120", "ie-btn-720",
+                                     C_ACC, metric="ie_trend"),
+                     style={"display": "flex", "justifyContent": "flex-end",
+                            "marginBottom": "4px"}),
+            dcc.Graph(id="ie-trend-graph", style={"height": "185px"},
+                      config={"displayModeBar": False}),
+        ], style={**_CARD, "marginBottom": "10px"}),
+
+        # Row 10 — ACC · VLF · ULF · Extended Metrics  (supporting signals)
+        html.Div([
             html.Div([
-                html.Div([
-                    html.Div("EYE OPEN  — last capture",
-                             style={"color": C_DIM, "fontSize": "10px",
-                                    "textTransform": "uppercase", "letterSpacing": "1px",
-                                    "marginBottom": "6px"}),
-                    html.Img(id="eye-open-img", src="",
-                             style={"width": "100%", "maxHeight": "160px",
-                                    "objectFit": "contain", "borderRadius": "4px",
-                                    "display": "block", "backgroundColor": C_BG,
-                                    "minHeight": "100px"}),
-                ], style=_CARD),
-                html.Div([
-                    html.Div("BLINK  — last detected",
-                             style={"color": C_DIM, "fontSize": "10px",
-                                    "textTransform": "uppercase", "letterSpacing": "1px",
-                                    "marginBottom": "6px"}),
-                    html.Img(id="eye-closed-img", src="",
-                             style={"width": "100%", "maxHeight": "160px",
-                                    "objectFit": "contain", "borderRadius": "4px",
-                                    "display": "block", "backgroundColor": C_BG,
-                                    "minHeight": "100px"}),
-                ], style=_CARD),
-            ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr",
-                      "gap": "10px", "marginBottom": "10px"}),
-
-            # Charts
+                html.Div([_info_btn("acc")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="acc-graph", style={"height": "200px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
             html.Div([
-                html.Div([
-                    html.Div(_range_btn_group("blink-range-store",
-                                             "blink-btn-60", "blink-btn-120",
-                                             "blink-btn-720", C_BLINK, metric="blink_rate"),
-                             style={"display": "flex", "justifyContent": "flex-end",
-                                    "marginBottom": "4px"}),
-                    dcc.Graph(id="blink-rate-graph", style={"height": "200px"},
-                              config={"displayModeBar": False}),
-                ], style=_CARD),
-                html.Div([
-                    html.Div([_info_btn("blink_ibi")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
-                    dcc.Graph(id="blink-ibi-graph", style={"height": "200px"},
-                              config={"displayModeBar": False}),
-                ], style=_CARD),
-            ], style={"display": "grid", "gridTemplateColumns": "2fr 1fr",
-                      "gap": "10px"}),
-
-        ], style={**_CARD, "marginTop": "10px",
-                  "borderTop": f"3px solid {C_BLINK}"})]),
+                html.Div(_range_btn_group("vlf-range-store",
+                                         "vlf-btn-60", "vlf-btn-120", "vlf-btn-720",
+                                         C_VLF, metric="vlf"),
+                         style={"display": "flex", "justifyContent": "flex-end",
+                                "marginBottom": "4px"}),
+                dcc.Graph(id="vlf-live-graph", style={"height": "200px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
+            html.Div([
+                html.Div(_range_btn_group("ulf-range-store",
+                                         "ulf-btn-60", "ulf-btn-120", "ulf-btn-720",
+                                         C_ULF, metric="ulf"),
+                         style={"display": "flex", "justifyContent": "flex-end",
+                                "marginBottom": "4px"}),
+                dcc.Graph(id="ulf-live-graph", style={"height": "200px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
+            html.Div([
+                html.Div("Extended Metrics",
+                         style={"color": C_DIM, "fontSize": "11px",
+                                "textTransform": "uppercase", "letterSpacing": "1px",
+                                "marginBottom": "10px"}),
+                html.Pre(id="ext-metrics",
+                         style={"fontFamily": "'JetBrains Mono', monospace",
+                                "fontSize": "12px", "color": C_TEXT, "lineHeight": "1.8",
+                                "whiteSpace": "pre-wrap", "margin": "0"}),
+            ], style=_CARD),
+        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 1fr 1fr",
+                  "gap": "10px"}),
 
     ], id="content-live"),
 
@@ -4918,73 +4710,6 @@ def update_ie_trend(_n, minutes_str):
     return _ie_trend_fig(rows, minutes=minutes)
 
 
-# ── blink range button group ─────────────────────────────────────────────────
-@callback(
-    Output("blink-range-store", "data"),
-    Output("blink-btn-60",  "style"),
-    Output("blink-btn-120", "style"),
-    Output("blink-btn-720", "style"),
-    Input("blink-btn-60",   "n_clicks"),
-    Input("blink-btn-120",  "n_clicks"),
-    Input("blink-btn-720",  "n_clicks"),
-    prevent_initial_call=True,
-)
-def handle_blink_range(_60, _120, _720):
-    val = {"blink-btn-60": "60", "blink-btn-120": "120", "blink-btn-720": "720"}.get(
-        ctx.triggered_id, "60")
-    return (val,
-            _rbtn_style(val == "60",  C_BLINK),
-            _rbtn_style(val == "120", C_BLINK),
-            _rbtn_style(val == "720", C_BLINK))
-
-
-# ── blink charts + KPIs (2 000 ms) ───────────────────────────────────────────
-@callback(
-    Output("blink-rate-graph", "figure"),
-    Output("blink-ibi-graph",  "figure"),
-    Output("kpi-blink-rate",   "children"),
-    Output("kpi-brv",          "children"),
-    Output("kpi-ear",          "children"),
-    Output("blink-status",     "children"),
-    Input("tick-slow",          "n_intervals"),
-    Input("blink-range-store",  "data"),
-)
-def update_blink(_n, minutes_str):
-    minutes = int(minutes_str or 60)
-    stats   = _blink.get_stats(window_s=60.0)
-
-    _blink_rate_history.append({
-        "t":    datetime.now().strftime("%H:%M"),
-        "rate": stats["rate"],
-        "brv":  stats["brv"],
-    })
-
-    status_text = stats["status"]
-    if stats["status"] == "running":
-        status_text = f"running  ·  EAR {stats['ear']:.2f}  ·  {stats['n_blinks']} blinks/min"
-
-    rate_str = f"{stats['rate']:.1f}" if stats["rate"] > 0 else "—"
-    brv_str  = f"{stats['brv']:.2f}" if stats["brv"]  > 0 else "—"
-    ear_str  = f"{stats['ear']:.2f}" if stats["ear"]  > 0 else "—"
-
-    return (
-        _blink_rate_fig(list(_blink_rate_history), minutes=minutes),
-        _blink_ibi_fig(_blink.get_recent_ibis()),
-        rate_str, brv_str, ear_str,
-        status_text,
-    )
-
-
-# ── camera preview images (60 000 ms) ────────────────────────────────────────
-@callback(
-    Output("eye-open-img",   "src"),
-    Output("eye-closed-img", "src"),
-    Input("tick-minute",     "n_intervals"),
-)
-def update_eye_images(_n):
-    open_img, closed_img = _blink.get_preview_images()
-    return open_img or "", closed_img or ""
-
 
 # ── today view callback (5 000 ms) ────────────────────────────────────────────
 @callback(
@@ -5295,40 +5020,6 @@ def toggle_measuring(_, state):
                 "⏹ STOP REC",
                 {**_btn, "color": C_BAD, "border": f"1px solid {C_BAD}"})
 
-
-# ── eye tracking toggle ────────────────────────────────────────────────────────
-@callback(
-    Output("eye-track-store",     "data"),
-    Output("btn-eye-toggle",      "children"),
-    Output("btn-eye-toggle",      "style"),
-    Output("eye-section-wrapper", "style"),
-    Input("btn-eye-toggle",       "n_clicks"),
-    State("eye-track-store",      "data"),
-    prevent_initial_call=True,
-)
-def toggle_eye_tracking(_, state):
-    _btn = {
-        "backgroundColor": "transparent",
-        "borderRadius": "12px",
-        "padding": "4px 14px",
-        "fontSize": "10px",
-        "fontWeight": "700",
-        "letterSpacing": "1px",
-        "cursor": "pointer",
-        "fontFamily": "'JetBrains Mono', monospace",
-    }
-    if state == "on":
-        _blink.stop()
-        return ("off",
-                "👁 START EYE",
-                {**_btn, "color": C_DIM, "border": f"1px solid {C_BORDER}"},
-                {"display": "none"})
-    else:
-        _blink.start()
-        return ("on",
-                "👁 STOP EYE",
-                {**_btn, "color": C_BLINK, "border": f"1px solid {C_BLINK}"},
-                {"display": "block"})
 
 
 # ── device panel toggle ────────────────────────────────────────────────────────
@@ -6231,7 +5922,6 @@ def delete_custom_preset_cb(n_clicks_list, refresh):
 # ── entry point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     _start_ble(_buf)
-    _blink.start()
     print("Just Breathe dashboard → http://127.0.0.1:8050")
     print("Put on your Polar H10.  Ctrl-C to quit.\n")
     app.run(debug=False, use_reloader=False, host="127.0.0.1", port=8050)
