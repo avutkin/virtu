@@ -3476,6 +3476,7 @@ app.layout = html.Div([
                             "pointerEvents": "none",
                         }),
                         # Animated inner ring — 160px base, scaled by easing between guide limits
+                        # NOTE: no CSS transition — rf-pacer-anim.js drives this at 60fps via rAF
                         html.Div(id="rf-pacer-ring", style={
                             "position": "absolute", "top": "50%", "left": "50%",
                             "width": "160px", "height": "160px",
@@ -3484,7 +3485,6 @@ app.layout = html.Div([
                             "border": "2px solid rgba(129,140,248,0.35)",
                             "backgroundColor": "rgba(129,140,248,0.06)",
                             "transform": "scale(1)",
-                            "transition": "transform 0.1s linear",
                             "pointerEvents": "none",
                         }),
                         # Countdown number — centered inside ring, above all layers
@@ -3851,11 +3851,10 @@ def rf_update_pacer_settings(bpm_slider, preset_clicks, cur_bpm, state, cur_pace
     return bpm, inhale_s, exhale_s, label, pacer_state
 
 
-# 6C — clientside pacer animation (10 fps via tick-pacer)
+# 6C — clientside pacer params sync (rf-pacer-anim.js drives visuals at 60fps via rAF)
 app.clientside_callback(
     """
-    function(n_intervals, pacer_state, is_sound_on) {
-
+    function(pacer_state, is_sound_on) {
         /* ── BPM-adaptive guide ring sizes ──────────────────────────────────
            Slower BPM → rings spread apart (long breath, big swing)
            Faster BPM → rings close together (short breath, small swing)
@@ -3881,131 +3880,32 @@ app.clientside_callback(
             };
         }
 
-        var rings       = ringPx(pacer_state);
-        var outer_style = guideStyle(rings.outer, '1.5px dashed rgba(129,140,248,0.32)');
-        var inner_style = guideStyle(rings.inner, '1.5px dashed rgba(86,211,100,0.32)');
+        var rings = ringPx(pacer_state);
+        var ps    = pacer_state || {};
 
-        /* ── idle / paused ──────────────────────────────────────────────── */
-        if (!pacer_state || !pacer_state.is_running) {
-            window._rfPacerStop && window._rfPacerStop();
-            return [
-                {position:'absolute', top:'50%', left:'50%',
-                 width:'160px', height:'160px',
-                 marginLeft:'-80px', marginTop:'-80px',
-                 borderRadius:'50%',
-                 border:'2px solid rgba(129,140,248,0.35)',
-                 backgroundColor:'rgba(129,140,248,0.06)',
-                 transform:'scale(1.0)', transition:'transform 0.4s ease',
-                 pointerEvents:'none'},
-                'READY', '',
-                {color:'#818cf8', fontSize:'18px', fontWeight:'700',
-                 letterSpacing:'2px', fontFamily:"'JetBrains Mono', monospace",
-                 textAlign:'center', marginTop:'14px'},
-                outer_style, inner_style,
-                '', {opacity:'0', position:'absolute', top:'50%', left:'50%',
-                     transform:'translate(-50%,-50%)'}
-            ];
-        }
-
-        /* ── timing ─────────────────────────────────────────────────────── */
-        var now       = Date.now() / 1000.0;
-        var elapsed   = now - pacer_state.start_ts;
-        var cycle     = pacer_state.inhale_s + pacer_state.exhale_s;
-        var phase_t   = elapsed % cycle;
-        var is_inhale = phase_t < pacer_state.inhale_s;
-        var progress, remaining, color;
-
-        if (is_inhale) {
-            progress  = phase_t / pacer_state.inhale_s;
-            remaining = pacer_state.inhale_s - phase_t;
-            color     = '#818cf8';    /* indigo — inhale */
-        } else {
-            var ep    = phase_t - pacer_state.inhale_s;
-            progress  = ep / pacer_state.exhale_s;
-            remaining = pacer_state.exhale_s - ep;
-            color     = '#56d364';    /* green  — exhale */
-        }
-
-        /* ── sinusoidal ease-in-out (organic breathing feel) ────────────── */
-        var eased = (1 - Math.cos(progress * Math.PI)) / 2;
-
-        /* Inhale EXPANDS (min → max), Exhale CONTRACTS (max → min) */
-        var scale = is_inhale
-            ? rings.min_s + (rings.max_s - rings.min_s) * eased
-            : rings.max_s - (rings.max_s - rings.min_s) * eased;
-        var glow  = is_inhale ? (6 + 28 * eased) : (6 + 28 * (1 - eased));
-
-        /* ── continuous frequency sweep (breathing entrainment) ─────────────
-           Sound rises in pitch as you fill your lungs (150 → 450 Hz) and
-           descends as you release (450 → 150 Hz).  Volume mirrors fullness:
-           louder at peak inhale, softer at empty exhale.
-           A 3:1 frequency ratio (perfect fifth + octave) is naturally
-           pleasing and easy to follow subconsciously.                       */
-        if (is_sound_on) {
-            var F_LOW  = 150,  F_HIGH = 450;
-            var tFreq  = is_inhale
-                ? F_LOW  + (F_HIGH - F_LOW)  * eased   /* rising  */
-                : F_HIGH - (F_HIGH - F_LOW)  * eased;  /* falling */
-            var tVol   = is_inhale
-                ? 0.07 + 0.13 * eased                  /* louder  as lungs fill */
-                : 0.20 - 0.13 * eased;                 /* quieter as lungs empty */
-            window._rfPacerBreath && window._rfPacerBreath(tFreq, tVol);
-        } else {
-            window._rfPacerStop && window._rfPacerStop();
-        }
-
-        /* ── center countdown number ─────────────────────────────────────── */
-        var secR         = Math.floor(remaining);
-        var center_text  = (secR > 0) ? String(secR) : '';
-        var center_style = {
-            position:'absolute', top:'50%', left:'50%',
-            transform:'translate(-50%,-50%)',
-            textAlign:'center', lineHeight:'1',
-            pointerEvents:'none', zIndex:'10',
-            color: color, fontSize:'38px', fontWeight:'700',
-            fontFamily:"'JetBrains Mono', monospace",
-            textShadow:'0 1px 6px rgba(0,0,0,0.55)'
+        /* Push current params to the 60 fps rAF loop in rf-pacer-anim.js.
+           The loop reads this object directly and drives all visual + audio
+           updates — completely outside React so there are no stutter gaps.  */
+        window._rfPacerParams = {
+            is_running:  !!(ps.is_running),
+            is_sound_on: !!(is_sound_on),
+            inhale_s:    ps.inhale_s  || 4.0,
+            exhale_s:    ps.exhale_s  || 6.0,
+            start_ts:    ps.start_ts  || 0,
+            min_s:       rings.min_s,
+            max_s:       rings.max_s
         };
 
-        /* ── ring & label styles ─────────────────────────────────────────── */
-        var alpha = 0.06 + 0.18 * (is_inhale ? eased : 1 - eased);
-        var ring_style = {
-            position:'absolute', top:'50%', left:'50%',
-            width:'160px', height:'160px',
-            marginLeft:'-80px', marginTop:'-80px',
-            borderRadius:'50%',
-            border:'2px solid ' + color,
-            backgroundColor:'rgba(129,140,248,' + alpha.toFixed(3) + ')',
-            boxShadow:'0 0 ' + glow.toFixed(0) + 'px ' + color,
-            transform:'scale(' + scale.toFixed(4) + ')',
-            transition:'transform 0.1s linear',
-            pointerEvents:'none'
-        };
-        var label_style = {
-            color: color, fontSize:'18px', fontWeight:'700',
-            letterSpacing:'2px', fontFamily:"'JetBrains Mono', monospace",
-            textAlign:'center', marginTop:'14px'
-        };
-
-        return [ring_style,
-                is_inhale ? 'INHALE' : 'EXHALE',
-                remaining.toFixed(1) + 's',
-                label_style,
-                outer_style, inner_style,
-                center_text, center_style];
+        return [
+            guideStyle(rings.outer, '1.5px dashed rgba(129,140,248,0.32)'),
+            guideStyle(rings.inner, '1.5px dashed rgba(86,211,100,0.32)')
+        ];
     }
     """,
-    Output("rf-pacer-ring",         "style"),
-    Output("rf-phase-label",        "children"),
-    Output("rf-phase-countdown",    "children"),
-    Output("rf-phase-label",        "style"),
     Output("rf-pacer-outer-guide",  "style"),
     Output("rf-pacer-inner-guide",  "style"),
-    Output("rf-pacer-center-text",  "children"),
-    Output("rf-pacer-center-text",  "style"),
-    Input("tick-pacer",             "n_intervals"),
     Input("rf-pacer-state",         "data"),
-    State("rf-sound-on",            "data"),
+    Input("rf-sound-on",            "data"),
 )
 
 
