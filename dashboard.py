@@ -3455,18 +3455,47 @@ app.layout = html.Div([
 
                 # Animated pacer circle
                 html.Div([
-                    html.Div(id="rf-pacer-ring", style={
-                        "width": "240px", "height": "240px", "borderRadius": "50%",
-                        "border": f"2px solid rgba(129,140,248,0.3)",
-                        "backgroundColor": "rgba(129,140,248,0.05)",
-                        "position": "relative", "margin": "0 auto",
-                        "transition": "transform 0.3s ease", "transform": "scale(1)",
+                    # Positioning wrapper — everything is absolute inside here
+                    html.Div([
+                        # Outer guide ring: shows max inhale expansion limit (160×1.40=224px)
+                        html.Div(style={
+                            "position": "absolute", "top": "50%", "left": "50%",
+                            "width": "224px", "height": "224px",
+                            "marginLeft": "-112px", "marginTop": "-112px",
+                            "borderRadius": "50%",
+                            "border": "1.5px dashed rgba(129,140,248,0.28)",
+                            "pointerEvents": "none",
+                        }),
+                        # Inner guide ring: shows min exhale contraction limit (160×0.85=136px)
+                        html.Div(style={
+                            "position": "absolute", "top": "50%", "left": "50%",
+                            "width": "136px", "height": "136px",
+                            "marginLeft": "-68px", "marginTop": "-68px",
+                            "borderRadius": "50%",
+                            "border": "1.5px dashed rgba(86,211,100,0.28)",
+                            "pointerEvents": "none",
+                        }),
+                        # Animated inner ring — starts at 160px, scales between 0.85 and 1.40
+                        html.Div(id="rf-pacer-ring", style={
+                            "position": "absolute", "top": "50%", "left": "50%",
+                            "width": "160px", "height": "160px",
+                            "marginLeft": "-80px", "marginTop": "-80px",
+                            "borderRadius": "50%",
+                            "border": "2px solid rgba(129,140,248,0.35)",
+                            "backgroundColor": "rgba(129,140,248,0.06)",
+                            "transform": "scale(1)",
+                            "transition": "transform 0.1s linear",
+                            "pointerEvents": "none",
+                        }),
+                    ], style={
+                        "position": "relative", "width": "240px", "height": "240px",
+                        "margin": "0 auto",
                     }),
                     html.Div(id="rf-phase-label",
                              children="READY",
                              style={"color": C_RF, "fontSize": "18px", "fontWeight": "700",
                                     "letterSpacing": "2px", "textAlign": "center",
-                                    "marginTop": "12px",
+                                    "marginTop": "14px",
                                     "fontFamily": "'JetBrains Mono', monospace"}),
                     html.Div(id="rf-phase-countdown",
                              children="",
@@ -3809,60 +3838,105 @@ def rf_update_pacer_settings(bpm_slider, preset_clicks, cur_bpm, state):
 app.clientside_callback(
     """
     function(n_intervals, pacer_state, is_sound_on) {
+        /* ── idle / paused ─────────────────────────────────────────────── */
         if (!pacer_state || !pacer_state.is_running) {
+            window._rfLastVoiceKey = null;
             return [
-                {width:'240px', height:'240px', borderRadius:'50%',
-                 border:'2px solid rgba(129,140,248,0.3)',
-                 backgroundColor:'rgba(129,140,248,0.05)',
-                 position:'relative', margin:'0 auto',
-                 transition:'transform 0.3s ease', transform:'scale(1)'},
+                {position:'absolute', top:'50%', left:'50%',
+                 width:'160px', height:'160px',
+                 marginLeft:'-80px', marginTop:'-80px',
+                 borderRadius:'50%',
+                 border:'2px solid rgba(129,140,248,0.35)',
+                 backgroundColor:'rgba(129,140,248,0.06)',
+                 transform:'scale(1)', transition:'transform 0.3s ease',
+                 pointerEvents:'none'},
                 'READY', '',
                 {color:'#818cf8', fontSize:'18px', fontWeight:'700',
                  letterSpacing:'2px', fontFamily:"'JetBrains Mono', monospace",
-                 textAlign:'center', marginTop:'12px'}
+                 textAlign:'center', marginTop:'14px'}
             ];
         }
-        var now     = Date.now() / 1000.0;
-        var elapsed = now - pacer_state.start_ts;
-        var cycle   = pacer_state.inhale_s + pacer_state.exhale_s;
-        var phase_t = elapsed % cycle;
+
+        /* ── timing ─────────────────────────────────────────────────────── */
+        var now      = Date.now() / 1000.0;
+        var elapsed  = now - pacer_state.start_ts;
+        var cycle    = pacer_state.inhale_s + pacer_state.exhale_s;
+        var phase_t  = elapsed % cycle;
         var is_inhale = phase_t < pacer_state.inhale_s;
         var progress, remaining, scale, glow, color;
+
         if (is_inhale) {
             progress  = phase_t / pacer_state.inhale_s;
-            remaining = (pacer_state.inhale_s - phase_t).toFixed(1);
+            remaining = pacer_state.inhale_s - phase_t;
             scale     = 0.85 + 0.55 * progress;
-            glow      = 20 + 40 * progress;
+            glow      = 18 + 36 * progress;
             color     = '#818cf8';
+            /* phase-start tone */
             if (phase_t < 0.15 && is_sound_on) {
-                window._rfPlayTone && window._rfPlayTone(528, 0.18, 0.3);
+                window._rfPlayTone && window._rfPlayTone(528, 0.15, 0.28);
             }
         } else {
             var ep    = phase_t - pacer_state.inhale_s;
             progress  = ep / pacer_state.exhale_s;
-            remaining = (pacer_state.exhale_s - ep).toFixed(1);
+            remaining = pacer_state.exhale_s - ep;
             scale     = 1.40 - 0.55 * progress;
-            glow      = 60 - 40 * progress;
+            glow      = 54 - 36 * progress;
             color     = '#56d364';
+            /* phase-start tone */
             if (ep < 0.15 && is_sound_on) {
-                window._rfPlayTone && window._rfPlayTone(396, 0.12, 0.3);
+                window._rfPlayTone && window._rfPlayTone(396, 0.10, 0.28);
             }
         }
+
+        /* ── voice countdown ─────────────────────────────────────────────
+           Speak each integer second once per phase using Web Speech API.
+           trackKey changes on every new second AND on phase switch,
+           so the same number is spoken fresh after inhale → exhale.        */
+        var countNum  = Math.ceil(remaining);
+        var phaseKey  = is_inhale ? 'I' : 'E';
+        var trackKey  = phaseKey + countNum;
+        if (is_sound_on && countNum > 0 && window.speechSynthesis &&
+                trackKey !== window._rfLastVoiceKey) {
+            window._rfLastVoiceKey = trackKey;
+            window.speechSynthesis.cancel();
+            var utt = new SpeechSynthesisUtterance(String(countNum));
+            utt.rate   = 0.72;
+            utt.pitch  = is_inhale ? 1.1 : 0.85;
+            utt.volume = 0.48;
+            /* prefer a calm system voice */
+            var voices = window.speechSynthesis.getVoices();
+            var calm = voices.find(function(v) {
+                return /Samantha|Karen|Moira|Tessa|Ava|Victoria|Nicky/i.test(v.name);
+            }) || voices.find(function(v) {
+                return v.lang && v.lang.startsWith('en') && !v.name.includes('Compact');
+            });
+            if (calm) utt.voice = calm;
+            window.speechSynthesis.speak(utt);
+        }
+
+        /* ── ring style ─────────────────────────────────────────────────── */
+        var alpha = 0.06 + 0.18 * (is_inhale ? progress : 1 - progress);
         var ring_style = {
-            width:'240px', height:'240px', borderRadius:'50%',
+            position:'absolute', top:'50%', left:'50%',
+            width:'160px', height:'160px',
+            marginLeft:'-80px', marginTop:'-80px',
+            borderRadius:'50%',
             border:'2px solid ' + color,
-            backgroundColor: 'rgba(129,140,248,' + (0.05 + 0.15 * (is_inhale ? progress : 1-progress)) + ')',
-            boxShadow: '0 0 ' + glow + 'px ' + color,
-            position:'relative', margin:'0 auto',
+            backgroundColor:'rgba(129,140,248,' + alpha.toFixed(3) + ')',
+            boxShadow:'0 0 ' + glow.toFixed(0) + 'px ' + color,
             transform:'scale(' + scale.toFixed(3) + ')',
-            transition:'transform 0.1s linear'
+            transition:'transform 0.1s linear',
+            pointerEvents:'none'
         };
         var label_style = {
             color: color, fontSize:'18px', fontWeight:'700',
             letterSpacing:'2px', fontFamily:"'JetBrains Mono', monospace",
-            textAlign:'center', marginTop:'12px'
+            textAlign:'center', marginTop:'14px'
         };
-        return [ring_style, is_inhale ? 'INHALE' : 'EXHALE', remaining + 's', label_style];
+        return [ring_style,
+                is_inhale ? 'INHALE' : 'EXHALE',
+                remaining.toFixed(1) + 's',
+                label_style];
     }
     """,
     Output("rf-pacer-ring",      "style"),
