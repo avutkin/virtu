@@ -37,11 +37,21 @@ final class TrainSession {
     }
 
     var durationString: String {
-        let mins = Int(duration / 60)
+        let mins = Int((duration / 60).rounded())
         return "\(mins) min"
     }
 
+    var isActive: Bool { endedAt == nil }
+
     var recoveryMinArray: [Float] {
-        (try? JSONDecoder().decode([Float].self, from: Data(recoveryMins.utf8))) ?? []
+        guard let data = recoveryMins.data(using: .utf8) else {
+            assertionFailure("TrainSession.recoveryMins is not valid UTF-8: \(recoveryMins)")
+            return []
+        }
+        guard let result = try? JSONDecoder().decode([Float].self, from: data) else {
+            assertionFailure("TrainSession.recoveryMins is not valid JSON [Float]: \(recoveryMins)")
+            return []
+        }
+        return result
     }
 }
