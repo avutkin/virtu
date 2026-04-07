@@ -71,12 +71,22 @@ enum AutonomicCompute {
 
 struct TrainView: View {
     @Environment(AppEnvironment.self) var env
+    @Environment(\.modelContext) var ctx
 
     @State private var trainHistory:    [MetricsTick]    = []
     @State private var baseline:        TrainBaseline?   = nil
     @State private var trainState:      TrainState       = .calibrating
     @State private var showBLESheet                      = false
     @State private var autonomicIndices: AutonomicIndices? = nil
+
+    // Session recording
+    @State private var isSessionActive:  Bool       = false
+    @State private var sessionSNSAccum:  [Float]    = []
+    @State private var sessionPNSAccum:  [Float]    = []
+    @State private var setCount:         Int        = 0
+    @State private var recoveryStart:    Date?      = nil
+    @State private var setRecoveryMins:  [Float]    = []
+    @State private var prevTrainState:   TrainState = .calibrating
 
     @AppStorage("train.maxHR") private var maxHR: Double = 160
 
@@ -137,9 +147,12 @@ struct TrainView: View {
                     }
 
                     CalibrationBar(
-                        baseline:     baseline,
-                        isCollecting: trainHistory.count < 15 && baseline == nil,
-                        onRecalibrate: recalibrate
+                        baseline:        baseline,
+                        isCollecting:    trainHistory.count < 15 && baseline == nil,
+                        isSessionActive: isSessionActive,
+                        onRecalibrate:   recalibrate,
+                        onStartSession:  startSession,
+                        onEndSession:    endSession
                     )
                 }
                 .padding(.horizontal)
@@ -184,6 +197,24 @@ struct TrainView: View {
         // Update state machine
         trainState = deriveState(tick: tick)
         autonomicIndices = AutonomicCompute.compute(tick: tick, baseline: baseline)
+
+        // Track set/recovery transitions for session recording
+        if isSessionActive {
+            if prevTrainState == .active && trainState == .recover {
+                recoveryStart = .now
+                setCount += 1
+            }
+            if prevTrainState == .recover && trainState == .ready, let rs = recoveryStart {
+                let mins = Float(Date().timeIntervalSince(rs) / 60)
+                setRecoveryMins.append(mins)
+                recoveryStart = nil
+            }
+            if let idx = autonomicIndices {
+                sessionSNSAccum.append(idx.sns)
+                sessionPNSAccum.append(idx.pns)
+            }
+        }
+        prevTrainState = trainState
     }
 
     private func calibrateFrom(_ ticks: [MetricsTick]) {
@@ -198,6 +229,42 @@ struct TrainView: View {
     private func recalibrate() {
         let recent = Array(trainHistory.suffix(15))
         calibrateFrom(recent)
+    }
+
+    private func startSession() {
+        guard baseline != nil else { return }
+        isSessionActive  = true
+        sessionSNSAccum  = []
+        sessionPNSAccum  = []
+        setCount         = 0
+        setRecoveryMins  = []
+        recoveryStart    = nil
+        prevTrainState   = trainState
+    }
+
+    private func endSession() {
+        guard isSessionActive, let b = baseline else { return }
+        isSessionActive = false
+
+        let avgSNS = sessionSNSAccum.isEmpty ? 0 : sessionSNSAccum.reduce(0, +) / Float(sessionSNSAccum.count)
+        let avgPNS = sessionPNSAccum.isEmpty ? 0 : sessionPNSAccum.reduce(0, +) / Float(sessionPNSAccum.count)
+        let avgRec = setRecoveryMins.isEmpty ? 0 : setRecoveryMins.reduce(0, +) / Float(setRecoveryMins.count)
+        let rec    = (try? String(data: JSONEncoder().encode(setRecoveryMins), encoding: .utf8)) ?? "[]"
+
+        let session         = TrainSession(baselineHR: b.hr, baselineRMSSD: b.rmssd)
+        session.endedAt     = .now
+        session.setCount    = setCount
+        session.avgSNSIndex = avgSNS
+        session.avgPNSIndex = avgPNS
+        session.avgRecoveryMin = avgRec
+        session.recoveryMins   = rec
+        ctx.insert(session)
+        try? ctx.save()
+
+        sessionSNSAccum = []
+        sessionPNSAccum = []
+        setCount        = 0
+        setRecoveryMins = []
     }
 
     private func deriveState(tick: MetricsTick) -> TrainState {
@@ -699,9 +766,12 @@ private struct RMSSDChart: View {
 // MARK: - Calibration Bar
 
 private struct CalibrationBar: View {
-    let baseline:     TrainBaseline?
-    let isCollecting: Bool
-    let onRecalibrate: () -> Void
+    let baseline:        TrainBaseline?
+    let isCollecting:    Bool
+    let isSessionActive: Bool
+    let onRecalibrate:   () -> Void
+    let onStartSession:  () -> Void
+    let onEndSession:    () -> Void
 
     @State private var dotCount = 1
 
@@ -755,6 +825,28 @@ private struct CalibrationBar: View {
                         RoundedRectangle(cornerRadius: 6)
                             .strokeBorder(Theme.accent.opacity(0.3), lineWidth: 0.5)
                     )
+
+                if isSessionActive {
+                    Button("END TRAINING", action: onEndSession)
+                        .font(Theme.monoLabel)
+                        .foregroundStyle(Theme.warn)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Theme.warn.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .overlay(RoundedRectangle(cornerRadius: 6)
+                            .strokeBorder(Theme.warn.opacity(0.3), lineWidth: 0.5))
+                } else {
+                    Button("START TRAINING", action: onStartSession)
+                        .font(Theme.monoLabel)
+                        .foregroundStyle(Theme.accent)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Theme.accent.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .overlay(RoundedRectangle(cornerRadius: 6)
+                            .strokeBorder(Theme.accent.opacity(0.3), lineWidth: 0.5))
+                }
             }
         }
         .padding(.vertical, 10)
