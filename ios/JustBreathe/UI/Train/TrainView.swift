@@ -200,12 +200,13 @@ struct TrainView: View {
 
         // Track set/recovery transitions for session recording
         if isSessionActive {
+            let now = Date.now
             if prevTrainState == .active && trainState == .recover {
-                recoveryStart = .now
+                recoveryStart = now
                 setCount += 1
             }
             if prevTrainState == .recover && trainState == .ready, let rs = recoveryStart {
-                let mins = Float(Date().timeIntervalSince(rs) / 60)
+                let mins = Float(now.timeIntervalSince(rs) / 60)
                 setRecoveryMins.append(mins)
                 recoveryStart = nil
             }
@@ -249,7 +250,8 @@ struct TrainView: View {
         let avgSNS = sessionSNSAccum.isEmpty ? 0 : sessionSNSAccum.reduce(0, +) / Float(sessionSNSAccum.count)
         let avgPNS = sessionPNSAccum.isEmpty ? 0 : sessionPNSAccum.reduce(0, +) / Float(sessionPNSAccum.count)
         let avgRec = setRecoveryMins.isEmpty ? 0 : setRecoveryMins.reduce(0, +) / Float(setRecoveryMins.count)
-        let rec    = (try? String(data: JSONEncoder().encode(setRecoveryMins), encoding: .utf8)) ?? "[]"
+        let recData = (try? JSONEncoder().encode(setRecoveryMins)) ?? Data()
+        let rec     = String(data: recData, encoding: .utf8) ?? "[]"
 
         let session         = TrainSession(baselineHR: b.hr, baselineRMSSD: b.rmssd)
         session.endedAt     = .now
@@ -846,6 +848,7 @@ private struct CalibrationBar: View {
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                         .overlay(RoundedRectangle(cornerRadius: 6)
                             .strokeBorder(Theme.accent.opacity(0.3), lineWidth: 0.5))
+                        .disabled(baseline == nil)
                 }
             }
         }
