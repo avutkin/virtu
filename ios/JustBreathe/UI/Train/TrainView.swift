@@ -55,6 +55,7 @@ enum AutonomicCompute {
         return nil
     }
 
+    /// Precondition: `pns + sns == 1.0` (both call sites guarantee this).
     private static func classify(pns: Float, sns: Float, tick: MetricsTick, baseline: TrainBaseline?) -> PolyvagalState {
         if pns >= 0.55 { return .ventralVagal }
         if sns >= 0.65 { return .sympathetic }
@@ -250,36 +251,40 @@ private struct AutonomicCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Text("AUTONOMIC BALANCE")
-                    .font(Theme.monoLabel)
-                    .foregroundStyle(Theme.dim)
-                Spacer()
-            }
-
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(stateColor)
-                    .frame(width: 8, height: 8)
-                Text(stateLabel)
-                    .font(Theme.mono(14))
-                    .fontWeight(.medium)
-                    .foregroundStyle(stateColor)
-            }
-
-            IndexBar(label: "SNS", value: indices?.sns, color: Theme.warn)
-            IndexBar(label: "PNS", value: indices?.pns, color: Theme.accent)
-
-            Text(tipText)
+            Text("AUTONOMIC BALANCE")
                 .font(Theme.monoLabel)
-                .foregroundStyle(Theme.breathe.opacity(0.8))
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .foregroundStyle(Theme.dim)
+
+            if indices == nil {
+                Text("Waiting for HRV data…")
+                    .font(Theme.monoLabel)
+                    .foregroundStyle(Theme.dim.opacity(0.6))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(stateColor)
+                        .frame(width: 8, height: 8)
+                    Text(stateLabel)
+                        .font(Theme.mono(14))
+                        .fontWeight(.medium)
+                        .foregroundStyle(stateColor)
+                }
+
+                IndexBar(label: "SNS", value: indices?.sns, color: Theme.warn)
+                IndexBar(label: "PNS", value: indices?.pns, color: Theme.accent)
+
+                Text(tipText)
+                    .font(Theme.monoLabel)
+                    .foregroundStyle(Theme.breathe.opacity(0.8))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .padding(Theme.cardPad)
         .background(Theme.card)
         .clipShape(RoundedRectangle(cornerRadius: Theme.cardRadius))
         .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius)
-            .strokeBorder(stateColor.opacity(0.25), lineWidth: 0.5))
+            .strokeBorder((indices == nil ? Theme.dim : stateColor).opacity(0.25), lineWidth: 0.5))
         .animation(.easeInOut(duration: 0.4), value: indices?.state)
     }
 }
@@ -302,8 +307,7 @@ private struct IndexBar: View {
                         .fill(Theme.border)
                     RoundedRectangle(cornerRadius: 3)
                         .fill(color.opacity(0.7))
-                        .frame(width: geo.size.width * CGFloat(value ?? 0))
-                        .animation(.easeInOut(duration: 0.5), value: value)
+                        .frame(width: geo.size.width * CGFloat(min(1, max(0, value ?? 0))))
                 }
             }
             .frame(height: 8)
