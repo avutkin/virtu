@@ -1,0 +1,676 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A101 /* JustBreatheApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F101 /* JustBreatheApp.swift */; };
+		A102 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = F102 /* AppEnvironment.swift */; };
+		A103 /* BLEService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F103 /* BLEService.swift */; };
+		A104 /* PolarH10Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = F104 /* PolarH10Profile.swift */; };
+		A105 /* DataBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F105 /* DataBuffer.swift */; };
+		A106 /* MetricsEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = F106 /* MetricsEngine.swift */; };
+		A107 /* HRVCompute.swift in Sources */ = {isa = PBXBuildFile; fileRef = F107 /* HRVCompute.swift */; };
+		A108 /* RSACompute.swift in Sources */ = {isa = PBXBuildFile; fileRef = F108 /* RSACompute.swift */; };
+		A109 /* BreathingCompute.swift in Sources */ = {isa = PBXBuildFile; fileRef = F109 /* BreathingCompute.swift */; };
+		A110 /* CoherenceCompute.swift in Sources */ = {isa = PBXBuildFile; fileRef = F110 /* CoherenceCompute.swift */; };
+		A111 /* SyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F111 /* SyncService.swift */; };
+		A112 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F112 /* APIClient.swift */; };
+		A113 /* SessionUploader.swift in Sources */ = {isa = PBXBuildFile; fileRef = F113 /* SessionUploader.swift */; };
+		A114 /* HRVSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = F114 /* HRVSession.swift */; };
+		A115 /* HRVSample.swift in Sources */ = {isa = PBXBuildFile; fileRef = F115 /* HRVSample.swift */; };
+		A116 /* ResonanceResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = F116 /* ResonanceResult.swift */; };
+		A117 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = F117 /* Theme.swift */; };
+		A118 /* WaveformRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F118 /* WaveformRenderer.swift */; };
+		A119 /* LiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F119 /* LiveView.swift */; };
+		A120 /* ECGWaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F120 /* ECGWaveformView.swift */; };
+		A121 /* HRVRingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F121 /* HRVRingView.swift */; };
+		A122 /* HeartBeatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F122 /* HeartBeatView.swift */; };
+		A123 /* ResonateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F123 /* ResonateView.swift */; };
+		A124 /* PacerCircleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F124 /* PacerCircleView.swift */; };
+		A125 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F125 /* HistoryView.swift */; };
+		A126 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F126 /* SettingsView.swift */; };
+		A127 /* MetricsHistoryPoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = F127 /* MetricsHistoryPoint.swift */; };
+		A128 /* MetricsChartsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F128 /* MetricsChartsView.swift */; };
+		A129 /* ACCWaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F129 /* ACCWaveformView.swift */; };
+		A130 /* RRTachogramView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F130 /* RRTachogramView.swift */; };
+		A131 /* HRVAnalysisView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F131 /* HRVAnalysisView.swift */; };
+		A132 /* SplashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F132 /* SplashView.swift */; };
+		A133 /* BLENavButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = F133 /* BLENavButton.swift */; };
+\t\tA134 /* TrainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F134 /* TrainView.swift */; };
+		A135 /* TrainSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = F135 /* TrainSession.swift */; };
+		AT01 /* MetricsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT01 /* MetricsTests.swift */; };
+		AT02 /* BLETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT02 /* BLETests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		520563AE2F70993A00075CAD /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = PROJ /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = TAPP;
+			remoteInfo = JustBreathe;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		F101 /* JustBreatheApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JustBreatheApp.swift; sourceTree = "<group>"; };
+		F102 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
+		F103 /* BLEService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BLEService.swift; sourceTree = "<group>"; };
+		F104 /* PolarH10Profile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolarH10Profile.swift; sourceTree = "<group>"; };
+		F105 /* DataBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataBuffer.swift; sourceTree = "<group>"; };
+		F106 /* MetricsEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricsEngine.swift; sourceTree = "<group>"; };
+		F107 /* HRVCompute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HRVCompute.swift; sourceTree = "<group>"; };
+		F108 /* RSACompute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RSACompute.swift; sourceTree = "<group>"; };
+		F109 /* BreathingCompute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BreathingCompute.swift; sourceTree = "<group>"; };
+		F110 /* CoherenceCompute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoherenceCompute.swift; sourceTree = "<group>"; };
+		F111 /* SyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncService.swift; sourceTree = "<group>"; };
+		F112 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		F113 /* SessionUploader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionUploader.swift; sourceTree = "<group>"; };
+		F114 /* HRVSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HRVSession.swift; sourceTree = "<group>"; };
+		F115 /* HRVSample.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HRVSample.swift; sourceTree = "<group>"; };
+		F116 /* ResonanceResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResonanceResult.swift; sourceTree = "<group>"; };
+		F117 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		F118 /* WaveformRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformRenderer.swift; sourceTree = "<group>"; };
+		F119 /* LiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveView.swift; sourceTree = "<group>"; };
+		F120 /* ECGWaveformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ECGWaveformView.swift; sourceTree = "<group>"; };
+		F121 /* HRVRingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HRVRingView.swift; sourceTree = "<group>"; };
+		F122 /* HeartBeatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeartBeatView.swift; sourceTree = "<group>"; };
+		F123 /* ResonateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResonateView.swift; sourceTree = "<group>"; };
+		F124 /* PacerCircleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacerCircleView.swift; sourceTree = "<group>"; };
+		F125 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
+		F126 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		F127 /* MetricsHistoryPoint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricsHistoryPoint.swift; sourceTree = "<group>"; };
+		F128 /* MetricsChartsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricsChartsView.swift; sourceTree = "<group>"; };
+		F129 /* ACCWaveformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ACCWaveformView.swift; sourceTree = "<group>"; };
+		F130 /* RRTachogramView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RRTachogramView.swift; sourceTree = "<group>"; };
+		F131 /* HRVAnalysisView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HRVAnalysisView.swift; sourceTree = "<group>"; };
+		F132 /* SplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashView.swift; sourceTree = "<group>"; };
+		F133 /* BLENavButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BLENavButton.swift; sourceTree = "<group>"; };
+\t\tF134 /* TrainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainView.swift; sourceTree = "<group>"; };
+		F135 /* TrainSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainSession.swift; sourceTree = "<group>"; };
+		FAPP /* JustBreathe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JustBreathe.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		FINFO /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		FT01 /* MetricsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricsTests.swift; sourceTree = "<group>"; };
+		FT02 /* BLETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BLETests.swift; sourceTree = "<group>"; };
+		FTST /* JustBreatheTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = JustBreatheTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		BFAPP /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BFTST /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		GAPP /* JustBreathe */ = {
+			isa = PBXGroup;
+			children = (
+				GAPP_APP /* App */,
+				GAPP_BLE /* BLE */,
+				GAPP_MET /* Metrics */,
+				GAPP_SYN /* Sync */,
+				GAPP_MOD /* Models */,
+				GAPP_UI /* UI */,
+				FINFO /* Info.plist */,
+			);
+			path = JustBreathe;
+			sourceTree = "<group>";
+		};
+		GAPP_APP /* App */ = {
+			isa = PBXGroup;
+			children = (
+				F101 /* JustBreatheApp.swift */,
+				F102 /* AppEnvironment.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		GAPP_BLE /* BLE */ = {
+			isa = PBXGroup;
+			children = (
+				F103 /* BLEService.swift */,
+				F104 /* PolarH10Profile.swift */,
+				F105 /* DataBuffer.swift */,
+			);
+			path = BLE;
+			sourceTree = "<group>";
+		};
+		GAPP_DES /* Design */ = {
+			isa = PBXGroup;
+			children = (
+				F117 /* Theme.swift */,
+				F118 /* WaveformRenderer.swift */,
+				F132 /* SplashView.swift */,
+				F133 /* BLENavButton.swift */,
+			);
+			path = Design;
+			sourceTree = "<group>";
+		};
+		GAPP_TRN /* Train */ = {
+			isa = PBXGroup;
+			children = (
+				F134 /* TrainView.swift */,
+			);
+			path = Train;
+			sourceTree = "<group>";
+		};
+		GAPP_HIS /* History */ = {
+			isa = PBXGroup;
+			children = (
+				F125 /* HistoryView.swift */,
+			);
+			path = History;
+			sourceTree = "<group>";
+		};
+		GAPP_LIV /* Live */ = {
+			isa = PBXGroup;
+			children = (
+				F119 /* LiveView.swift */,
+				F120 /* ECGWaveformView.swift */,
+				F121 /* HRVRingView.swift */,
+				F122 /* HeartBeatView.swift */,
+				F128 /* MetricsChartsView.swift */,
+				F129 /* ACCWaveformView.swift */,
+				F130 /* RRTachogramView.swift */,
+				F131 /* HRVAnalysisView.swift */,
+			);
+			path = Live;
+			sourceTree = "<group>";
+		};
+		GAPP_MET /* Metrics */ = {
+			isa = PBXGroup;
+			children = (
+				F106 /* MetricsEngine.swift */,
+				F107 /* HRVCompute.swift */,
+				F108 /* RSACompute.swift */,
+				F109 /* BreathingCompute.swift */,
+				F110 /* CoherenceCompute.swift */,
+			);
+			path = Metrics;
+			sourceTree = "<group>";
+		};
+		GAPP_MOD /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				F114 /* HRVSession.swift */,
+				F115 /* HRVSample.swift */,
+				F116 /* ResonanceResult.swift */,
+\t\t\t\tF127 /* MetricsHistoryPoint.swift */,
+				F135 /* TrainSession.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		GAPP_RES /* Resonate */ = {
+			isa = PBXGroup;
+			children = (
+				F123 /* ResonateView.swift */,
+				F124 /* PacerCircleView.swift */,
+			);
+			path = Resonate;
+			sourceTree = "<group>";
+		};
+		GAPP_SET /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				F126 /* SettingsView.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		GAPP_SYN /* Sync */ = {
+			isa = PBXGroup;
+			children = (
+				F111 /* SyncService.swift */,
+				F112 /* APIClient.swift */,
+				F113 /* SessionUploader.swift */,
+			);
+			path = Sync;
+			sourceTree = "<group>";
+		};
+		GAPP_UI /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				GAPP_DES /* Design */,
+				GAPP_LIV /* Live */,
+				GAPP_TRN /* Train */,
+				GAPP_RES /* Resonate */,
+				GAPP_HIS /* History */,
+				GAPP_SET /* Settings */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+		GPRODUCTS /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				FAPP /* JustBreathe.app */,
+				FTST /* JustBreatheTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		GROOT = {
+			isa = PBXGroup;
+			children = (
+				GAPP /* JustBreathe */,
+				GTESTS /* JustBreatheTests */,
+				GPRODUCTS /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		GTESTS /* JustBreatheTests */ = {
+			isa = PBXGroup;
+			children = (
+				FT01 /* MetricsTests.swift */,
+				FT02 /* BLETests.swift */,
+			);
+			path = JustBreatheTests;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		TAPP /* JustBreathe */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = XLAPP /* Build configuration list for PBXNativeTarget "JustBreathe" */;
+			buildPhases = (
+				BSAPP /* Sources */,
+				BFAPP /* Frameworks */,
+				BRAPP /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = JustBreathe;
+			productName = JustBreathe;
+			productReference = FAPP /* JustBreathe.app */;
+			productType = "com.apple.product-type.application";
+		};
+		TTST /* JustBreatheTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = XLTST /* Build configuration list for PBXNativeTarget "JustBreatheTests" */;
+			buildPhases = (
+				BSTST /* Sources */,
+				BFTST /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				DEPTEST /* PBXTargetDependency */,
+			);
+			name = JustBreatheTests;
+			productName = JustBreatheTests;
+			productReference = FTST /* JustBreatheTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		PROJ /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 2630;
+				TargetAttributes = {
+					TAPP = {
+						CreatedOnToolsVersion = 15.0;
+					};
+					TTST = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = TAPP;
+					};
+				};
+			};
+			buildConfigurationList = XLPROJ /* Build configuration list for PBXProject "JustBreathe" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = GROOT;
+			productRefGroup = GPRODUCTS /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				TAPP /* JustBreathe */,
+				TTST /* JustBreatheTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		BRAPP /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		BSAPP /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A101 /* JustBreatheApp.swift in Sources */,
+				A102 /* AppEnvironment.swift in Sources */,
+				A103 /* BLEService.swift in Sources */,
+				A104 /* PolarH10Profile.swift in Sources */,
+				A105 /* DataBuffer.swift in Sources */,
+				A106 /* MetricsEngine.swift in Sources */,
+				A107 /* HRVCompute.swift in Sources */,
+				A108 /* RSACompute.swift in Sources */,
+				A109 /* BreathingCompute.swift in Sources */,
+				A110 /* CoherenceCompute.swift in Sources */,
+				A111 /* SyncService.swift in Sources */,
+				A112 /* APIClient.swift in Sources */,
+				A113 /* SessionUploader.swift in Sources */,
+				A114 /* HRVSession.swift in Sources */,
+				A115 /* HRVSample.swift in Sources */,
+\t\t\t\tA116 /* ResonanceResult.swift in Sources */,
+				A135 /* TrainSession.swift in Sources */,
+				A127 /* MetricsHistoryPoint.swift in Sources */,
+				A117 /* Theme.swift in Sources */,
+				A118 /* WaveformRenderer.swift in Sources */,
+				A132 /* SplashView.swift in Sources */,
+				A133 /* BLENavButton.swift in Sources */,
+				A119 /* LiveView.swift in Sources */,
+				A120 /* ECGWaveformView.swift in Sources */,
+				A121 /* HRVRingView.swift in Sources */,
+				A122 /* HeartBeatView.swift in Sources */,
+				A128 /* MetricsChartsView.swift in Sources */,
+				A129 /* ACCWaveformView.swift in Sources */,
+				A130 /* RRTachogramView.swift in Sources */,
+				A131 /* HRVAnalysisView.swift in Sources */,
+				A134 /* TrainView.swift in Sources */,
+				A123 /* ResonateView.swift in Sources */,
+				A124 /* PacerCircleView.swift in Sources */,
+				A125 /* HistoryView.swift in Sources */,
+				A126 /* SettingsView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BSTST /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AT01 /* MetricsTests.swift in Sources */,
+				AT02 /* BLETests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		DEPTEST /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = TAPP /* JustBreathe */;
+			targetProxy = 520563AE2F70993A00075CAD /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		CBD_APP /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FHUVQ8JNXD;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = JustBreathe/Info.plist;
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "JustBreathe needs Bluetooth to connect to your Polar H10 heart rate monitor.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.alexutkin.justbreathe;
+				PRODUCT_NAME = JustBreathe;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		CBD_PROJ /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_CYCLES = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		CBD_TST /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.alexutkin.justbreathe.tests;
+				PRODUCT_NAME = JustBreatheTests;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/JustBreathe.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/JustBreathe";
+			};
+			name = Debug;
+		};
+		CBR_APP /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FHUVQ8JNXD;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = JustBreathe/Info.plist;
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "JustBreathe needs Bluetooth to connect to your Polar H10 heart rate monitor.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.alexutkin.justbreathe;
+				PRODUCT_NAME = JustBreathe;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		CBR_PROJ /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_CYCLES = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.9;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		CBR_TST /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.alexutkin.justbreathe.tests;
+				PRODUCT_NAME = JustBreatheTests;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/JustBreathe.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/JustBreathe";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		XLAPP /* Build configuration list for PBXNativeTarget "JustBreathe" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CBD_APP /* Debug */,
+				CBR_APP /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		XLPROJ /* Build configuration list for PBXProject "JustBreathe" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CBD_PROJ /* Debug */,
+				CBR_PROJ /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		XLTST /* Build configuration list for PBXNativeTarget "JustBreatheTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CBD_TST /* Debug */,
+				CBR_TST /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = PROJ /* Project object */;
+}
