@@ -1,0 +1,99 @@
+name: Server Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - 'metrics.py'
+      - 'requirements.txt'
+
+jobs:
+  # ── Server tests ─────────────────────────────────────────────────────────────
+  test:
+    name: Python tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER:     postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB:       justbreathe_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r server/requirements.txt
+          pip install pytest pytest-asyncio httpx
+
+      - name: Run server tests
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/justbreathe_test
+        run: pytest server/tests/ -v
+
+  # ── Deploy to AWS (main branch only) ─────────────────────────────────────────
+  deploy:
+    name: Deploy → AWS
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H 18.116.98.119 >> ~/.ssh/known_hosts
+
+      - name: Deploy to server
+        run: |
+          ssh -i ~/.ssh/deploy_key ubuntu@18.116.98.119 << 'ENDSSH'
+            set -e
+            cd ~/just-breathe
+
+            # Pull latest code
+            git pull origin main
+
+            # Install / update Python dependencies
+            pip install -r requirements.txt -q
+            pip install -r server/requirements.txt -q
+
+            # Run DB migrations (schema is idempotent CREATE IF NOT EXISTS)
+            python -c "
+          import asyncio
+          from server.db import init_pool, create_schema, close_pool
+          async def run():
+              await init_pool()
+              await create_schema()
+              await close_pool()
+          asyncio.run(run())
+          "
+
+            # Restart the API service
+            sudo systemctl restart justbreathe-api
+            echo "Deploy complete"
+          ENDSSH
+
+      - name: Health check
+        run: |
+          sleep 5
+          curl --fail http://18.116.98.119:8000/health || exit 1

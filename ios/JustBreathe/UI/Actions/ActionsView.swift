@@ -1,0 +1,1452 @@
+import SwiftUI
+import SwiftData
+
+// MARK: - Actions Section
+
+private enum ActionsSection: String, CaseIterable {
+    case log    = "LOG"
+    case impact = "IMPACT"
+}
+
+// MARK: - Impact Sort
+
+private enum ImpactSort: String, CaseIterable {
+    case rsa  = "RSA"
+    case vti  = "VTI"
+    case sdnn = "SDNN"
+
+    var unit: String {
+        switch self {
+        case .rsa, .sdnn: return "ms"
+        case .vti:        return ""
+        }
+    }
+}
+
+// MARK: - ActionsView
+
+struct ActionsView: View {
+    @Environment(AppEnvironment.self) var env
+    @Environment(\.modelContext) var ctx
+    @Query(sort: \ActivityLog.startedAt, order: .reverse)
+    private var allEntries: [ActivityLog]
+
+    @State private var section:          ActionsSection = .log
+    @State private var showBLESheet                     = false
+    @State private var showStartSheet                   = false
+    @State private var showLogPastSheet                 = false
+    @State private var selectedEntry:     ActivityLog?  = nil
+    @State private var editEntry:         ActivityLog?  = nil
+    @State private var preselectedType:   ActivityType? = nil
+
+    private var todayEntries: [ActivityLog] {
+        allEntries.filter { Calendar.current.isDateInToday($0.startedAt) }
+    }
+
+    private var activeEntry: ActivityLog? {
+        allEntries.first(where: { $0.isActive })
+    }
+
+    private var suggested: [ActivityType] {
+        suggestedActivities()
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                // ── Section picker ────────────────────────────────
+                HStack(spacing: 0) {
+                    ForEach(ActionsSection.allCases, id: \.self) { s in
+                        Button(s.rawValue) {
+                            withAnimation(.easeInOut(duration: 0.2)) { section = s }
+                        }
+                        .font(Theme.monoLabel)
+                        .foregroundStyle(section == s ? Theme.bg : Theme.accent)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity)
+                        .background(section == s ? Theme.accent : Color.clear)
+                    }
+                }
+                .background(Theme.card)
+                .clipShape(Capsule())
+                .overlay(Capsule().strokeBorder(Theme.border, lineWidth: 0.5))
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
+                .padding(.bottom, 6)
+
+                if section == .log {
+                    logSection
+                } else {
+                    impactSection
+                }
+            }
+            .background(Theme.bg)
+            .navigationTitle("ACTIONS")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Theme.bg, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    BLENavButton(state: env.ble.state,
+                                 bpm: env.latestTick?.meanBPM) {
+                        showBLESheet = true
+                    }
+                }
+            }
+            .sheet(isPresented: $showBLESheet) { BLEConnectionSheet(ble: env.ble) }
+            .sheet(isPresented: $showStartSheet, onDismiss: { preselectedType = nil }) {
+                StartActivitySheet(preselected: preselectedType) { type, subtype, name in
+                    beginActivity(type: type, subtype: subtype, customName: name)
+                }
+            }
+            .sheet(isPresented: $showLogPastSheet) {
+                LogPastSheet { type, subtype, name, start, end, notes in
+                    logPast(type: type, subtype: subtype, customName: name, start: start, end: end, notes: notes)
+                }
+            }
+            .sheet(item: $selectedEntry) { entry in
+                ActivityDetailView(entry: entry)
+            }
+            .sheet(item: $editEntry) { entry in
+                EditActivitySheet(entry: entry) { ctx in
+                    entry.computeHRVWindows(context: ctx)
+                    try? ctx.save()
+                }
+            }
+        }
+    }
+
+    // MARK: - Log Section
+
+    private var logSection: some View {
+        List {
+            // ── Active banner ─────────────────────────────────────
+            if let active = activeEntry {
+                ActiveActivityBanner(entry: active, tick: env.latestTick) {
+                    endActivity(active)
+                }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(.init(top: 8, leading: 16, bottom: 0, trailing: 16))
+            }
+
+            // ── Suggestions + action buttons ──────────────────────
+            Section {
+                VStack(spacing: 10) {
+                    HStack {
+                        Text("SUGGESTED NOW")
+                            .font(Theme.monoLabel)
+                            .foregroundStyle(Theme.dim)
+                        Spacer()
+                        Text(hourLabel())
+                            .font(Theme.monoLabel)
+                            .foregroundStyle(Theme.dim.opacity(0.6))
+                    }
+
+                    HStack(spacing: 10) {
+                        ForEach(suggested, id: \.self) { type in
+                            SuggestionChip(type: type) {
+                                preselectedType = type
+                                showStartSheet  = true
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    HStack(spacing: 12) {
+                        Button {
+                            if activeEntry == nil { showStartSheet = true }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: activeEntry == nil ? "play.fill" : "stop.fill")
+                                Text(activeEntry == nil ? "START" : "RECORDING…")
+                            }
+                            .font(Theme.monoBody)
+                            .foregroundStyle(activeEntry == nil ? Theme.bg : Theme.warn)
+                            .padding(.vertical, 10)
+                            .frame(maxWidth: .infinity)
+                            .background(activeEntry == nil ? Theme.accent : Theme.warn.opacity(0.15))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .overlay(RoundedRectangle(cornerRadius: 8)
+                                .strokeBorder(activeEntry == nil ? .clear : Theme.warn.opacity(0.4), lineWidth: 0.5))
+                        }
+
+                        Button {
+                            showLogPastSheet = true
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "clock.arrow.circlepath")
+                                Text("LOG PAST")
+                            }
+                            .font(Theme.monoBody)
+                            .foregroundStyle(Theme.accent)
+                            .padding(.vertical, 10)
+                            .frame(maxWidth: .infinity)
+                            .background(Theme.accent.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .overlay(RoundedRectangle(cornerRadius: 8)
+                                .strokeBorder(Theme.accent.opacity(0.3), lineWidth: 0.5))
+                        }
+                    }
+                }
+                .cardStyle()
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(.init(top: 8, leading: 16, bottom: 4, trailing: 16))
+            }
+
+            // ── Today's log ───────────────────────────────────────
+            if !todayEntries.isEmpty {
+                Section {
+                    ForEach(todayEntries) { entry in
+                        ActivityLogRow(entry: entry)
+                            .contentShape(Rectangle())
+                            .onTapGesture { selectedEntry = entry }
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    deleteEntry(entry)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                                Button {
+                                    editEntry = entry
+                                } label: {
+                                    Label("Edit", systemImage: "pencil")
+                                }
+                                .tint(Theme.breathe)
+                            }
+                            .listRowBackground(Theme.card)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(.init(top: 4, leading: 16, bottom: 4, trailing: 16))
+                    }
+                } header: {
+                    Text("TODAY")
+                        .font(Theme.monoLabel)
+                        .foregroundStyle(Theme.dim)
+                        .textCase(nil)
+                }
+                .listSectionSeparator(.hidden)
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(Theme.bg)
+    }
+
+    // MARK: - Impact Section
+
+    @State private var impactSort: ImpactSort = .rsa
+
+    private var impactSection: some View {
+        ScrollView {
+            VStack(spacing: 14) {
+
+                // Sort picker
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("RANKED BY")
+                        .font(Theme.monoLabel)
+                        .foregroundStyle(Theme.dim)
+
+                    HStack(spacing: 8) {
+                        ForEach(ImpactSort.allCases, id: \.self) { s in
+                            Button(s.rawValue) { impactSort = s }
+                                .font(Theme.monoLabel)
+                                .foregroundStyle(impactSort == s ? Theme.bg : Theme.accent)
+                                .padding(.vertical, 6)
+                                .padding(.horizontal, 12)
+                                .background(impactSort == s ? Theme.accent : Theme.card)
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .cardStyle()
+
+                let ranked = rankedActivities()
+                if ranked.isEmpty {
+                    Text("Log activities to see their HRV impact.")
+                        .font(Theme.monoBody)
+                        .foregroundStyle(Theme.dim)
+                        .multilineTextAlignment(.center)
+                        .padding(.vertical, 40)
+                } else {
+                    ForEach(ranked, id: \.type) { summary in
+                        ActivityImpactCard(summary: summary, sortBy: impactSort)
+                    }
+                }
+            }
+            .padding(.horizontal)
+            .padding(.top, 8)
+            .padding(.bottom, 20)
+        }
+        .background(Theme.bg)
+    }
+
+    // MARK: - Helpers
+
+    private func hourLabel() -> String {
+        let h = Calendar.current.component(.hour, from: Date())
+        switch h {
+        case 5..<12:  return "MORNING"
+        case 12..<17: return "AFTERNOON"
+        case 17..<21: return "EVENING"
+        default:      return "NIGHT"
+        }
+    }
+
+    private func suggestedActivities() -> [ActivityType] {
+        let hour = Calendar.current.component(.hour, from: Date())
+        let bucket = hour / 3
+
+        // Build frequency map from history
+        var freq: [ActivityType: Int] = [:]
+        for entry in allEntries {
+            guard let type = ActivityType(rawValue: entry.activityType) else { continue }
+            let entryBucket = Calendar.current.component(.hour, from: entry.startedAt) / 3
+            if entryBucket == bucket { freq[type, default: 0] += 1 }
+        }
+
+        if !freq.isEmpty {
+            let sorted = freq.sorted { $0.value > $1.value }.prefix(2).map(\.key)
+            if !sorted.isEmpty { return sorted }
+        }
+
+        // Fallback: hard-coded defaults by hour
+        return ActivityType.allCases
+            .filter { $0 != .custom && $0.defaultHours.contains(hour) }
+            .prefix(2)
+            .asArray()
+            .ifEmpty(fallback: [.meditation, .breathwork])
+    }
+
+    // MARK: - Activity CRUD
+
+    private func beginActivity(type: ActivityType, subtype: String?, customName: String?) {
+        let entry = ActivityLog(
+            activityType:    type.rawValue,
+            activitySubtype: subtype,
+            customName:      customName,
+            startedAt:       .now,
+            isManual:        false
+        )
+        ctx.insert(entry)
+        try? ctx.save()
+    }
+
+    private func endActivity(_ entry: ActivityLog) {
+        entry.endedAt = .now
+        entry.computeHRVWindows(context: ctx)
+        try? ctx.save()
+    }
+
+    private func logPast(type: ActivityType, subtype: String?, customName: String?,
+                         start: Date, end: Date, notes: String?) {
+        let entry = ActivityLog(
+            activityType:    type.rawValue,
+            activitySubtype: subtype,
+            customName:      customName,
+            startedAt:       start,
+            endedAt:         end,
+            isManual:        true
+        )
+        entry.notes = notes
+        entry.computeHRVWindows(context: ctx)
+        ctx.insert(entry)
+        try? ctx.save()
+    }
+
+    private func deleteEntry(_ entry: ActivityLog) {
+        ctx.delete(entry)
+        try? ctx.save()
+    }
+
+    // MARK: - Impact aggregation
+
+    struct ActivityTypeSummary {
+        let type:  String
+        let icon:  String
+        let color: Color
+        let count: Int
+        // during - before: what changed while the activity was happening
+        let duringRSADelta:  Float?
+        let duringVTIDelta:  Float?
+        let duringSDNNDelta: Float?
+        // after - before: net recovery / adaptation effect
+        let afterRSADelta:   Float?
+        let afterVTIDelta:   Float?
+        let afterSDNNDelta:  Float?
+    }
+
+    private func rankedActivities() -> [ActivityTypeSummary] {
+        let completed = allEntries.filter { $0.endedAt != nil }
+        var grouped: [String: [ActivityLog]] = [:]
+        for e in completed { grouped[e.activityType, default: []].append(e) }
+
+        var summaries = grouped.compactMap { (type, entries) -> ActivityTypeSummary? in
+            guard !entries.isEmpty else { return nil }
+
+            func avgDelta(_ a: KeyPath<ActivityLog, Float?>, _ b: KeyPath<ActivityLog, Float?>) -> Float? {
+                let vals = entries.compactMap { e -> Float? in
+                    guard let av = e[keyPath: a], let bv = e[keyPath: b] else { return nil }
+                    return av - bv
+                }
+                guard !vals.isEmpty else { return nil }
+                return vals.reduce(0, +) / Float(vals.count)
+            }
+
+            let typeEnum = ActivityType(rawValue: type) ?? .custom
+            return ActivityTypeSummary(
+                type:  type,
+                icon:  typeEnum.icon,
+                color: typeEnum.color,
+                count: entries.count,
+                // during - before
+                duringRSADelta:  avgDelta(\.duringRSA,  \.beforeRSA),
+                duringVTIDelta:  avgDelta(\.duringVTI,  \.beforeVTI),
+                duringSDNNDelta: avgDelta(\.duringSDNN, \.beforeSDNN),
+                // after - before
+                afterRSADelta:   avgDelta(\.afterRSA,   \.beforeRSA),
+                afterVTIDelta:   avgDelta(\.afterVTI,   \.beforeVTI),
+                afterSDNNDelta:  avgDelta(\.afterSDNN,  \.beforeSDNN)
+            )
+        }
+
+        // Sort by during-delta of selected metric (descending)
+        summaries.sort {
+            let a: Float?
+            let b: Float?
+            switch impactSort {
+            case .rsa:  a = $0.duringRSADelta;  b = $1.duringRSADelta
+            case .vti:  a = $0.duringVTIDelta;  b = $1.duringVTIDelta
+            case .sdnn: a = $0.duringSDNNDelta; b = $1.duringSDNNDelta
+            }
+            return (a ?? -.infinity) > (b ?? -.infinity)
+        }
+        return summaries
+    }
+}
+
+// MARK: - SuggestionChip
+
+private struct SuggestionChip: View {
+    let type:   ActivityType
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: type.icon)
+                    .font(.system(size: 11))
+                Text(type.rawValue)
+                    .font(Theme.monoLabel)
+            }
+            .foregroundStyle(type.color)
+            .padding(.vertical, 5)
+            .padding(.horizontal, 10)
+            .background(type.color.opacity(0.12))
+            .clipShape(Capsule())
+            .overlay(Capsule().strokeBorder(type.color.opacity(0.3), lineWidth: 0.5))
+        }
+    }
+}
+
+// MARK: - ActiveActivityBanner
+
+private struct ActiveActivityBanner: View {
+    let entry:  ActivityLog
+    let tick:   MetricsTick?
+    let onStop: () -> Void
+
+    @State private var elapsed: TimeInterval = 0
+    private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    private var elapsedString: String {
+        let t = Int(elapsed)
+        return String(format: "%02d:%02d", t / 60, t % 60)
+    }
+
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Theme.warn)
+                        .frame(width: 6, height: 6)
+                        .opacity(0.8)
+                    Image(systemName: entry.activityTypeEnum.icon)
+                        .font(.system(size: 13))
+                        .foregroundStyle(entry.activityTypeEnum.color)
+                    Text(entry.displayName.uppercased())
+                        .font(Theme.monoLabel)
+                        .foregroundStyle(Theme.text)
+                }
+                Spacer()
+                Text(elapsedString)
+                    .font(Theme.mono(18))
+                    .foregroundStyle(Theme.warn)
+                    .monospacedDigit()
+            }
+
+            HStack(spacing: 0) {
+                MetricPill(label: "HR",  value: MetricFormat.bpm(tick?.meanBPM),  unit: "bpm")
+                MetricPill(label: "RSA", value: MetricFormat.ms(tick?.rsaMs),     unit: "ms")
+                MetricPill(label: "VTI", value: MetricFormat.ratio(tick?.vti),    unit: "")
+            }
+
+            Button(action: onStop) {
+                HStack(spacing: 6) {
+                    Image(systemName: "stop.fill")
+                    Text("STOP")
+                }
+                .font(Theme.monoBody)
+                .foregroundStyle(Theme.warn)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity)
+                .background(Theme.warn.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(Theme.warn.opacity(0.35), lineWidth: 0.5))
+            }
+        }
+        .cardStyle()
+        .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius)
+            .strokeBorder(Theme.warn.opacity(0.3), lineWidth: 0.5))
+        .onReceive(timer) { _ in
+            elapsed = Date().timeIntervalSince(entry.startedAt)
+        }
+        .onAppear {
+            elapsed = Date().timeIntervalSince(entry.startedAt)
+        }
+    }
+}
+
+private struct MetricPill: View {
+    let label: String
+    let value: String
+    let unit:  String
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(label)
+                .font(Theme.monoLabel)
+                .foregroundStyle(Theme.dim)
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text(value)
+                    .font(Theme.monoBody)
+                    .foregroundStyle(Theme.text)
+                if !unit.isEmpty {
+                    Text(unit)
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundStyle(Theme.dim)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - ActivityLogRow
+
+private struct ActivityLogRow: View {
+    let entry: ActivityLog
+
+    private var timeStr: String {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "HH:mm"
+        return fmt.string(from: entry.startedAt)
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            // Icon
+            ZStack {
+                Circle()
+                    .fill(entry.activityTypeEnum.color.opacity(0.15))
+                    .frame(width: 36, height: 36)
+                Image(systemName: entry.activityTypeEnum.icon)
+                    .font(.system(size: 16))
+                    .foregroundStyle(entry.activityTypeEnum.color)
+            }
+
+            // Name + time
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry.displayName)
+                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Theme.text)
+                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    Text(timeStr)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(Theme.dim)
+                    if entry.isActive {
+                        Text("LIVE").font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.warn)
+                    } else {
+                        Text(entry.durationString).font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.dim)
+                    }
+                }
+            }
+            .frame(width: 96, alignment: .leading)
+
+            // Metric columns
+            LogMetricCell(label: "HR",   value: entry.duringHR,   base: entry.beforeHR,   fmt: "%.0f", isRate: true)
+            LogMetricCell(label: "RSA",  value: entry.duringRSA,  base: entry.beforeRSA,  fmt: "%.0f", isRate: false)
+            LogMetricCell(label: "VTI",  value: entry.duringVTI,  base: entry.beforeVTI,  fmt: "%.2f", isRate: false)
+            LogMetricCell(label: "SDNN", value: entry.duringSDNN, base: entry.beforeSDNN, fmt: "%.0f", isRate: false)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.dim.opacity(0.4))
+        }
+        .padding(.vertical, 7)
+    }
+}
+
+private struct LogMetricCell: View {
+    let label:  String
+    let value:  Float?
+    let base:   Float?
+    let fmt:    String
+    let isRate: Bool
+
+    private var delta: Float? {
+        guard let v = value, let b = base else { return nil }
+        return v - b
+    }
+
+    private var deltaColor: Color {
+        guard let d = delta else { return Theme.dim }
+        return isRate ? Theme.dim : (d >= 0 ? Theme.accent : Theme.warn)
+    }
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(label)
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundStyle(Theme.dim)
+            Text(value.map { String(format: fmt, $0) } ?? "—")
+                .font(.system(size: 13, design: .monospaced))
+                .foregroundStyle(Theme.text)
+            Group {
+                if let d = delta {
+                    Text("\(d >= 0 ? "+" : "")\(String(format: fmt, d))")
+                        .foregroundStyle(deltaColor)
+                } else {
+                    Text("—").foregroundStyle(Theme.dim.opacity(0.4))
+                }
+            }
+            .font(.system(size: 10, design: .monospaced))
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - DeltaChip
+
+private struct DeltaChip: View {
+    let value: Float
+    let unit:  String
+
+    private var color: Color { value >= 0 ? Theme.accent : Theme.warn }
+    private var sign:  String { value >= 0 ? "+" : "" }
+
+    var body: some View {
+        Text("\(sign)\(Int(value.rounded())) \(unit)")
+            .font(Theme.monoLabel)
+            .foregroundStyle(color)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(color.opacity(0.12))
+            .clipShape(Capsule())
+    }
+}
+
+// MARK: - ActivityImpactCard
+
+private struct ActivityImpactCard: View {
+    let summary: ActionsView.ActivityTypeSummary
+    let sortBy:  ImpactSort
+
+    private var duringDelta: Float? {
+        switch sortBy {
+        case .rsa:  return summary.duringRSADelta
+        case .vti:  return summary.duringVTIDelta
+        case .sdnn: return summary.duringSDNNDelta
+        }
+    }
+
+    private var afterDelta: Float? {
+        switch sortBy {
+        case .rsa:  return summary.afterRSADelta
+        case .vti:  return summary.afterVTIDelta
+        case .sdnn: return summary.afterSDNNDelta
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // Header
+            HStack {
+                HStack(spacing: 8) {
+                    ZStack {
+                        Circle()
+                            .fill(summary.color.opacity(0.15))
+                            .frame(width: 30, height: 30)
+                        Image(systemName: summary.icon)
+                            .font(.system(size: 13))
+                            .foregroundStyle(summary.color)
+                    }
+                    Text(summary.type)
+                        .font(Theme.mono(13))
+                        .foregroundStyle(Theme.text)
+                }
+                Spacer()
+                Text("\(summary.count) log\(summary.count == 1 ? "" : "s")")
+                    .font(Theme.monoLabel)
+                    .foregroundStyle(Theme.dim)
+            }
+
+            // Primary: during delta (big)
+            if let d = duringDelta {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    let sign = d >= 0 ? "+" : ""
+                    Text("\(sign)\(String(format: "%.1f", d))")
+                        .font(Theme.mono(28))
+                        .foregroundStyle(d >= 0 ? Theme.accent : Theme.warn)
+                    if !sortBy.unit.isEmpty {
+                        Text(sortBy.unit)
+                            .font(Theme.monoLabel)
+                            .foregroundStyle(Theme.dim)
+                    }
+                    Text("\(sortBy.rawValue) during")
+                        .font(Theme.monoLabel)
+                        .foregroundStyle(Theme.dim)
+                        .padding(.leading, 4)
+                }
+            } else {
+                Text("Not enough data")
+                    .font(Theme.monoLabel)
+                    .foregroundStyle(Theme.dim)
+            }
+
+            // Supplemental: during vs after for all three metrics
+            VStack(spacing: 0) {
+                HStack {
+                    Text("")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text("DURING")
+                        .frame(width: 70, alignment: .center)
+                    Text("AFTER")
+                        .frame(width: 70, alignment: .center)
+                }
+                .font(Theme.monoLabel)
+                .foregroundStyle(Theme.dim.opacity(0.6))
+                .padding(.bottom, 4)
+
+                MiniDeltaRow(label: "RSA",  unit: "ms",
+                             during: summary.duringRSADelta,  after: summary.afterRSADelta)
+                MiniDeltaRow(label: "VTI",  unit: "",
+                             during: summary.duringVTIDelta,  after: summary.afterVTIDelta)
+                MiniDeltaRow(label: "SDNN", unit: "ms",
+                             during: summary.duringSDNNDelta, after: summary.afterSDNNDelta)
+            }
+        }
+        .cardStyle()
+    }
+}
+
+private struct MiniDeltaRow: View {
+    let label:  String
+    let unit:   String
+    let during: Float?
+    let after:  Float?
+
+    var body: some View {
+        HStack {
+            Text(label)
+                .font(Theme.monoLabel)
+                .foregroundStyle(Theme.dim)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            deltaText(during)
+                .frame(width: 70, alignment: .center)
+            deltaText(after)
+                .frame(width: 70, alignment: .center)
+        }
+        .padding(.vertical, 3)
+    }
+
+    @ViewBuilder
+    private func deltaText(_ v: Float?) -> some View {
+        if let v {
+            let sign = v >= 0 ? "+" : ""
+            Text("\(sign)\(String(format: "%.1f", v))\(unit.isEmpty ? "" : " \(unit)")")
+                .font(Theme.monoLabel)
+                .foregroundStyle(v >= 0 ? Theme.accent : Theme.warn)
+        } else {
+            Text("—")
+                .font(Theme.monoLabel)
+                .foregroundStyle(Theme.dim)
+        }
+    }
+}
+
+// MARK: - ActivityDetailView
+
+struct ActivityDetailView: View {
+    @Environment(\.modelContext) var ctx
+    @Environment(\.dismiss) var dismiss
+    @Bindable var entry: ActivityLog
+
+    private var timeStr: String {
+        let fmt = DateFormatter()
+        fmt.dateStyle = .medium
+        fmt.timeStyle = .short
+        return fmt.string(from: entry.startedAt)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 16) {
+
+                    // Header
+                    HStack(spacing: 10) {
+                            ZStack {
+                                Circle()
+                                    .fill(entry.activityTypeEnum.color.opacity(0.15))
+                                    .frame(width: 44, height: 44)
+                                Image(systemName: entry.activityTypeEnum.icon)
+                                    .font(.system(size: 20))
+                                    .foregroundStyle(entry.activityTypeEnum.color)
+                            }
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(entry.displayName)
+                                    .font(Theme.mono(16))
+                                    .foregroundStyle(Theme.text)
+                                Text(timeStr + " · " + entry.durationString)
+                                    .font(Theme.monoLabel)
+                                    .foregroundStyle(Theme.dim)
+                            }
+                            Spacer()
+                        }
+
+                        // Metric table: BEFORE / DURING / AFTER
+                        VStack(spacing: 0) {
+                            MetricTableHeader()
+                            Divider().background(Theme.border)
+                            MetricRow(label: "HR",   unit: "bpm",
+                                      before: entry.beforeHR,    during: entry.duringHR,    after: entry.afterHR,    fmt: { MetricFormat.bpm($0) })
+                            MetricRow(label: "SDNN", unit: "ms",
+                                      before: entry.beforeSDNN,  during: entry.duringSDNN,  after: entry.afterSDNN,  fmt: { MetricFormat.ms($0) })
+                            MetricRow(label: "RSA",  unit: "ms",
+                                      before: entry.beforeRSA,   during: entry.duringRSA,   after: entry.afterRSA,   fmt: { MetricFormat.ms($0) })
+                            MetricRow(label: "VTI",  unit: "",
+                                      before: entry.beforeVTI,   during: entry.duringVTI,   after: entry.afterVTI,   fmt: { MetricFormat.ratio($0) })
+                            MetricRow(label: "LF/HF", unit: "",
+                                      before: entry.beforeLFHF,  during: entry.duringLFHF,  after: entry.afterLFHF,  fmt: { MetricFormat.ratio($0) })
+                        }
+                        .cardStyle()
+
+                        // Notes
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("NOTES")
+                                .font(Theme.monoLabel)
+                                .foregroundStyle(Theme.dim)
+                            TextField("Add notes…", text: Binding(
+                                get: { entry.notes ?? "" },
+                                set: { entry.notes = $0.isEmpty ? nil : $0 }
+                            ), axis: .vertical)
+                            .font(Theme.monoBody)
+                            .foregroundStyle(Theme.text)
+                            .lineLimit(3...6)
+                        }
+                        .cardStyle()
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 16)
+                    .padding(.bottom, 30)
+                }
+            }
+            .navigationTitle(entry.displayName.uppercased())
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Theme.bg, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        try? ctx.save()
+                        dismiss()
+                    }
+                    .font(Theme.monoLabel)
+                    .foregroundStyle(Theme.accent)
+                }
+            }
+        }
+    }
+
+private struct MetricTableHeader: View {
+    var body: some View {
+        HStack {
+            Text("METRIC")
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text("BEFORE")
+                .frame(width: 60, alignment: .center)
+            Text("DURING")
+                .frame(width: 60, alignment: .center)
+            Text("AFTER")
+                .frame(width: 60, alignment: .center)
+            Text("Δ")
+                .frame(width: 50, alignment: .trailing)
+        }
+        .font(Theme.monoLabel)
+        .foregroundStyle(Theme.dim)
+        .padding(.vertical, 6)
+    }
+}
+
+private struct MetricRow: View {
+    let label:  String
+    let unit:   String
+    let before: Float?
+    let during: Float?
+    let after:  Float?
+    let fmt:    (Float?) -> String
+
+    private var delta: Float? {
+        guard let a = after, let b = before else { return nil }
+        return a - b
+    }
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(label)
+                    .font(Theme.monoBody)
+                    .foregroundStyle(Theme.text)
+                if !unit.isEmpty {
+                    Text(unit)
+                        .font(Theme.monoLabel)
+                        .foregroundStyle(Theme.dim)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(fmt(before))
+                .frame(width: 60, alignment: .center)
+            Text(fmt(during))
+                .frame(width: 60, alignment: .center)
+            Text(fmt(after))
+                .frame(width: 60, alignment: .center)
+
+            Group {
+                if let d = delta {
+                    let sign = d >= 0 ? "+" : ""
+                    Text("\(sign)\(String(format: "%.1f", d))")
+                        .foregroundStyle(d >= 0 ? Theme.accent : Theme.warn)
+                } else {
+                    Text("—").foregroundStyle(Theme.dim)
+                }
+            }
+            .font(Theme.monoLabel)
+            .frame(width: 50, alignment: .trailing)
+        }
+        .font(Theme.monoLabel)
+        .foregroundStyle(Theme.text)
+        .padding(.vertical, 8)
+        .overlay(alignment: .bottom) {
+            Theme.border.frame(height: 0.5).opacity(0.6)
+        }
+    }
+}
+
+// MARK: - StartActivitySheet
+
+private struct StartActivitySheet: View {
+    var preselected: ActivityType? = nil
+    let onStart: (ActivityType, String?, String?) -> Void
+    @Environment(\.dismiss) var dismiss
+    @State private var selected:         ActivityType
+    @State private var selectedSubtype:  String?      = nil
+    @State private var customName:       String       = ""
+    @State private var showCustom:       Bool         = false
+
+    init(preselected: ActivityType? = nil, onStart: @escaping (ActivityType, String?, String?) -> Void) {
+        self.preselected = preselected
+        self.onStart     = onStart
+        _selected  = State(initialValue: preselected ?? .meditation)
+        _showCustom = State(initialValue: preselected == .custom)
+    }
+
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
+
+    private var startLabel: String {
+        if let sub = selectedSubtype { return sub.uppercased() }
+        if selected == .custom { return customName.isEmpty ? "CUSTOM" : customName.uppercased() }
+        return selected.rawValue.uppercased()
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 16) {
+                    Text("SELECT ACTIVITY")
+                        .font(Theme.monoLabel)
+                        .foregroundStyle(Theme.dim)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal)
+
+                    LazyVGrid(columns: columns, spacing: 10) {
+                        ForEach(ActivityType.allCases, id: \.self) { type in
+                            ActivityTypeCell(type: type, isSelected: selected == type) {
+                                selected = type
+                                selectedSubtype = nil
+                                showCustom = (type == .custom)
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+
+                    if !selected.subtypes.isEmpty {
+                        SubtypePicker(type: selected, selected: $selectedSubtype)
+                            .padding(.horizontal)
+                    }
+
+                    if showCustom {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("CUSTOM NAME")
+                                .font(Theme.monoLabel)
+                                .foregroundStyle(Theme.dim)
+                            TextField("e.g. Ice bath", text: $customName)
+                                .font(Theme.monoBody)
+                                .foregroundStyle(Theme.text)
+                                .padding(10)
+                                .background(Theme.card)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .overlay(RoundedRectangle(cornerRadius: 8)
+                                    .strokeBorder(Theme.border, lineWidth: 0.5))
+                        }
+                        .padding(.horizontal)
+                    }
+
+                    Button {
+                        let name = selected == .custom && !customName.isEmpty ? customName : nil
+                        onStart(selected, selectedSubtype, name)
+                        dismiss()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "play.fill")
+                            Text("START \(startLabel)")
+                        }
+                        .font(Theme.monoBody)
+                        .foregroundStyle(Theme.bg)
+                        .padding(.vertical, 14)
+                        .frame(maxWidth: .infinity)
+                        .background(Theme.accent)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                    .padding(.horizontal)
+                    .disabled(selected == .custom && customName.isEmpty)
+                }
+                .padding(.top, 16)
+                .padding(.bottom, 30)
+            }
+            .background(Theme.bg)
+            .navigationTitle("START ACTIVITY")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Theme.bg, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }
+                        .font(Theme.monoLabel)
+                        .foregroundStyle(Theme.dim)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - LogPastSheet
+
+private struct LogPastSheet: View {
+    let onSave: (ActivityType, String?, String?, Date, Date, String?) -> Void
+    @Environment(\.dismiss) var dismiss
+    @State private var selected:        ActivityType = .meditation
+    @State private var selectedSubtype: String?      = nil
+    @State private var customName:      String       = ""
+    @State private var showCustom:      Bool         = false
+    @State private var startDate:       Date         = .now
+    @State private var durationMins:    Double       = 30
+    @State private var notes:           String       = ""
+
+    private var endDate: Date { startDate.addingTimeInterval(durationMins * 60) }
+
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 16) {
+
+                    Text("SELECT ACTIVITY")
+                        .font(Theme.monoLabel)
+                        .foregroundStyle(Theme.dim)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal)
+
+                    LazyVGrid(columns: columns, spacing: 10) {
+                        ForEach(ActivityType.allCases, id: \.self) { type in
+                            ActivityTypeCell(type: type, isSelected: selected == type) {
+                                selected = type
+                                selectedSubtype = nil
+                                showCustom = (type == .custom)
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+
+                    if !selected.subtypes.isEmpty {
+                        SubtypePicker(type: selected, selected: $selectedSubtype)
+                            .padding(.horizontal)
+                    }
+
+                    if showCustom {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("CUSTOM NAME")
+                                .font(Theme.monoLabel)
+                                .foregroundStyle(Theme.dim)
+                            TextField("e.g. Ice bath", text: $customName)
+                                .font(Theme.monoBody)
+                                .foregroundStyle(Theme.text)
+                                .padding(10)
+                                .background(Theme.card)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .overlay(RoundedRectangle(cornerRadius: 8)
+                                    .strokeBorder(Theme.border, lineWidth: 0.5))
+                        }
+                        .padding(.horizontal)
+                    }
+
+                    VStack(spacing: 12) {
+                        DatePicker("START TIME", selection: $startDate, displayedComponents: [.date, .hourAndMinute])
+                            .font(Theme.monoLabel)
+                            .foregroundStyle(Theme.dim)
+                            .tint(Theme.accent)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("DURATION")
+                                    .font(Theme.monoLabel)
+                                    .foregroundStyle(Theme.dim)
+                                Spacer()
+                                Text("\(Int(durationMins)) min")
+                                    .font(Theme.monoBody)
+                                    .foregroundStyle(Theme.accent)
+                            }
+                            Slider(value: $durationMins, in: 1...180, step: 1)
+                                .tint(Theme.accent)
+                        }
+                    }
+                    .cardStyle()
+                    .padding(.horizontal)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("NOTES (OPTIONAL)")
+                            .font(Theme.monoLabel)
+                            .foregroundStyle(Theme.dim)
+                        TextField("Notes…", text: $notes, axis: .vertical)
+                            .font(Theme.monoBody)
+                            .foregroundStyle(Theme.text)
+                            .lineLimit(2...4)
+                            .padding(10)
+                            .background(Theme.card)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .overlay(RoundedRectangle(cornerRadius: 8)
+                                .strokeBorder(Theme.border, lineWidth: 0.5))
+                    }
+                    .padding(.horizontal)
+
+                    Button {
+                        let name = selected == .custom && !customName.isEmpty ? customName : nil
+                        let noteVal = notes.isEmpty ? nil : notes
+                        onSave(selected, selectedSubtype, name, startDate, endDate, noteVal)
+                        dismiss()
+                    } label: {
+                        Text("SAVE")
+                            .font(Theme.monoBody)
+                            .foregroundStyle(Theme.bg)
+                            .padding(.vertical, 14)
+                            .frame(maxWidth: .infinity)
+                            .background(Theme.accent)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                    .padding(.horizontal)
+                    .disabled(selected == .custom && customName.isEmpty)
+                }
+                .padding(.top, 16)
+                .padding(.bottom, 30)
+            }
+            .background(Theme.bg)
+            .navigationTitle("LOG PAST ACTIVITY")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Theme.bg, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }
+                        .font(Theme.monoLabel)
+                        .foregroundStyle(Theme.dim)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - SubtypePicker
+
+private struct SubtypePicker: View {
+    let type:     ActivityType
+    @Binding var selected: String?
+
+    private let cols = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("SUBTYPE")
+                    .font(Theme.monoLabel)
+                    .foregroundStyle(Theme.dim)
+                Spacer()
+                if selected != nil {
+                    Button("clear") { selected = nil }
+                        .font(Theme.monoLabel)
+                        .foregroundStyle(Theme.dim.opacity(0.5))
+                }
+            }
+
+            LazyVGrid(columns: cols, spacing: 8) {
+                ForEach(type.subtypes, id: \.self) { sub in
+                    Button {
+                        selected = selected == sub ? nil : sub
+                    } label: {
+                        Text(sub)
+                            .font(Theme.monoLabel)
+                            .foregroundStyle(selected == sub ? Theme.bg : type.color)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity)
+                            .background(selected == sub ? type.color : type.color.opacity(0.1))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .overlay(RoundedRectangle(cornerRadius: 8)
+                                .strokeBorder(selected == sub ? .clear : type.color.opacity(0.25), lineWidth: 0.5))
+                    }
+                }
+            }
+        }
+        .cardStyle()
+    }
+}
+
+// MARK: - ActivityTypeCell
+
+private struct ActivityTypeCell: View {
+    let type:       ActivityType
+    let isSelected: Bool
+    let action:     () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                ZStack {
+                    Circle()
+                        .fill(isSelected ? type.color : type.color.opacity(0.12))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: type.icon)
+                        .font(.system(size: 18))
+                        .foregroundStyle(isSelected ? Theme.bg : type.color)
+                }
+                Text(type == .custom ? "Custom" : type.rawValue)
+                    .font(Theme.monoLabel)
+                    .foregroundStyle(isSelected ? Theme.text : Theme.dim)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity)
+            .background(isSelected ? type.color.opacity(0.15) : Theme.card)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(isSelected ? type.color.opacity(0.5) : Theme.border, lineWidth: 0.5))
+        }
+    }
+}
+
+// MARK: - EditActivitySheet
+
+private struct EditActivitySheet: View {
+    @Bindable var entry: ActivityLog
+    let onSave: (ModelContext) -> Void
+
+    @Environment(\.modelContext) var ctx
+    @Environment(\.dismiss) var dismiss
+
+    @State private var selected:        ActivityType
+    @State private var selectedSubtype: String?
+    @State private var customName:      String
+    @State private var showCustom:      Bool
+    @State private var startDate:       Date
+    @State private var durationMins:    Double
+    @State private var notes:           String
+
+    private var endDate: Date { startDate.addingTimeInterval(durationMins * 60) }
+
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
+
+    init(entry: ActivityLog, onSave: @escaping (ModelContext) -> Void) {
+        self.entry  = entry
+        self.onSave = onSave
+        let typeEnum = ActivityType(rawValue: entry.activityType) ?? .custom
+        _selected        = State(initialValue: typeEnum)
+        _selectedSubtype = State(initialValue: entry.activitySubtype)
+        _customName      = State(initialValue: entry.customName ?? "")
+        _showCustom      = State(initialValue: typeEnum == .custom)
+        _startDate       = State(initialValue: entry.startedAt)
+        let dur = entry.endedAt.map { $0.timeIntervalSince(entry.startedAt) / 60 } ?? 30
+        _durationMins    = State(initialValue: max(1, min(180, dur)))
+        _notes           = State(initialValue: entry.notes ?? "")
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 16) {
+
+                    Text("SELECT ACTIVITY")
+                        .font(Theme.monoLabel)
+                        .foregroundStyle(Theme.dim)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal)
+
+                    LazyVGrid(columns: columns, spacing: 10) {
+                        ForEach(ActivityType.allCases, id: \.self) { type in
+                            ActivityTypeCell(type: type, isSelected: selected == type) {
+                                selected = type
+                                selectedSubtype = nil
+                                showCustom = (type == .custom)
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+
+                    if !selected.subtypes.isEmpty {
+                        SubtypePicker(type: selected, selected: $selectedSubtype)
+                            .padding(.horizontal)
+                    }
+
+                    if showCustom {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("CUSTOM NAME")
+                                .font(Theme.monoLabel)
+                                .foregroundStyle(Theme.dim)
+                            TextField("e.g. Ice bath", text: $customName)
+                                .font(Theme.monoBody)
+                                .foregroundStyle(Theme.text)
+                                .padding(10)
+                                .background(Theme.card)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .overlay(RoundedRectangle(cornerRadius: 8)
+                                    .strokeBorder(Theme.border, lineWidth: 0.5))
+                        }
+                        .padding(.horizontal)
+                    }
+
+                    VStack(spacing: 12) {
+                        DatePicker("START TIME", selection: $startDate, displayedComponents: [.date, .hourAndMinute])
+                            .font(Theme.monoLabel)
+                            .foregroundStyle(Theme.dim)
+                            .tint(Theme.accent)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("DURATION")
+                                    .font(Theme.monoLabel)
+                                    .foregroundStyle(Theme.dim)
+                                Spacer()
+                                Text("\(Int(durationMins)) min")
+                                    .font(Theme.monoBody)
+                                    .foregroundStyle(Theme.accent)
+                            }
+                            Slider(value: $durationMins, in: 1...180, step: 1)
+                                .tint(Theme.accent)
+                        }
+                    }
+                    .cardStyle()
+                    .padding(.horizontal)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("NOTES (OPTIONAL)")
+                            .font(Theme.monoLabel)
+                            .foregroundStyle(Theme.dim)
+                        TextField("Notes…", text: $notes, axis: .vertical)
+                            .font(Theme.monoBody)
+                            .foregroundStyle(Theme.text)
+                            .lineLimit(2...4)
+                            .padding(10)
+                            .background(Theme.card)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .overlay(RoundedRectangle(cornerRadius: 8)
+                                .strokeBorder(Theme.border, lineWidth: 0.5))
+                    }
+                    .padding(.horizontal)
+
+                    Button {
+                        entry.activityType    = selected.rawValue
+                        entry.activitySubtype = selectedSubtype
+                        entry.customName      = (selected == .custom && !customName.isEmpty) ? customName : nil
+                        entry.startedAt       = startDate
+                        entry.endedAt         = endDate
+                        entry.isManual        = true
+                        entry.notes           = notes.isEmpty ? nil : notes
+                        onSave(ctx)
+                        dismiss()
+                    } label: {
+                        Text("SAVE CHANGES")
+                            .font(Theme.monoBody)
+                            .foregroundStyle(Theme.bg)
+                            .padding(.vertical, 14)
+                            .frame(maxWidth: .infinity)
+                            .background(Theme.accent)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                    .padding(.horizontal)
+                    .disabled(selected == .custom && customName.isEmpty)
+                }
+                .padding(.top, 16)
+                .padding(.bottom, 30)
+            }
+            .background(Theme.bg)
+            .navigationTitle("EDIT ACTIVITY")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Theme.bg, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }
+                        .font(Theme.monoLabel)
+                        .foregroundStyle(Theme.dim)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Collection helpers
+
+private extension Array {
+    func asArray() -> [Element] { Array(self) }
+    func ifEmpty(fallback: [Element]) -> [Element] { isEmpty ? fallback : self }
+}
+
+private extension ArraySlice {
+    func asArray() -> [Element] { Array(self) }
+}

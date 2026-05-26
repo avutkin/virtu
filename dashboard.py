@@ -66,7 +66,7 @@ _RF_COH_STABLE_N       = 5      # consecutive ticks needed for convergence
 _RF_COH_STABLE_THRESH  = 0.025  # coherence std threshold → "stable"
 _RF_EXPLORATION        = 0.25   # UCB exploration bonus for untested candidates
 _RF_REFINE_STEP        = 0.1    # BPM step for gradient refinement phase
-_RF_HISTORY_MIN        = 3      # min past sessions before history-based narrowing
+_RF_HISTORY_MIN        = 1      # min past sessions before history-based narrowing
 _RF_IE_RATIO    = 0.40  # default inhale fraction (4:6 pattern)
 
 _RF_PRESETS = [
@@ -866,7 +866,13 @@ def _start_ble(buf: DataBuffer) -> None:
                     _sensor_status["state"] = (
                         f"connecting to {addr[:17]}…" if addr else "searching…"
                     )
-                    await sensor.connect(timeout=20.0, device_address=addr)
+                    # Hard 25-second timeout on connect — prevents indefinite hang
+                    # when the H10 is found via scan but GATT handshake stalls
+                    # (common when the belt is also paired to a phone).
+                    await asyncio.wait_for(
+                        sensor.connect(timeout=20.0, device_address=addr),
+                        timeout=25.0,
+                    )
                     _sensor_status.update(state="connected",
                                           device=sensor._device_label,
                                           since=time.time())
@@ -2339,6 +2345,8 @@ app.layout = html.Div([
     dcc.Store(id="rf-candidates",    data=_RF_CANDIDATES),
     dcc.Store(id="rf-step-coh-buf",  data={}),
     dcc.Store(id="rf-step-start",    data=None),
+    dcc.Store(id="rf-refined",       data=False),
+    dcc.Store(id="live-rr-ms",       data=857),
     dcc.Interval(id="tick-pacer",    interval=100, n_intervals=0, disabled=True),
 
     # ── Navigation bar ────────────────────────────────────────────────────────
@@ -2551,7 +2559,7 @@ app.layout = html.Div([
         ], style={"display": "grid", "gridTemplateColumns": "repeat(7, 1fr)",
                   "gap": "10px", "marginBottom": "10px"}),
 
-        # Row 2 — ECG + RR intervals (primary cardiac signals)
+        # Row 2 — ECG · ACC · RR intervals (raw waveforms)
         html.Div([
             html.Div([
                 html.Div([_info_btn("ecg")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
@@ -2559,40 +2567,48 @@ app.layout = html.Div([
                           config={"displayModeBar": False}),
             ], style=_CARD),
             html.Div([
+                html.Div([_info_btn("acc")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="acc-graph", style={"height": "200px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
+            html.Div([
                 html.Div([_info_btn("rr")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
                 dcc.Graph(id="rr-graph", style={"height": "200px"},
                           config={"displayModeBar": False}),
             ], style=_CARD),
-        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr",
+        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 1fr",
                   "gap": "10px", "marginBottom": "10px"}),
 
-        # Row 3 — Heart Rate live trend (full width)
+        # Row 3 — Heart Rate · SDNN  (primary HRV trends)
         html.Div([
             html.Div([
-                dcc.Store(id="hr-range-store", data="60"),
-                html.Button("60 m", id="hr-btn-60",   n_clicks=0,
-                            style=_rbtn_style(True,  C_ECG)),
-                html.Button("2 h",  id="hr-btn-120",  n_clicks=0,
-                            style=_rbtn_style(False, C_ECG)),
-                html.Button("24 h", id="hr-btn-1440", n_clicks=0,
-                            style=_rbtn_style(False, C_ECG)),
-                _info_btn("hr"),
-            ], style={"display": "flex", "gap": "4px",
-                      "justifyContent": "flex-end", "marginBottom": "4px"}),
-            dcc.Graph(id="hr-live-graph", style={"height": "200px"},
-                      config={"displayModeBar": False}),
-        ], style={**_CARD, "marginBottom": "10px"}),
-
-        # Row 4 — SDNN live trend (full width)
-        html.Div([
-            html.Div(_range_btn_group("sdnn-range-store",
-                                     "sdnn-btn-60", "sdnn-btn-120", "sdnn-btn-720",
-                                     C_SDNN, metric="sdnn"),
-                     style={"display": "flex", "justifyContent": "flex-end",
-                            "marginBottom": "4px"}),
-            dcc.Graph(id="sdnn-live-graph", style={"height": "200px"},
-                      config={"displayModeBar": False}),
-        ], style={**_CARD, "marginBottom": "10px"}),
+                html.Div([
+                    html.Span("♥", id="live-heart-pulse",
+                              style={"fontSize": "22px", "color": C_ECG}),
+                    dcc.Store(id="hr-range-store", data="60"),
+                    html.Button("60 m", id="hr-btn-60",   n_clicks=0,
+                                style=_rbtn_style(True,  C_ECG)),
+                    html.Button("2 h",  id="hr-btn-120",  n_clicks=0,
+                                style=_rbtn_style(False, C_ECG)),
+                    html.Button("24 h", id="hr-btn-1440", n_clicks=0,
+                                style=_rbtn_style(False, C_ECG)),
+                    _info_btn("hr"),
+                ], style={"display": "flex", "alignItems": "center", "gap": "4px",
+                          "justifyContent": "flex-end", "marginBottom": "4px"}),
+                dcc.Graph(id="hr-live-graph", style={"height": "200px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
+            html.Div([
+                html.Div(_range_btn_group("sdnn-range-store",
+                                         "sdnn-btn-60", "sdnn-btn-120", "sdnn-btn-720",
+                                         C_SDNN, metric="sdnn"),
+                         style={"display": "flex", "justifyContent": "flex-end",
+                                "marginBottom": "4px"}),
+                dcc.Graph(id="sdnn-live-graph", style={"height": "200px"},
+                          config={"displayModeBar": False}),
+            ], style=_CARD),
+        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr",
+                  "gap": "10px", "marginBottom": "10px"}),
 
         # Row 5 — RMSSD · pNN50 · VTI  (HRV time-domain + vagal tone)
         html.Div([
@@ -2705,13 +2721,8 @@ app.layout = html.Div([
                       config={"displayModeBar": False}),
         ], style={**_CARD, "marginBottom": "10px"}),
 
-        # Row 10 — ACC · VLF · ULF · Extended Metrics  (supporting signals)
+        # Row 10 — VLF · ULF · Extended Metrics  (supporting signals)
         html.Div([
-            html.Div([
-                html.Div([_info_btn("acc")], style={"display": "flex", "justifyContent": "flex-end", "marginBottom": "4px"}),
-                dcc.Graph(id="acc-graph", style={"height": "200px"},
-                          config={"displayModeBar": False}),
-            ], style=_CARD),
             html.Div([
                 html.Div(_range_btn_group("vlf-range-store",
                                          "vlf-btn-60", "vlf-btn-120", "vlf-btn-720",
@@ -2740,7 +2751,7 @@ app.layout = html.Div([
                                 "fontSize": "12px", "color": C_TEXT, "lineHeight": "1.8",
                                 "whiteSpace": "pre-wrap", "margin": "0"}),
             ], style=_CARD),
-        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 1fr 1fr",
+        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 1fr",
                   "gap": "10px"}),
 
     ], id="content-live"),
@@ -3529,6 +3540,7 @@ def switch_page(_nl, _nt, _nw, _nlog, _nr):
     Output("rf-step-start",      "data",  allow_duplicate=True),
     Output("rf-step-coh-buf",    "data",  allow_duplicate=True),
     Output("rf-prescreen-info",  "children", allow_duplicate=True),
+    Output("rf-refined",         "data",     allow_duplicate=True),
     Input("rf-btn-play",      "n_clicks"),
     Input("rf-btn-pause",     "n_clicks"),
     Input("rf-btn-stop",      "n_clicks"),
@@ -3553,18 +3565,18 @@ def rf_control(_play, _pause, _stop, _diag, _manual, cur_state, cur_scores, cur_
         stop_pacer = {"inhale_s": 4.0, "exhale_s": 6.0, "start_ts": 0, "is_running": False}
         return ("idle", None, 0, {}, True,
                 {"display": "none"}, {"display": "none"}, nu, stop_pacer,
-                _RF_CANDIDATES, None, {}, "")
+                _RF_CANDIDATES, None, {}, "", False)
     if trig == "rf-btn-pause":
         pause_pacer = {"inhale_s": 4.0, "exhale_s": 6.0, "start_ts": 0, "is_running": False}
-        return (nu, nu, nu, nu, True, nu, nu, nu, pause_pacer, nu, nu, nu, nu)
+        return (nu, nu, nu, nu, True, nu, nu, nu, pause_pacer, nu, nu, nu, nu, nu)
     if trig == "rf-btn-play":
         if cur_state in ("idle", "paused"):
             bpm = cur_bpm or 6.0
-            return ("manual", nu, nu, nu, False, nu, nu, bpm, _pacer(bpm), nu, nu, nu, nu)
+            return ("manual", nu, nu, nu, False, nu, nu, bpm, _pacer(bpm), nu, nu, nu, nu, nu)
     if trig == "rf-btn-manual":
         bpm = cur_bpm or 6.0
         return ("manual", time.time(), nu, nu, False,
-                {"display": "none"}, {"display": "none"}, bpm, _pacer(bpm), nu, nu, nu, nu)
+                {"display": "none"}, {"display": "none"}, bpm, _pacer(bpm), nu, nu, nu, nu, nu)
     if trig == "rf-btn-diagnosis":
         # HRV spectral pre-screening to warm-start search
         try:
@@ -3574,11 +3586,16 @@ def rf_control(_play, _pause, _stop, _diag, _manual, cur_state, cur_scores, cur_
         except Exception:
             prescreen_bpm = None
 
-        # History-informed candidate narrowing
+        # History-informed candidate narrowing + warm-start ordering
+        hist_best_bpm = None
         try:
             with _open_db() as _c:
                 past = _load_resonance_sessions(_c, days=90)
             candidates = _rf_personalised_candidates(past)
+            # Pick the most recent session's best frequency as warm-start anchor
+            recent = [s for s in past if s.get("best_freq_bpm")]
+            if recent:
+                hist_best_bpm = float(recent[0]["best_freq_bpm"])  # already sorted DESC
         except Exception:
             candidates = list(_RF_CANDIDATES)
 
@@ -3590,21 +3607,28 @@ def rf_control(_play, _pause, _stop, _diag, _manual, cur_state, cur_scores, cur_
                 if abs(c - mu) <= 1.5
             } or candidates)
 
-        # UCB picks first step (all untested → first candidate)
-        first_bpm = _rf_ucb_next({}, candidates)
+        # Sort candidates so the historically best BPM is tested first,
+        # then outward by distance — gives fastest warm-start convergence.
+        anchor = hist_best_bpm or prescreen_bpm
+        if anchor is not None:
+            candidates = sorted(candidates, key=lambda c: abs(c - anchor))
 
-        prescreen_msg = (
-            f"HRV pre-screen: {prescreen_bpm} BPM peak → "
-            f"testing {len(candidates)} candidates"
-            if prescreen_bpm else
-            f"HRV pre-screen: not enough data → testing {len(candidates)} candidates"
-        )
+        first_bpm = candidates[0] if candidates else 6.0
+
+        # Build informative prescreen message
+        parts = []
+        if prescreen_bpm is not None:
+            parts.append(f"HRV pre-screen: {prescreen_bpm} BPM peak")
+        if hist_best_bpm is not None:
+            parts.append(f"last best: {hist_best_bpm} BPM")
+        parts.append(f"starting at {first_bpm} BPM · {len(candidates)} candidates")
+        prescreen_msg = "  ·  ".join(parts)
 
         return ("scanning", time.time(), 0, {}, False,
                 {**_CARD, "marginBottom": "10px"}, {"display": "none"},
                 first_bpm, _pacer(first_bpm),
-                candidates, time.time(), {}, prescreen_msg)
-    return (nu,) * 13
+                candidates, time.time(), {}, prescreen_msg, False)
+    return (nu,) * 14
 
 
 # 6B — BPM slider + preset chips → stores
@@ -3683,10 +3707,7 @@ app.clientside_callback(
         var rings = ringPx(pacer_state);
         var ps    = pacer_state || {};
 
-        /* Push current params to the 60 fps rAF loop in rf-pacer-anim.js.
-           The loop reads this object directly and drives all visual + audio
-           updates — completely outside React so there are no stutter gaps.  */
-        window._rfPacerParams = {
+        var new_params = {
             is_running:  !!(ps.is_running),
             is_sound_on: !!(is_sound_on),
             inhale_s:    ps.inhale_s  || 4.0,
@@ -3695,6 +3716,18 @@ app.clientside_callback(
             min_s:       rings.min_s,
             max_s:       rings.max_s
         };
+
+        /* Route the update:
+           - Start / stop / reset → apply immediately to _rfPacerParams.
+           - Running BPM change   → enqueue in _rfPacerNext so the rAF loop
+             applies it at the next natural inhale boundary (zero visible jump). */
+        var cur = window._rfPacerParams || {};
+        if (!cur.is_running || !new_params.is_running) {
+            window._rfPacerParams = new_params;
+            window._rfPacerNext   = null;
+        } else {
+            window._rfPacerNext = new_params;
+        }
 
         return [
             guideStyle(rings.outer, '1.5px dashed rgba(129,140,248,0.32)'),
@@ -3707,6 +3740,61 @@ app.clientside_callback(
     Input("rf-pacer-state",         "data"),
     Input("rf-sound-on",            "data"),
 )
+
+# Heart-beat bridge: push live RR ms to window._liveRrMs so live-heart.js
+# can update the CSS animation-duration without going through React.
+app.clientside_callback(
+    """
+    function(rr_ms) {
+        window._liveRrMs = rr_ms || 857;
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("live-rr-ms", "data", allow_duplicate=True),
+    Input("live-rr-ms",  "data"),
+    prevent_initial_call=True,
+)
+
+
+def _make_pacer_aligned(new_bpm: float, old_ps: dict | None) -> dict:
+    """
+    Build a pacer-state dict whose start_ts is back-calculated so the first
+    inhale of the new BPM begins at the next inhale boundary of the OLD cycle.
+
+    This prevents a visible jump when the scan advances to a new step: instead
+    of restarting immediately from 0, the animation continues in exhale (tail of
+    old cycle expressed in new-cycle time-space) and the new inhale starts
+    seamlessly when the old cycle would have ended.
+
+    Derivation:
+        At time (now + T), where T = time_to_next_inhale, we want phase_t == 0.
+        phase_t = ((now + T) - start_ts) % new_cycle == 0
+        → start_ts = now + T  (mod new_cycle)
+        → back-calculated: start_ts = now - (new_cycle - T) % new_cycle
+    """
+    new_cycle = 60.0 / new_bpm
+    inh = round(new_cycle * _RF_IE_RATIO, 2)
+    exh = round(new_cycle * (1.0 - _RF_IE_RATIO), 2)
+    now = time.time()
+
+    if old_ps and old_ps.get("is_running") and old_ps.get("start_ts"):
+        old_inhale_s = float(old_ps.get("inhale_s") or 4.0)
+        old_exhale_s = float(old_ps.get("exhale_s") or 6.0)
+        old_cycle    = old_inhale_s + old_exhale_s
+        elapsed      = now - float(old_ps["start_ts"])
+        phase_t      = elapsed % old_cycle
+        time_to_next = old_cycle - phase_t          # seconds until next inhale
+
+        if time_to_next < 0.4:
+            # Already at boundary — start immediately
+            start_ts = now
+        else:
+            phase_in_new = (new_cycle - time_to_next) % new_cycle
+            start_ts = now - phase_in_new
+    else:
+        start_ts = now
+
+    return {"inhale_s": inh, "exhale_s": exh, "start_ts": start_ts, "is_running": True}
 
 
 # 6D — live RF metrics update (2s tick)
@@ -3733,6 +3821,7 @@ app.clientside_callback(
     Output("rf-step-start",      "data",  allow_duplicate=True),
     Output("rf-step-coh-buf",    "data",  allow_duplicate=True),
     Output("rf-prescreen-info",  "children", allow_duplicate=True),
+    Output("rf-refined",         "data",  allow_duplicate=True),
     Input("tick-slow",           "n_intervals"),
     State("rf-state",            "data"),
     State("rf-target-bpm",       "data"),
@@ -3742,10 +3831,13 @@ app.clientside_callback(
     State("rf-candidates",       "data"),
     State("rf-step-start",       "data"),
     State("rf-step-coh-buf",     "data"),
+    State("rf-refined",          "data"),
+    State("rf-pacer-state",      "data"),
     prevent_initial_call=True,
 )
 def update_rf_live(_n, state, target_bpm, scan_step, scores,
-                   session_start, candidates_data, step_start, step_coh_buf):
+                   session_start, candidates_data, step_start, step_coh_buf, is_refined,
+                   cur_pacer_state):
     nu = dash.no_update
 
     # read live values from kpi_cache
@@ -3804,6 +3896,7 @@ def update_rf_live(_n, state, target_bpm, scan_step, scores,
     new_step_start   = nu
     new_step_coh_buf = nu
     prescreen_info   = nu
+    new_refined      = nu
 
     now = time.time()
 
@@ -3877,7 +3970,7 @@ def update_rf_live(_n, state, target_bpm, scan_step, scores,
                     next_bpm          = _rf_ucb_next(new_scores, candidates)
                     new_step          = candidates.index(next_bpm) if next_bpm in candidates else step_idx + 1
                     new_target_bpm    = next_bpm
-                    new_pacer_state   = _make_pacer(next_bpm)
+                    new_pacer_state   = _make_pacer_aligned(next_bpm, cur_pacer_state)
                     new_step_start    = now
                     new_step_coh_buf  = coh_buf_d
                     early = "  [early exit — signal stable]" if (min_met and converged and not hard_limit) else ""
@@ -3885,20 +3978,21 @@ def update_rf_live(_n, state, target_bpm, scan_step, scores,
                                  f"Testing {next_bpm} BPM  ···  {_RF_MAX_DWELL_S}s max"
                                  + early)
                 else:
-                    # all candidates tested — check if gradient refinement needed
+                    # all candidates tested — one round of gradient refinement then finish
                     new_step_coh_buf = coh_buf_d
                     best_k_now = max(new_scores, key=lambda k: new_scores[k]["score"], default=None)
-                    if best_k_now:
+                    if best_k_now and not is_refined:
                         refine = _rf_gradient_refine(new_scores, float(best_k_now))
                         if refine:
-                            # extend candidates with refinement steps
-                            new_cands     = candidates + refine
+                            # extend candidates with refinement steps (runs only once)
+                            new_cands      = candidates + refine
                             new_candidates = new_cands
-                            next_bpm      = refine[0]
-                            new_step      = len(candidates)  # index of first refinement
-                            new_target_bpm   = next_bpm
-                            new_pacer_state  = _make_pacer(next_bpm)
-                            new_step_start   = now
+                            next_bpm       = refine[0]
+                            new_step       = len(candidates)  # index of first refinement
+                            new_target_bpm  = next_bpm
+                            new_pacer_state = _make_pacer_aligned(next_bpm, cur_pacer_state)
+                            new_step_start  = now
+                            new_refined     = True   # prevent second refinement pass
                             step_label = (f"Refining around {best_k_now} BPM — "
                                          f"testing {next_bpm} BPM")
                         else:
@@ -3928,6 +4022,7 @@ def update_rf_live(_n, state, target_bpm, scan_step, scores,
         result_sum, result_detail,
         new_target_bpm, new_pacer_state,
         new_candidates, new_step_start, new_step_coh_buf, prescreen_info,
+        new_refined,
     )
 
 
@@ -4094,6 +4189,7 @@ def load_rf_history(_n, _r):
     Output("battery-label",  "style"),
     Output("timer-label",    "children"),
     Output("btn-reconnect",  "style"),
+    Output("live-rr-ms",     "data"),
     Input("tick-fast", "n_intervals"),
 )
 def update_fast(_n: int):
@@ -4152,9 +4248,10 @@ def update_fast(_n: int):
 
     # ── KPI chips — read last values written by the slow callback ────────────
     k = _kpi_cache
+    latest_rr = int(rr[-1]) if rr and 300 < rr[-1] < 2500 else 857
     return (ecg_fig, acc_fig, rr_fig,
             k["bpm"], k["rmssd"], k["sdnn"], k["pnn50"], k["breath"], k["regularity"], k["lfhf"],
-            dot_style, status_lbl, bat_text, bat_style, timer, reconnect_style)
+            dot_style, status_lbl, bat_text, bat_style, timer, reconnect_style, latest_rr)
 
 
 _SAFE_FIG: dict = {

@@ -67,12 +67,20 @@ enum AutonomicCompute {
     }
 }
 
+// MARK: - Train Section
+
+private enum TrainSection: String, CaseIterable {
+    case train    = "TRAIN"
+    case resonate = "RESONATE"
+}
+
 // MARK: - Train View
 
 struct TrainView: View {
     @Environment(AppEnvironment.self) var env
     @Environment(\.modelContext) var ctx
 
+    @State private var section:          TrainSection    = .train
     @State private var trainHistory:    [MetricsTick]    = []
     @State private var baseline:        TrainBaseline?   = nil
     @State private var trainState:      TrainState       = .calibrating
@@ -92,75 +100,103 @@ struct TrainView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
+            VStack(spacing: 0) {
 
-                    StateBanner(state: trainState)
-
-                    HRPanel(
-                        tick:     env.latestTick,
-                        baseline: baseline,
-                        history:  trainHistory
-                    )
-
-                    AutonomicCard(indices: autonomicIndices)
-
-                    HRRecoveryChart(
-                        history:  Array(trainHistory.suffix(150)),
-                        baseline: baseline,
-                        maxHR:    Float(maxHR)
-                    )
-
-                    // Max HR stepper
-                    HStack(spacing: 12) {
-                        Button {
-                            if maxHR > 100 { maxHR -= 5 }
-                        } label: {
-                            Image(systemName: "minus.circle")
-                                .font(.system(size: 18, weight: .light))
-                                .foregroundStyle(Theme.dim)
+                // ── Section picker ──────────────────────────────────
+                HStack(spacing: 0) {
+                    ForEach(TrainSection.allCases, id: \.self) { s in
+                        Button(s.rawValue) {
+                            withAnimation(.easeInOut(duration: 0.2)) { section = s }
                         }
-
-                        Text("MAX  \(Int(maxHR)) bpm")
-                            .font(Theme.monoLabel)
-                            .foregroundStyle(Theme.dim)
-
-                        Button {
-                            if maxHR < 220 { maxHR += 5 }
-                        } label: {
-                            Image(systemName: "plus.circle")
-                                .font(.system(size: 18, weight: .light))
-                                .foregroundStyle(Theme.dim)
-                        }
+                        .font(Theme.monoLabel)
+                        .foregroundStyle(section == s ? Theme.bg : Theme.accent)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity)
+                        .background(section == s ? Theme.accent : Color.clear)
                     }
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .padding(.horizontal, 4)
-                    .padding(.top, -8)
-
-                    if trainState == .recover || trainState == .ready {
-                        RSACard(tick: env.latestTick)
-
-                        RMSSDChart(
-                            history:  Array(trainHistory.suffix(150)),
-                            baseline: baseline
-                        )
-                    }
-
-                    CalibrationBar(
-                        baseline:        baseline,
-                        isCollecting:    trainHistory.count < 15 && baseline == nil,
-                        isSessionActive: isSessionActive,
-                        onRecalibrate:   recalibrate,
-                        onStartSession:  startSession,
-                        onEndSession:    endSession
-                    )
                 }
-                .padding(.horizontal)
-                .padding(.top, 12)
-                .padding(.bottom, 20)
+                .background(Theme.card)
+                .clipShape(Capsule())
+                .overlay(Capsule().strokeBorder(Theme.border, lineWidth: 0.5))
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
+                .padding(.bottom, 6)
+
+                // ── Section content ─────────────────────────────────
+                if section == .train {
+                    ScrollView {
+                        VStack(spacing: 16) {
+
+                            StateBanner(state: trainState)
+
+                            HRPanel(
+                                tick:     env.latestTick,
+                                baseline: baseline,
+                                history:  trainHistory
+                            )
+
+                            AutonomicCard(indices: autonomicIndices)
+
+                            HRRecoveryChart(
+                                history:  Array(trainHistory.suffix(150)),
+                                baseline: baseline,
+                                maxHR:    Float(maxHR)
+                            )
+
+                            // Max HR stepper
+                            HStack(spacing: 12) {
+                                Button {
+                                    if maxHR > 100 { maxHR -= 5 }
+                                } label: {
+                                    Image(systemName: "minus.circle")
+                                        .font(.system(size: 18, weight: .light))
+                                        .foregroundStyle(Theme.dim)
+                                }
+
+                                Text("MAX  \(Int(maxHR)) bpm")
+                                    .font(Theme.monoLabel)
+                                    .foregroundStyle(Theme.dim)
+
+                                Button {
+                                    if maxHR < 220 { maxHR += 5 }
+                                } label: {
+                                    Image(systemName: "plus.circle")
+                                        .font(.system(size: 18, weight: .light))
+                                        .foregroundStyle(Theme.dim)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                            .padding(.horizontal, 4)
+                            .padding(.top, -8)
+
+                            if trainState == .recover || trainState == .ready {
+                                RSACard(tick: env.latestTick)
+
+                                RMSSDChart(
+                                    history:  Array(trainHistory.suffix(150)),
+                                    baseline: baseline
+                                )
+                            }
+
+                            CalibrationBar(
+                                baseline:        baseline,
+                                isCollecting:    trainHistory.count < 15 && baseline == nil,
+                                isSessionActive: isSessionActive,
+                                onRecalibrate:   recalibrate,
+                                onStartSession:  startSession,
+                                onEndSession:    endSession
+                            )
+                        }
+                        .padding(.horizontal)
+                        .padding(.top, 12)
+                        .padding(.bottom, 20)
+                    }
+                } else {
+                    ResonateView()
+                }
             }
             .background(Theme.bg)
-            .navigationTitle("TRAIN")
+            .navigationTitle(section == .train ? "TRAIN" : "RESONATE")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(Theme.bg, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)

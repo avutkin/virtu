@@ -1,0 +1,17 @@
+[Unit]
+Description=JustBreathe Sync API
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/just-breathe
+ExecStart=/usr/local/bin/uvicorn server.main:app --host 0.0.0.0 --port 8000 --workers 2
+Restart=always
+RestartSec=5
+Environment=DATABASE_URL=postgresql://justbreathe:CHANGE_ME@localhost:5432/justbreathe
+Environment=PYTHONPATH=/home/ubuntu/just-breathe
+
+[Install]
+WantedBy=multi-user.target

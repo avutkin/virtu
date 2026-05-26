@@ -1,0 +1,23 @@
+/* live-heart.css — lub-dub heartbeat animation synced to Polar H10 RR intervals */
+
+@keyframes heartbeat {
+  0%   { transform: scale(1.00); }
+  12%  { transform: scale(1.40); }   /* lub — systole */
+  22%  { transform: scale(1.15); }
+  38%  { transform: scale(1.35); }   /* dub — second peak */
+  52%  { transform: scale(1.00); }   /* diastole — rest */
+  100% { transform: scale(1.00); }
+}
+
+#live-heart-pulse {
+    display:                  inline-block;
+    animation-name:           heartbeat;
+    animation-iteration-count: infinite;
+    animation-timing-function: ease-in-out;
+    animation-duration:       857ms;   /* overridden at runtime by live-heart.js */
+    transform-origin:         center;
+    will-change:              transform;
+    line-height:              1;
+    vertical-align:           middle;
+    margin-right:             6px;
+}
