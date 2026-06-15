@@ -4,43 +4,43 @@ import SwiftUI
 
 enum Theme {
     // Backgrounds
-    static let bg      = Color(hex: "#070B11")   // deep navy-black
-    static let card    = Color(hex: "#0D1420")   // slightly lighter panel
-    static let border  = Color(hex: "#1A2535")   // subtle border
+    static let bg      = Color(hex: "#0C0C0C")   // pure near-black
+    static let card    = Color(hex: "#171717")   // dark surface
+    static let surface = Color(hex: "#222222")   // elevated surface (nested cards, icon containers)
+    static let border  = Color(hex: "#2A2A2A")   // neutral subtle border
 
-    // Accents
+    // Accents (used in charts and metric colors)
     static let accent  = Color(hex: "#00E5A0")   // ECG green
     static let hrv     = Color(hex: "#818CF8")   // indigo — HRV metrics
     static let rsa     = Color(hex: "#FB923C")   // amber — RSA
     static let warn    = Color(hex: "#FF6B6B")   // soft red
     static let coh     = Color(hex: "#39D353")   // coherence green
     static let breathe = Color(hex: "#58A6FF")   // blue — breathing
-    static let ulf     = Color(hex: "#A78BFA")   // muted violet — ULF power ring
+    static let ulf     = Color(hex: "#A78BFA")   // muted violet — ULF
 
     // Text
-    static let text    = Color(hex: "#E2E8F0")   // cool white
-    static let dim     = Color(hex: "#4A5568")   // muted
+    static let text    = Color(hex: "#FFFFFF")   // pure white
+    static let dim     = Color(hex: "#787878")   // medium gray
 
     // MARK: Typography
 
     static func mono(_ size: CGFloat) -> Font {
-        .custom("JetBrainsMono-Regular", size: size)
+        .system(size: size, design: .monospaced)
     }
 
     static func display(_ size: CGFloat) -> Font {
-        .custom("CormorantGaramond-Light", size: size)
+        .system(size: size, weight: .bold, design: .default)
     }
 
-    // Fallback system fonts if custom fonts aren't loaded
-    static let monoSmall:   Font = .custom("JetBrainsMono-Regular", size: 11, relativeTo: .caption)
-    static let monoBody:    Font = .custom("JetBrainsMono-Regular", size: 13, relativeTo: .body)
-    static let monoLabel:   Font = .custom("JetBrainsMono-Regular", size: 11, relativeTo: .caption2)
-    static let displayLarge: Font = .custom("CormorantGaramond-Light", size: 36, relativeTo: .title)
+    static let monoSmall:    Font = .system(size: 11, design: .monospaced)
+    static let monoBody:     Font = .system(size: 13, design: .monospaced)
+    static let monoLabel:    Font = .system(size: 11, design: .monospaced)
+    static let displayLarge: Font = .system(size: 42, weight: .bold, design: .default)
 
     // MARK: Spacing
 
-    static let cardPad:   CGFloat = 16
-    static let cardRadius: CGFloat = 12
+    static let cardPad:    CGFloat = 16
+    static let cardRadius: CGFloat = 16
     static let ringSize:   CGFloat = 72
 }
 

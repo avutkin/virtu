@@ -20,7 +20,7 @@ struct TrainBaseline {
 
 // MARK: - Polyvagal State
 
-enum PolyvagalState: Equatable {
+enum ANSState: Equatable {
     case ventralVagal   // parasympathetic brake ON — HFnu ≥ 0.55
     case sympathetic    // SNS dominant — LFnu ≥ 0.65
     case dorsalVagal    // very low HRV + HR not elevated — shutdown warning
@@ -30,7 +30,7 @@ enum PolyvagalState: Equatable {
 struct AutonomicIndices: Equatable {
     let sns:   Float           // LFnu 0–1
     let pns:   Float           // HFnu 0–1
-    let state: PolyvagalState
+    let state: ANSState
 }
 
 // MARK: - Autonomic Compute
@@ -56,7 +56,7 @@ enum AutonomicCompute {
     }
 
     /// Precondition: `pns + sns == 1.0` (both call sites guarantee this).
-    private static func classify(pns: Float, sns: Float, tick: MetricsTick, baseline: TrainBaseline?) -> PolyvagalState {
+    private static func classify(pns: Float, sns: Float, tick: MetricsTick, baseline: TrainBaseline?) -> ANSState {
         if pns >= 0.55 { return .ventralVagal }
         if sns >= 0.65 { return .sympathetic }
         if let rmssd = tick.rmssd, rmssd < 10,
@@ -325,7 +325,7 @@ struct TrainView: View {
 private struct AutonomicCard: View {
     let indices: AutonomicIndices?
 
-    private var state: PolyvagalState { indices?.state ?? .mixed }
+    private var state: ANSState { indices?.state ?? .mixed }
 
     private var stateLabel: String {
         switch state {

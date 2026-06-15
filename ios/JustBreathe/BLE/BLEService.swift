@@ -168,14 +168,15 @@ final class BLEService: NSObject {
         }
 
         // ── Step 2: scan.
-        // We scan for the Heart Rate Service — the H10 always advertises this UUID
-        // (0x180D), so filtering at the hardware level is reliable and avoids the
-        // name-based guard in didDiscover that silently drops devices whose name
-        // hasn't been cached by iOS yet.
+        // Scan with nil (no service filter) so iOS delivers ALL advertising devices.
+        // Service-UUID filtering works only if the H10 includes the UUID in its ad
+        // packet — some Polar H10 firmware versions omit it, so a service filter
+        // silently drops the device before didDiscover is called.
+        // We filter for Polar devices by name in didDiscover instead.
         state = .scanning
-        print("🔵 BLE: scanning (HR service filter)…")
+        print("🔵 BLE: scanning (all devices, Polar name filter in didDiscover)…")
         centralManager.scanForPeripherals(
-            withServices: [PolarH10Profile.heartRateService],
+            withServices: nil,
             options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
         )
 
@@ -463,21 +464,31 @@ extension BLEService: CBCentralManagerDelegate {
                                     didDiscover peripheral: CBPeripheral,
                                     advertisementData: [String: Any],
                                     rssi RSSI: NSNumber) {
-        // We scan with a Heart Rate service filter, so every device that reaches
-        // this callback IS a heart rate monitor — no name-based guard needed.
-        // (Name-based guards silently drop devices whose name hasn't been cached
-        // by iOS yet, which happens on first discovery after app install.)
+        // Resolve device name: prefer peripheral.name (cached by iOS) then
+        // the ad-packet local name. Polar H10 always advertises "Polar H10".
         let name = peripheral.name
                    ?? advertisementData[CBAdvertisementDataLocalNameKey] as? String
-                   ?? "HR Device"
+                   ?? ""
+
+        // Filter: only Polar devices or devices advertising the HR service UUID.
+        // This is more reliable than a service-UUID scan filter because some H10
+        // firmware versions don't include the HR UUID in the ad packet, so iOS
+        // would silently drop them before didDiscover is called.
+        let adServiceUUIDs = advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] ?? []
+        let isPolar   = name.localizedCaseInsensitiveContains("Polar") ||
+                        name.localizedCaseInsensitiveContains("H10")
+        let hasHRUUID = adServiceUUIDs.contains(PolarH10Profile.heartRateService)
+        guard isPolar || hasHRUUID else { return }
+
+        let displayName = name.isEmpty ? "Polar H10" : name
         let rssiVal = RSSI.intValue
         let uuid    = peripheral.identifier
-        print("📡 BLE: found '\(name)' RSSI \(rssiVal) dB  \(uuid)")
+        print("📡 BLE: found '\(displayName)' RSSI \(rssiVal) dB  \(uuid)")
 
         Task { @MainActor in
             self.peripheralMap[uuid] = peripheral
 
-            let device = BLEDevice(id: uuid, name: name.isEmpty ? "Polar H10" : name, rssi: rssiVal)
+            let device = BLEDevice(id: uuid, name: displayName, rssi: rssiVal)
             if let idx = self.discoveredDevices.firstIndex(where: { $0.id == uuid }) {
                 self.discoveredDevices[idx] = device
             } else {

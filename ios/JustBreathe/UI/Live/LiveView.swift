@@ -90,8 +90,9 @@ private struct DayScrollView: View {
 
     @Environment(AppEnvironment.self) var env
     @Environment(\.modelContext) var ctx
-    @State private var dayHistory:    [MetricsHistoryPoint] = []   // quality-filtered
-    @State private var rawDayHistory: [MetricsHistoryPoint] = []   // unfiltered
+    @State private var dayHistory:    [MetricsHistoryPoint] = []
+    @State private var rawDayHistory: [MetricsHistoryPoint] = []
+    @State private var showResonate   = false
 
     private var isToday: Bool { Calendar.current.isDateInToday(date) }
 
@@ -110,36 +111,44 @@ private struct DayScrollView: View {
     }
 
     private var currentTick: MetricsTick? {
-        isToday ? env.latestTick : dayAverageTick(from: dayHistory)
+        dayAverageTick(from: currentHistory)
     }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 12) {
 
+                // ── Autonomic state + recommended action (today only) ─
                 if isToday {
-                    // ── Waveforms + live status bar ────────────────
-                    // Isolated into its own View so 30-fps waveform
-                    // updates don't cascade into the chart area.
-                    TodayLiveSection()
+                    let state = PolyvagalState.infer(from: env.latestTick)
+                    CurrentStateCard(tick: env.latestTick, state: state)
+                        .padding(.horizontal)
+                    RecommendedActionCard(state: state) {
+                        showResonate = true
+                    }
+                    .padding(.horizontal)
                 }
 
-                // ── HRV rings 2×2 — live today / avg past ──────────
+                // ── Metrics table ───────────────────────────────────
                 VStack(alignment: .leading, spacing: 6) {
-                    if !isToday {
-                        Text("DAY AVERAGE")
+                    HStack {
+                        Text(isToday ? "LIVE" : "DAY AVERAGE")
                             .font(Theme.monoLabel)
                             .foregroundStyle(Theme.dim)
-                            .padding(.horizontal)
+                        Spacer()
+                        if isToday && currentTick != nil {
+                            Text("Δ vs today avg")
+                                .font(Theme.monoLabel)
+                                .foregroundStyle(Theme.dim.opacity(0.6))
+                        }
                     }
-                    HRVRingGrid(tick: currentTick)
-                        .cardStyle()
-                        .padding(.horizontal)
-                }
-
-                // ── Secondary metrics row ───────────────────────────
-                SecondaryMetricsRow(tick: currentTick)
                     .padding(.horizontal)
+                    MetricsTableView(
+                        tick:       isToday ? env.latestTick : currentTick,
+                        comparison: isToday ? currentTick    : nil
+                    )
+                    .padding(.horizontal)
+                }
 
                 // ── Historical metric charts ────────────────────────
                 if !currentHistory.isEmpty {
@@ -158,23 +167,16 @@ private struct DayScrollView: View {
                         .padding(.vertical, 48)
                 }
 
-                if isToday {
-                    // ── HRV Analysis (PSD + Coherence spectrum) ─────
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("ANALYSIS")
-                            .font(Theme.monoLabel)
-                            .foregroundStyle(Theme.dim)
-                            .padding(.horizontal)
-                        HRVAnalysisView(tick: env.latestTick)
-                            .padding(.horizontal)
-                    }
-                }
 
             }
             .padding(.top, 8)
         }
         .onAppear {
             if !isToday { loadDayHistory() }
+        }
+        .sheet(isPresented: $showResonate) {
+            ResonateView()
+                .environment(env)
         }
     }
 
@@ -236,25 +238,7 @@ private struct DayScrollView: View {
 private struct TodayLiveSection: View {
     @Environment(AppEnvironment.self) var env
 
-    var body: some View {
-        ECGWaveformView(buffer: env.waveform.ecg)
-            .padding(.horizontal)
-
-        ACCWaveformView(buffer: env.waveform.acc)
-            .padding(.horizontal)
-
-        RRTachogramView(rr: env.waveform.rr)
-            .padding(.horizontal)
-
-        HStack {
-            HeartBeatView(bpm: env.latestTick?.meanBPM)
-            Spacer()
-            BreathBadge(bpm: env.latestTick?.breathBPM)
-        }
-        .padding(.horizontal)
-        .cardStyle()
-        .padding(.horizontal)
-    }
+    var body: some View { EmptyView() }
 }
 
 // MARK: - Date Navigator
@@ -602,64 +586,78 @@ private struct DeviceRow: View {
 
 // MARK: - Sub-components
 
-private struct BreathBadge: View {
-    let bpm: Float?
+// MARK: - Metrics Table
+
+private struct MetricsTableView: View {
+    let tick:       MetricsTick?
+    let comparison: MetricsTick?   // day avg (today) or nil
+
+    private let cols = Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
 
     var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "wind")
-                .font(.caption2)
-                .foregroundStyle(Theme.breathe)
-            Text(MetricFormat.bpm(bpm))
-                .font(Theme.monoBody)
-                .foregroundStyle(Theme.text)
-            Text("br/min")
-                .font(Theme.monoLabel)
-                .foregroundStyle(Theme.dim)
+        LazyVGrid(columns: cols, spacing: 10) {
+            MetricTile(label: "RSA",   value: MetricFormat.ms(tick?.rsaMs),      unit: "ms",  delta: delta(tick?.rsaMs,   comparison?.rsaMs),   higherBetter: true)
+            MetricTile(label: "HRV",   value: MetricFormat.ms(tick?.rmssd),      unit: "ms",  delta: delta(tick?.rmssd,   comparison?.rmssd),   higherBetter: true)
+            MetricTile(label: "VTI",   value: MetricFormat.ratio(tick?.vti),     unit: "",    delta: delta(tick?.vti,     comparison?.vti),     higherBetter: true)
+            MetricTile(label: "LF/HF", value: MetricFormat.ratio(tick?.lfHF),   unit: "",    delta: delta(tick?.lfHF,    comparison?.lfHF),    higherBetter: false)
+            MetricTile(label: "pNN50", value: MetricFormat.percent(tick?.pnn50), unit: "",    delta: delta(tick?.pnn50,   comparison?.pnn50),   higherBetter: true)
+            MetricTile(label: "HR",    value: MetricFormat.bpm(tick?.meanBPM),   unit: "bpm", delta: delta(tick?.meanBPM, comparison?.meanBPM), higherBetter: false)
         }
+    }
+
+    private func delta(_ live: Float?, _ avg: Float?) -> Float? {
+        guard let l = live, let a = avg else { return nil }
+        return l - a
     }
 }
 
-private struct SecondaryMetricsRow: View {
-    let tick: MetricsTick?
+private struct MetricTile: View {
+    let label:        String
+    let value:        String
+    let unit:         String
+    let delta:        Float?
+    let higherBetter: Bool
 
-    var body: some View {
-        HStack(spacing: 0) {
-            MetricCell(label: "SDNN",    value: MetricFormat.ms(tick?.sdnn),       unit: "ms")
-            Divider().background(Theme.border)
-            MetricCell(label: "pNN50",   value: MetricFormat.percent(tick?.pnn50), unit: "")
-            Divider().background(Theme.border)
-            MetricCell(label: "RSA IDX", value: MetricFormat.ratio(tick?.rsaIdx),  unit: "")
-            Divider().background(Theme.border)
-            MetricCell(label: "CBI",     value: MetricFormat.score(tick?.cbi),     unit: "")
-        }
-        .frame(height: 56)
-        .cardStyle()
+    private var deltaColor: Color {
+        guard let d = delta else { return Theme.dim }
+        let positive = d >= 0
+        return (positive == higherBetter) ? Theme.accent : Theme.warn
     }
-}
 
-private struct MetricCell: View {
-    let label: String
-    let value: String
-    let unit:  String
+    private var deltaText: String {
+        guard let d = delta else { return "" }
+        return String(format: "%+.1f", d)
+    }
 
     var body: some View {
-        VStack(spacing: 2) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(label)
                 .font(Theme.monoLabel)
                 .foregroundStyle(Theme.dim)
-            HStack(alignment: .lastTextBaseline, spacing: 2) {
-                Text(value)
-                    .font(Theme.monoBody)
-                    .foregroundStyle(Theme.text)
+
+            Text(value)
+                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .foregroundStyle(Theme.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+
+            HStack(spacing: 4) {
                 if !unit.isEmpty {
                     Text(unit)
                         .font(Theme.monoLabel)
                         .foregroundStyle(Theme.dim)
                 }
+                if delta != nil {
+                    Text(deltaText)
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(deltaColor)
+                }
             }
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Theme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 

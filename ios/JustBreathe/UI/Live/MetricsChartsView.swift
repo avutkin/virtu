@@ -239,11 +239,33 @@ private struct MetricChartCard: View {
         return bands
     }
 
-    /// For today: sub-day windows roll backwards from now.
-    /// For past days: all windows anchor to 00:00 of that day.
-    private var windowDates: (start: Date, end: Date) {
+    /// Data bucketing range — always loads the full day so selection-based
+    /// panning can reach any point without a data gap.
+    private var bucketDates: (start: Date, end: Date) {
         let cal = Calendar.current
-        if cal.isDateInToday(date), win != .h24 {
+        if cal.isDateInToday(date) {
+            return (cal.startOfDay(for: date), Date())
+        }
+        let s = cal.startOfDay(for: date)
+        return (s, s.addingTimeInterval(86_400))
+    }
+
+    /// Visible chart domain. When a point is selected all charts align to
+    /// show a window centred on that time. Otherwise right edge = now (today)
+    /// or start-of-day anchor (past days).
+    private var windowDates: (start: Date, end: Date) {
+        let cal     = Calendar.current
+        let isToday = cal.isDateInToday(date)
+
+        if let sel = selectedX {
+            // Centre the window on the selected time, clamped so end ≤ now.
+            let half   = win.seconds / 2
+            let maxEnd = isToday ? Date() : cal.startOfDay(for: date).addingTimeInterval(86_400)
+            let end    = min(sel.addingTimeInterval(half), maxEnd)
+            return (end.addingTimeInterval(-win.seconds), end)
+        }
+
+        if isToday {
             let e = Date()
             return (e.addingTimeInterval(-win.seconds), e)
         }
@@ -252,14 +274,17 @@ private struct MetricChartCard: View {
     }
 
     private var windowLabel: String {
-        if Calendar.current.isDateInToday(date), win != .h24 {
+        if selectedX != nil {
+            return "aligned to selection  ·  \(win.bucketLabel)"
+        }
+        if Calendar.current.isDateInToday(date) {
             return "last \(win.rawValue)  ·  \(win.bucketLabel)"
         }
         return "00:00 + \(win.rawValue)  ·  \(win.bucketLabel)"
     }
 
     private var points: [ChartPoint] {
-        let (start, end) = windowDates
+        let (start, end) = bucketDates
         let bucket = win.bucketSeconds
         var sums:   [Int: Double] = [:]
         var counts: [Int: Int]    = [:]
@@ -405,9 +430,6 @@ private struct MetricChartCard: View {
                 .frame(width: 14)
 
             Chart {
-                // ── Anomaly bands (sensor noise / removal) ──────────────
-                // Grey tint marks periods where raw ticks existed but none
-                // passed the quality filter — sensor removed or poor contact.
                 ForEach(bands) { band in
                     RectangleMark(
                         xStart: .value("anomaly start", band.start),
@@ -557,17 +579,12 @@ struct MetricsChartsView: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            hrCard
-            rrHistoryCard
-            ieRatioCard
-            vtiCard
+            lfhfCard
             rsaCard
+            vtiCard
             sdnnCard
             pnn50Card
-            lfhfCard
-            vlfCard
-            ulfCard
-            coherenceCard
+            hrCard
         }
     }
 

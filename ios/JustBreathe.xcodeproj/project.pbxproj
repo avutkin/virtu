@@ -44,6 +44,9 @@
 		A135 /* TrainSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = F135 /* TrainSession.swift */; };
 		A136 /* ActivityLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F136 /* ActivityLog.swift */; };
 		A137 /* ActionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F137 /* ActionsView.swift */; };
+		A138 /* PolyvagalState.swift in Sources */ = {isa = PBXBuildFile; fileRef = F138 /* PolyvagalState.swift */; };
+		A139 /* CurrentStateCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F139 /* CurrentStateCard.swift */; };
+		A140 /* RecommendedActionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F140 /* RecommendedActionCard.swift */; };
 		ARES1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FRES1 /* Assets.xcassets */; };
 		AT01 /* MetricsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT01 /* MetricsTests.swift */; };
 		AT02 /* BLETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT02 /* BLETests.swift */; };
@@ -97,6 +100,9 @@
 		F135 /* TrainSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainSession.swift; sourceTree = "<group>"; };
 		F136 /* ActivityLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityLog.swift; sourceTree = "<group>"; };
 		F137 /* ActionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionsView.swift; sourceTree = "<group>"; };
+		F138 /* PolyvagalState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolyvagalState.swift; sourceTree = "<group>"; };
+		F139 /* CurrentStateCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrentStateCard.swift; sourceTree = "<group>"; };
+		F140 /* RecommendedActionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecommendedActionCard.swift; sourceTree = "<group>"; };
 		FRES1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		FAPP /* JustBreathe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JustBreathe.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FINFO /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -195,6 +201,8 @@
 				F129 /* ACCWaveformView.swift */,
 				F130 /* RRTachogramView.swift */,
 				F131 /* HRVAnalysisView.swift */,
+				F139 /* CurrentStateCard.swift */,
+				F140 /* RecommendedActionCard.swift */,
 			);
 			path = Live;
 			sourceTree = "<group>";
@@ -220,6 +228,7 @@
 				F127 /* MetricsHistoryPoint.swift */,
 				F135 /* TrainSession.swift */,
 				F136 /* ActivityLog.swift */,
+				F138 /* PolyvagalState.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -424,6 +433,9 @@
 				A134 /* TrainView.swift in Sources */,
 				A136 /* ActivityLog.swift in Sources */,
 				A137 /* ActionsView.swift in Sources */,
+				A138 /* PolyvagalState.swift in Sources */,
+				A139 /* CurrentStateCard.swift in Sources */,
+				A140 /* RecommendedActionCard.swift in Sources */,
 				A123 /* ResonateView.swift in Sources */,
 				A124 /* PacerCircleView.swift in Sources */,
 				A125 /* HistoryView.swift in Sources */,

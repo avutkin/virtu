@@ -25,22 +25,40 @@ private enum ImpactSort: String, CaseIterable {
 
 // MARK: - ActionsView
 
+// Single sheet enum — prevents SwiftUI multiple-sheet chaining bug.
+// Optional associated values cause type-inference issues in @ViewBuilder;
+// use two explicit cases instead.
+private enum ActionSheet: Identifiable {
+    case ble
+    case start
+    case startWith(ActivityType)
+    case logPast
+    case detail(ActivityLog)
+    case edit(ActivityLog)
+
+    var id: String {
+        switch self {
+        case .ble:              return "ble"
+        case .start:            return "start"
+        case .startWith(let t): return "startWith-\(t.rawValue)"
+        case .logPast:          return "logPast"
+        case .detail(let e):    return "detail-\(e.id)"
+        case .edit(let e):      return "edit-\(e.id)"
+        }
+    }
+}
+
 struct ActionsView: View {
     @Environment(AppEnvironment.self) var env
     @Environment(\.modelContext) var ctx
     @Query(sort: \ActivityLog.startedAt, order: .reverse)
     private var allEntries: [ActivityLog]
 
-    @State private var section:          ActionsSection = .log
-    @State private var showBLESheet                     = false
-    @State private var showStartSheet                   = false
-    @State private var showLogPastSheet                 = false
-    @State private var selectedEntry:     ActivityLog?  = nil
-    @State private var editEntry:         ActivityLog?  = nil
-    @State private var preselectedType:   ActivityType? = nil
+    @State private var section:      ActionsSection = .log
+    @State private var activeSheet:  ActionSheet?   = nil
 
     private var todayEntries: [ActivityLog] {
-        allEntries.filter { Calendar.current.isDateInToday($0.startedAt) }
+        allEntries.filter { Calendar.current.isDateInToday($0.startedAt) && !$0.isActive }
     }
 
     private var activeEntry: ActivityLog? {
@@ -89,29 +107,12 @@ struct ActionsView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     BLENavButton(state: env.ble.state,
                                  bpm: env.latestTick?.meanBPM) {
-                        showBLESheet = true
+                        activeSheet = .ble
                     }
                 }
             }
-            .sheet(isPresented: $showBLESheet) { BLEConnectionSheet(ble: env.ble) }
-            .sheet(isPresented: $showStartSheet, onDismiss: { preselectedType = nil }) {
-                StartActivitySheet(preselected: preselectedType) { type, subtype, name in
-                    beginActivity(type: type, subtype: subtype, customName: name)
-                }
-            }
-            .sheet(isPresented: $showLogPastSheet) {
-                LogPastSheet { type, subtype, name, start, end, notes in
-                    logPast(type: type, subtype: subtype, customName: name, start: start, end: end, notes: notes)
-                }
-            }
-            .sheet(item: $selectedEntry) { entry in
-                ActivityDetailView(entry: entry)
-            }
-            .sheet(item: $editEntry) { entry in
-                EditActivitySheet(entry: entry) { ctx in
-                    entry.computeHRVWindows(context: ctx)
-                    try? ctx.save()
-                }
+            .sheet(item: $activeSheet) { sheet in
+                sheetContent(sheet)
             }
         }
     }
@@ -130,69 +131,68 @@ struct ActionsView: View {
                 .listRowInsets(.init(top: 8, leading: 16, bottom: 0, trailing: 16))
             }
 
-            // ── Suggestions + action buttons ──────────────────────
-            Section {
-                VStack(spacing: 10) {
-                    HStack {
-                        Text("SUGGESTED NOW")
-                            .font(Theme.monoLabel)
-                            .foregroundStyle(Theme.dim)
-                        Spacer()
-                        Text(hourLabel())
-                            .font(Theme.monoLabel)
-                            .foregroundStyle(Theme.dim.opacity(0.6))
-                    }
+            // ── Suggestions + action buttons (hidden while recording) ──
+            if activeEntry == nil {
+                Section {
+                    VStack(spacing: 10) {
+                        HStack {
+                            Text("SUGGESTED NOW")
+                                .font(Theme.monoLabel)
+                                .foregroundStyle(Theme.dim)
+                            Spacer()
+                            Text(hourLabel())
+                                .font(Theme.monoLabel)
+                                .foregroundStyle(Theme.dim.opacity(0.6))
+                        }
 
-                    HStack(spacing: 10) {
-                        ForEach(suggested, id: \.self) { type in
-                            SuggestionChip(type: type) {
-                                preselectedType = type
-                                showStartSheet  = true
+                        HStack(spacing: 10) {
+                            ForEach(suggested, id: \.self) { type in
+                                SuggestionChip(type: type) {
+                                    activeSheet = .startWith(type)
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                        HStack(spacing: 12) {
+                            Button {
+                                activeSheet = .start
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "play.fill")
+                                    Text("START")
+                                }
+                                .font(Theme.monoBody)
+                                .foregroundStyle(Theme.bg)
+                                .padding(.vertical, 10)
+                                .frame(maxWidth: .infinity)
+                                .background(Theme.accent)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                            }
+
+                            Button {
+                                activeSheet = .logPast
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "clock.arrow.circlepath")
+                                    Text("LOG PAST")
+                                }
+                                .font(Theme.monoBody)
+                                .foregroundStyle(Theme.accent)
+                                .padding(.vertical, 10)
+                                .frame(maxWidth: .infinity)
+                                .background(Theme.accent.opacity(0.08))
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .overlay(RoundedRectangle(cornerRadius: 8)
+                                    .strokeBorder(Theme.accent.opacity(0.3), lineWidth: 0.5))
                             }
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                    HStack(spacing: 12) {
-                        Button {
-                            if activeEntry == nil { showStartSheet = true }
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: activeEntry == nil ? "play.fill" : "stop.fill")
-                                Text(activeEntry == nil ? "START" : "RECORDING…")
-                            }
-                            .font(Theme.monoBody)
-                            .foregroundStyle(activeEntry == nil ? Theme.bg : Theme.warn)
-                            .padding(.vertical, 10)
-                            .frame(maxWidth: .infinity)
-                            .background(activeEntry == nil ? Theme.accent : Theme.warn.opacity(0.15))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .overlay(RoundedRectangle(cornerRadius: 8)
-                                .strokeBorder(activeEntry == nil ? .clear : Theme.warn.opacity(0.4), lineWidth: 0.5))
-                        }
-
-                        Button {
-                            showLogPastSheet = true
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "clock.arrow.circlepath")
-                                Text("LOG PAST")
-                            }
-                            .font(Theme.monoBody)
-                            .foregroundStyle(Theme.accent)
-                            .padding(.vertical, 10)
-                            .frame(maxWidth: .infinity)
-                            .background(Theme.accent.opacity(0.08))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .overlay(RoundedRectangle(cornerRadius: 8)
-                                .strokeBorder(Theme.accent.opacity(0.3), lineWidth: 0.5))
-                        }
-                    }
+                    .cardStyle()
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(.init(top: 8, leading: 16, bottom: 4, trailing: 16))
                 }
-                .cardStyle()
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-                .listRowInsets(.init(top: 8, leading: 16, bottom: 4, trailing: 16))
             }
 
             // ── Today's log ───────────────────────────────────────
@@ -201,7 +201,7 @@ struct ActionsView: View {
                     ForEach(todayEntries) { entry in
                         ActivityLogRow(entry: entry)
                             .contentShape(Rectangle())
-                            .onTapGesture { selectedEntry = entry }
+                            .onTapGesture { activeSheet = .detail(entry) }
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                 Button(role: .destructive) {
                                     deleteEntry(entry)
@@ -209,7 +209,7 @@ struct ActionsView: View {
                                     Label("Delete", systemImage: "trash")
                                 }
                                 Button {
-                                    editEntry = entry
+                                    activeSheet = .edit(entry)
                                 } label: {
                                     Label("Edit", systemImage: "pencil")
                                 }
@@ -280,6 +280,36 @@ struct ActionsView: View {
             .padding(.bottom, 20)
         }
         .background(Theme.bg)
+    }
+
+    // MARK: - Sheet content
+
+    @ViewBuilder
+    private func sheetContent(_ sheet: ActionSheet) -> some View {
+        switch sheet {
+        case .ble:
+            BLEConnectionSheet(ble: env.ble)
+        case .start:
+            StartActivitySheet(preselected: nil) { type, subtype, name in
+                beginActivity(type: type, subtype: subtype, customName: name)
+            }
+        case .startWith(let type):
+            StartActivitySheet(preselected: type) { type, subtype, name in
+                beginActivity(type: type, subtype: subtype, customName: name)
+            }
+        case .logPast:
+            LogPastSheet { type, subtype, name, start, end, notes in
+                logPast(type: type, subtype: subtype, customName: name,
+                        start: start, end: end, notes: notes)
+            }
+        case .detail(let entry):
+            ActivityDetailView(entry: entry)
+        case .edit(let entry):
+            EditActivitySheet(entry: entry) { ctx in
+                entry.computeHRVWindows(context: ctx)
+                try? ctx.save()
+            }
+        }
     }
 
     // MARK: - Helpers
