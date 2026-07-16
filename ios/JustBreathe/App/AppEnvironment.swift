@@ -214,6 +214,19 @@ final class AppEnvironment {
             }
             .store(in: &cancellables)
 
+        // A connection gap (unexpected drop, silent watchdog-detected drop, or BT
+        // power cycling) invalidates every buffered signal: RR/ECG/ACC around the
+        // gap don't represent a continuous recording, and the first RR interval(s)
+        // delivered after resuming can reflect elapsed time across the gap rather
+        // than a real beat-to-beat interval. Drop everything rather than let a
+        // few bad samples sit in the 1200-beat HRV window for up to ~20 minutes.
+        ble.connectionGapSubject
+            .sink { [weak self] in
+                guard let self else { return }
+                Task { await self.dataBuffer.clear() }
+            }
+            .store(in: &cancellables)
+
         // ── Metrics tick ─────────────────────────────────────────────────────
         // Foreground: every 2 s — full fidelity, updates live UI.
         // Background: every 30 s — throttled to save battery, still records to disk.

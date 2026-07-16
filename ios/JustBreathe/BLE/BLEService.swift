@@ -79,6 +79,12 @@ final class BLEService: NSObject {
     let accSubject = PassthroughSubject<[SIMD3<Int16>], Never>()
     let hrSubject  = PassthroughSubject<HRFrame, Never>()
 
+    /// Fires whenever the connection drops (expectedly or not) — signals that any
+    /// in-flight signal buffers span a gap and must be discarded rather than kept
+    /// around for HRV computation, since a resumed stream's first RR intervals
+    /// may reflect elapsed time across the gap rather than a real beat-to-beat interval.
+    let connectionGapSubject = PassthroughSubject<Void, Never>()
+
     // MARK: Private
 
     private var centralManager:        CBCentralManager!
@@ -374,6 +380,7 @@ final class BLEService: NSObject {
     private func handleUnexpectedDisconnect(_ p: CBPeripheral, error: Error?) {
         connectionTimeoutTask?.cancel()
         clearCharacteristics()          // keep `peripheral` for direct reconnect
+        connectionGapSubject.send()
 
         let reason = error?.localizedDescription ?? "Disconnected"
         state = .disconnected(reason: reason)
@@ -431,6 +438,7 @@ extension BLEService: CBCentralManagerDelegate {
                 self.scanTimeoutTask?.cancel()
                 self.reconnectTask?.cancel()
                 self.clearConnectionState()
+                self.connectionGapSubject.send()
                 self.state = .disconnected(reason: "Bluetooth is off")
             default:
                 break

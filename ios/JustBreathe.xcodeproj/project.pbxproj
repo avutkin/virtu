@@ -47,6 +47,8 @@
 		A138 /* PolyvagalState.swift in Sources */ = {isa = PBXBuildFile; fileRef = F138 /* PolyvagalState.swift */; };
 		A139 /* CurrentStateCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F139 /* CurrentStateCard.swift */; };
 		A140 /* RecommendedActionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F140 /* RecommendedActionCard.swift */; };
+		A141 /* DFACompute.swift in Sources */ = {isa = PBXBuildFile; fileRef = F141 /* DFACompute.swift */; };
+		A142 /* AdvancedHRVCompute.swift in Sources */ = {isa = PBXBuildFile; fileRef = F142 /* AdvancedHRVCompute.swift */; };
 		ARES1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FRES1 /* Assets.xcassets */; };
 		AT01 /* MetricsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT01 /* MetricsTests.swift */; };
 		AT02 /* BLETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT02 /* BLETests.swift */; };
@@ -103,6 +105,8 @@
 		F138 /* PolyvagalState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolyvagalState.swift; sourceTree = "<group>"; };
 		F139 /* CurrentStateCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrentStateCard.swift; sourceTree = "<group>"; };
 		F140 /* RecommendedActionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecommendedActionCard.swift; sourceTree = "<group>"; };
+		F141 /* DFACompute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DFACompute.swift; sourceTree = "<group>"; };
+		F142 /* AdvancedHRVCompute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedHRVCompute.swift; sourceTree = "<group>"; };
 		FRES1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		FAPP /* JustBreathe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JustBreathe.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FINFO /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -215,6 +219,8 @@
 				F108 /* RSACompute.swift */,
 				F109 /* BreathingCompute.swift */,
 				F110 /* CoherenceCompute.swift */,
+				F141 /* DFACompute.swift */,
+				F142 /* AdvancedHRVCompute.swift */,
 			);
 			path = Metrics;
 			sourceTree = "<group>";
@@ -436,6 +442,8 @@
 				A138 /* PolyvagalState.swift in Sources */,
 				A139 /* CurrentStateCard.swift in Sources */,
 				A140 /* RecommendedActionCard.swift in Sources */,
+				A141 /* DFACompute.swift in Sources */,
+				A142 /* AdvancedHRVCompute.swift in Sources */,
 				A123 /* ResonateView.swift in Sources */,
 				A124 /* PacerCircleView.swift in Sources */,
 				A125 /* HistoryView.swift in Sources */,

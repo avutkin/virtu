@@ -13,7 +13,19 @@ struct JustBreatheApp: App {
     init() {
         let schema = Schema([HRVSession.self, HRVSample.self, ResonanceResult.self, TrainSession.self, ActivityLog.self])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-        let c = try! ModelContainer(for: schema, configurations: [config])
+        // Attempt to open the store; if schema has changed delete and recreate so the
+        // app never crashes on launch after adding new optional model fields.
+        let c: ModelContainer
+        do {
+            c = try ModelContainer(for: schema, configurations: [config])
+        } catch {
+            // Delete stale store and recreate from scratch.
+            let url = config.url
+            try? FileManager.default.removeItem(at: url)
+            try? FileManager.default.removeItem(at: url.appendingPathExtension("wal"))
+            try? FileManager.default.removeItem(at: url.appendingPathExtension("shm"))
+            c = try! ModelContainer(for: schema, configurations: [config])
+        }
         container = c
         _env = State(initialValue: AppEnvironment(modelContainer: c))
     }

@@ -33,6 +33,18 @@ struct MetricsTick {
     let coherenceScore: Float?
     let cbi:            Float?
 
+    // Nonlinear HRV
+    let dfa1: Float?   // DFA α1 short-term scaling exponent (scales 4–16)
+
+    // Signal quality
+    let signalQuality: Float?
+
+    // Advanced nonlinear HRV (computed on slower cadence — needs 100–350 beats)
+    let rcmse: Float?   // Refined Composite Multiscale Entropy mean (scales 1–5)
+    let pip:   Float?   // HR Fragmentation: % inflection points (higher = more fragmented)
+    let ials:  Float?   // HR Fragmentation: inverse avg segment length
+    let dc:    Float?   // Deceleration Capacity in ms (Bauer 2006, PRSA)
+
     // Phase info (for UI breathing ring)
     let breathPhases: BreathPhases?
 
@@ -58,6 +70,14 @@ enum MetricsEngine {
 
         // --- Time-domain HRV ---
         let hrv = HRVCompute.compute(rrMs: rrMs)
+
+        // --- DFA α1 ---
+        let dfa = DFACompute.compute(rrMs: rrMs)
+
+        // --- Advanced nonlinear metrics (need 100–350 beats, more expensive) ---
+        let rcmseResult = AdvancedHRVCompute.computeRCMSE(rrMs: rrMs)
+        let hrfResult   = AdvancedHRVCompute.computeHRF(rrMs: rrMs)
+        let dcResult    = AdvancedHRVCompute.computeDC(rrMs: rrMs)
 
         // --- Breathing from ACC Z ---
         let breathing = BreathingCompute.computeRate(accZ: snapshot.accZ)
@@ -103,6 +123,12 @@ enum MetricsEngine {
             regularity:     breathing?.regularity,
             coherenceScore: coherence?.score,
             cbi:            cbi,
+            dfa1:           dfa?.alpha1,
+            signalQuality:  hrv.map { 1 - $0.artifactRate },
+            rcmse:          rcmseResult?.meanEntropy,
+            pip:            hrfResult?.pip,
+            ials:           hrfResult?.ials,
+            dc:             dcResult?.dc,
             breathPhases:   phases,
             psdFreqs:        hrv?.psdFreqs,
             psdValues:       hrv?.psdValues,

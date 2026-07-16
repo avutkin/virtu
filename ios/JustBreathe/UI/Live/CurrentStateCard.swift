@@ -19,13 +19,6 @@ struct CurrentStateCard: View {
                 autonomicSection
                     .padding(.vertical, 18)
             }
-
-            let causes = state.causes(from: tick)
-            if !causes.isEmpty {
-                Divider().background(Theme.border)
-                causeSection(causes)
-                    .padding(.top, 18)
-            }
         }
         .padding(18)
         .background(Theme.card)

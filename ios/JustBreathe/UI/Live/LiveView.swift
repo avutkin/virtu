@@ -118,15 +118,11 @@ private struct DayScrollView: View {
         ScrollView {
             VStack(spacing: 12) {
 
-                // ── Autonomic state + recommended action (today only) ─
+                // ── Autonomic state (today only) ────────────────────
                 if isToday {
                     let state = PolyvagalState.infer(from: env.latestTick)
                     CurrentStateCard(tick: env.latestTick, state: state)
                         .padding(.horizontal)
-                    RecommendedActionCard(state: state) {
-                        showResonate = true
-                    }
-                    .padding(.horizontal)
                 }
 
                 // ── Metrics table ───────────────────────────────────
@@ -220,6 +216,12 @@ private struct DayScrollView: View {
             regularity:      nil,
             coherenceScore:  avg(history.compactMap(\.coherence)),
             cbi:             avg(history.compactMap(\.cbi)),
+            dfa1:            avg(history.compactMap(\.dfa1)),
+            signalQuality:   avg(history.compactMap(\.signalQuality)),
+            rcmse:           avg(history.compactMap(\.rcmse)),
+            pip:             avg(history.compactMap(\.pip)),
+            ials:            avg(history.compactMap(\.ials)),
+            dc:              avg(history.compactMap(\.dc)),
             breathPhases:    nil,
             psdFreqs:        nil,
             psdValues:       nil,
@@ -596,14 +598,22 @@ private struct MetricsTableView: View {
 
     var body: some View {
         LazyVGrid(columns: cols, spacing: 10) {
-            MetricTile(label: "RSA",   value: MetricFormat.ms(tick?.rsaMs),      unit: "ms",  delta: delta(tick?.rsaMs,   comparison?.rsaMs),   higherBetter: true)
-            MetricTile(label: "HRV",   value: MetricFormat.ms(tick?.rmssd),      unit: "ms",  delta: delta(tick?.rmssd,   comparison?.rmssd),   higherBetter: true)
-            MetricTile(label: "VTI",   value: MetricFormat.ratio(tick?.vti),     unit: "",    delta: delta(tick?.vti,     comparison?.vti),     higherBetter: true)
-            MetricTile(label: "LF/HF", value: MetricFormat.ratio(tick?.lfHF),   unit: "",    delta: delta(tick?.lfHF,    comparison?.lfHF),    higherBetter: false)
-            MetricTile(label: "pNN50", value: MetricFormat.percent(tick?.pnn50), unit: "",    delta: delta(tick?.pnn50,   comparison?.pnn50),   higherBetter: true)
-            MetricTile(label: "HR",    value: MetricFormat.bpm(tick?.meanBPM),   unit: "bpm", delta: delta(tick?.meanBPM, comparison?.meanBPM), higherBetter: false)
+            MetricTile(label: "Mental Clarity",       techLabel: "DFA α1",  value: dfa1String,                       unit: "",    delta: delta(tick?.dfa1,    comparison?.dfa1),    higherBetter: false)
+            MetricTile(label: "Conscious Breathing",  techLabel: "RSA",     value: MetricFormat.ms(tick?.rsaMs),    unit: "ms",  delta: delta(tick?.rsaMs,   comparison?.rsaMs),   higherBetter: true)
+            MetricTile(label: "Energy Reserve",       techLabel: "HRV",     value: MetricFormat.ms(tick?.rmssd),    unit: "ms",  delta: delta(tick?.rmssd,   comparison?.rmssd),   higherBetter: true)
+            MetricTile(label: "Adaptive Power",       techLabel: "RCMSE",   value: rcmseString,                      unit: "",    delta: delta(tick?.rcmse,   comparison?.rcmse),   higherBetter: true)
+            MetricTile(label: "Inner Noise",          techLabel: "PIP",     value: pipString,                        unit: "%",   delta: delta(tick?.pip,     comparison?.pip),     higherBetter: false)
+            MetricTile(label: "Calm Reserve",         techLabel: "DC",      value: dcString,                         unit: "ms",  delta: delta(tick?.dc,      comparison?.dc),      higherBetter: true)
+            MetricTile(label: "Calm Power",           techLabel: "VTI",     value: MetricFormat.ratio(tick?.vti),   unit: "",    delta: delta(tick?.vti,     comparison?.vti),     higherBetter: true)
+            MetricTile(label: "Stress Balance",       techLabel: "LF/HF",   value: MetricFormat.ratio(tick?.lfHF), unit: "",    delta: delta(tick?.lfHF,    comparison?.lfHF),    higherBetter: false)
+            MetricTile(label: "Pulse",                techLabel: "HR",      value: MetricFormat.bpm(tick?.meanBPM), unit: "bpm", delta: delta(tick?.meanBPM, comparison?.meanBPM), higherBetter: false)
         }
     }
+
+    private var dfa1String:  String { tick?.dfa1.map  { String(format: "%.2f", $0) } ?? "—" }
+    private var rcmseString: String { tick?.rcmse.map { String(format: "%.2f", $0) } ?? "—" }
+    private var pipString:   String { tick?.pip.map   { String(format: "%.1f", $0) } ?? "—" }
+    private var dcString:    String { tick?.dc.map    { String(format: "%.1f", $0) } ?? "—" }
 
     private func delta(_ live: Float?, _ avg: Float?) -> Float? {
         guard let l = live, let a = avg else { return nil }
@@ -612,11 +622,22 @@ private struct MetricsTableView: View {
 }
 
 private struct MetricTile: View {
-    let label:        String
+    let label:        String   // consumer name
+    let techLabel:    String   // technical name shown in gray
     let value:        String
     let unit:         String
     let delta:        Float?
     let higherBetter: Bool
+
+    init(label: String, techLabel: String = "", value: String, unit: String,
+         delta: Float?, higherBetter: Bool) {
+        self.label        = label
+        self.techLabel    = techLabel
+        self.value        = value
+        self.unit         = unit
+        self.delta        = delta
+        self.higherBetter = higherBetter
+    }
 
     private var deltaColor: Color {
         guard let d = delta else { return Theme.dim }
@@ -629,32 +650,46 @@ private struct MetricTile: View {
         return String(format: "%+.1f", d)
     }
 
+    private var hasData: Bool { value != "—" }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
+            // Line 1 — white consumer name
             Text(label)
-                .font(Theme.monoLabel)
-                .foregroundStyle(Theme.dim)
-
-            Text(value)
-                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
                 .foregroundStyle(Theme.text)
                 .lineLimit(1)
-                .minimumScaleFactor(0.7)
+                .truncationMode(.tail)
+            // Line 2 — gray technical term (tight spacing so they read as one label)
+            if !techLabel.isEmpty {
+                Text(techLabel)
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(Theme.dim)
+                    .lineLimit(1)
+                    .padding(.top, -2)
+            }
 
+            // Value — fixed height so all tiles are the same size
+            Text(value)
+                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .foregroundStyle(hasData ? Theme.text : Theme.dim.opacity(0.4))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .frame(minHeight: 28)
+
+            // Unit + delta — always rendered to lock row height
             HStack(spacing: 4) {
-                if !unit.isEmpty {
-                    Text(unit)
-                        .font(Theme.monoLabel)
-                        .foregroundStyle(Theme.dim)
-                }
-                if delta != nil {
+                Text(unit.isEmpty ? " " : unit)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(Theme.dim)
+                if hasData, delta != nil {
                     Text(deltaText)
                         .font(.system(size: 10, weight: .semibold, design: .monospaced))
                         .foregroundStyle(deltaColor)
                 }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 90, alignment: .leading)
         .padding(12)
         .background(Theme.surface)
         .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -679,7 +714,8 @@ private func createMockEnvironment() -> AppEnvironment {
         timestamp: Date(), meanBPM: 72.5, sdnn: 45.3, rmssd: 38.7,
         pnn50: 22.1, vti: 12.5, ulfPower: 25, vlfPower: 550, lfPower: 850, hfPower: 1200, lfHF: 0.71,
         rsaMs: 42.0, rsaIdx: 1.41, breathBPM: 6.2, breathHz: 0.103,
-        regularity: 0.85, coherenceScore: 0.76, cbi: 0.82,
+        regularity: 0.85, coherenceScore: 0.76, cbi: 0.82, dfa1: 1.02, signalQuality: 0.97,
+        rcmse: 1.45, pip: 54.2, ials: 0.51, dc: 7.2,
         breathPhases: nil, psdFreqs: nil, psdValues: nil,
         coherenceFreqs: nil, coherenceValues: nil
     )

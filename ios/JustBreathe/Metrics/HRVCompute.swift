@@ -10,6 +10,10 @@ struct HRVMetrics {
     let pnn50:   Float      // %
     let vti:     Float      // ln(RMSSD)
 
+    /// Fraction of raw RR intervals removed as physiological artifacts (0–1).
+    /// 0 = perfect signal, 1 = all beats rejected.
+    let artifactRate: Float
+
     // Frequency domain (nil when < 30 RR intervals)
     let ulfPower: Float?    // ms²  (< 0.003 Hz; meaningful only for long recordings)
     let vlfPower: Float?    // ms²  (0.003–0.04 Hz)
@@ -48,6 +52,8 @@ enum HRVCompute {
     static func compute(rrMs: [Int]) -> HRVMetrics? {
         let rr = cleanRR(rrMs)
         guard rr.count >= minRRTime else { return nil }
+        let artifactRate: Float = rrMs.isEmpty ? 0 :
+            Float(rrMs.count - rr.count) / Float(rrMs.count)
 
         // --- Time domain ---
         let mean    = vDSP.mean(rr)
@@ -64,6 +70,7 @@ enum HRVCompute {
               let interp = interpTachogram(rr, fs: rrFS) else {
             return HRVMetrics(
                 meanBPM: meanBPM, sdnn: sdnn, rmssd: rmssd, pnn50: pnn50, vti: vti,
+                artifactRate: artifactRate,
                 ulfPower: nil, vlfPower: nil, lfPower: nil, hfPower: nil,
                 lfHF: nil, lfNU: nil, hfNU: nil,
                 psdFreqs: nil, psdValues: nil
@@ -88,6 +95,7 @@ enum HRVCompute {
 
         return HRVMetrics(
             meanBPM: meanBPM, sdnn: sdnn, rmssd: rmssd, pnn50: pnn50, vti: vti,
+            artifactRate: artifactRate,
             ulfPower: ulfP, vlfPower: vlfP,
             lfPower: lfP, hfPower: hfP,
             lfHF:  hfP > 0 ? lfP / hfP : 0,
@@ -101,6 +109,19 @@ enum HRVCompute {
     // MARK: Helpers
 
     /// Remove physiologically implausible RR values (< 300 ms or > 2000 ms).
+    /// This is the shared baseline filter for all HRV/nonlinear metrics — every
+    /// caller consuming raw RR intervals should clean through here first so a
+    /// grossly corrupted value (duplicated/garbled BLE frame, gap after a
+    /// reconnect) can't distort SDNN, DFA α1, entropy, or fragmentation metrics.
+    ///
+    /// Deliberately does NOT apply a successive-difference/Malik-style rejection
+    /// rule here: this app's core use case is paced resonance breathing, where
+    /// genuine beat-to-beat RSA swings routinely exceed 20-30% and are exactly
+    /// the signal being measured. A stricter ectopic-beat filter belongs only on
+    /// metrics that specifically need it (see `AdvancedHRVCompute.computeDC`),
+    /// not on this shared path — applying it globally previously caused real
+    /// high-RSA beats to be flagged as artifacts, inflating `artifactRate` and
+    /// visibly flattening/corrupting LF/HF and other metrics during deep breathing.
     static func cleanRR(_ rrMs: [Int]) -> [Float] {
         rrMs.compactMap { v in
             let f = Float(v)

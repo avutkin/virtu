@@ -16,6 +16,12 @@ final class HRVSample {
     var cbi:            Float?
     var breathBPM:      Float?
     var ieRatio:        Float?   // BreathPhases.meanIE
+    var dfa1:           Float?
+    var signalQuality:  Float?
+    var rcmse:          Float?
+    var pip:            Float?
+    var ials:           Float?
+    var dc:             Float?
     var vti:            Float?   // ln(RMSSD)
     var ulfPower:       Float?   // ms²  (ULF < 0.003 Hz)
     var vlfPower:       Float?   // ms²  (VLF 0.003–0.04 Hz)
@@ -35,6 +41,12 @@ final class HRVSample {
         self.cbi        = tick.cbi
         self.breathBPM  = tick.breathBPM
         self.ieRatio    = tick.breathPhases?.meanIE
+        self.dfa1          = tick.dfa1
+        self.signalQuality = tick.signalQuality
+        self.rcmse         = tick.rcmse
+        self.pip           = tick.pip
+        self.ials          = tick.ials
+        self.dc            = tick.dc
         self.vti        = tick.vti
         self.ulfPower   = tick.ulfPower
         self.vlfPower   = tick.vlfPower

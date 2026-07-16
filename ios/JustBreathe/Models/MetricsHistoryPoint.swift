@@ -42,6 +42,12 @@ struct MetricsHistoryPoint {
     let cbi:        Float?   // 0–1
     let breathBPM:  Float?   // br/min
     let meanBPM:    Float?   // bpm
+    let dfa1:          Float?
+    let signalQuality: Float?
+    let rcmse:         Float?   // RCMSE mean entropy (scales 1–5)
+    let pip:           Float?   // HR Fragmentation: % inflection points
+    let ials:          Float?   // HR Fragmentation: inverse avg segment length
+    let dc:            Float?   // Deceleration Capacity (ms)
 
     init(from tick: MetricsTick) {
         timestamp  = tick.timestamp
@@ -60,6 +66,12 @@ struct MetricsHistoryPoint {
         cbi        = tick.cbi
         breathBPM  = tick.breathBPM
         meanBPM    = tick.meanBPM
+        dfa1          = tick.dfa1
+        signalQuality = tick.signalQuality
+        rcmse         = tick.rcmse
+        pip           = tick.pip
+        ials          = tick.ials
+        dc            = tick.dc
     }
 
     init(from sample: HRVSample) {
@@ -79,5 +91,11 @@ struct MetricsHistoryPoint {
         cbi        = sample.cbi
         breathBPM  = sample.breathBPM
         meanBPM    = sample.meanBPM
+        dfa1          = sample.dfa1
+        signalQuality = sample.signalQuality
+        rcmse         = sample.rcmse
+        pip           = sample.pip
+        ials          = sample.ials
+        dc            = sample.dc
     }
 }

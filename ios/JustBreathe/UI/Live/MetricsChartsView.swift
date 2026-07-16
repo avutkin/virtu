@@ -40,9 +40,10 @@ private struct RefLine {
 // MARK: - Bucketed Data Point
 
 private struct ChartPoint: Identifiable {
-    let id:   Int    // bucket key — stable across re-renders; prevents full chart rebuild
-    let date: Date
-    let val:  Double
+    let id:      Int    // bucket key — stable across re-renders
+    let date:    Date
+    let val:     Double
+    let quality: Float? // average signal quality in this bucket (nil = no quality data)
 }
 
 // MARK: - Anomaly Band
@@ -141,9 +142,10 @@ private struct MetricInfoSheet: View {
 // MARK: - Generic Chart Card
 
 private struct MetricChartCard: View {
-    let title:      String
-    let subtitle:   String
-    let yLabel:     String
+    let title:         String   // consumer name — shown in white
+    let technicalName: String   // technical name — shown in gray after title
+    let subtitle:      String   // description — shown on second line
+    let yLabel:        String
     let color:      Color
     let windows:    [TimeWindow]
     let refs:       [RefLine]
@@ -164,7 +166,7 @@ private struct MetricChartCard: View {
     @Binding var selectedX: Date?
     @State private var showInfo = false
 
-    init(title: String, subtitle: String, yLabel: String,
+    init(title: String, technicalName: String = "", subtitle: String, yLabel: String,
          color: Color, windows: [TimeWindow], refs: [RefLine],
          yDomain: ClosedRange<Double>,
          win: Binding<TimeWindow>,
@@ -178,6 +180,7 @@ private struct MetricChartCard: View {
          bucketTransform: ((Double) -> Double)? = nil,
          extract: @escaping (MetricsHistoryPoint) -> Double?) {
         self.title           = title
+        self.technicalName   = technicalName
         self.subtitle        = subtitle
         self.yLabel          = yLabel
         self.color           = color
@@ -197,6 +200,46 @@ private struct MetricChartCard: View {
     }
 
     // MARK: Anomaly bands
+
+    /// Buckets where signal quality is poor (artifact rate > 20%) but data exists.
+    /// Rendered as a subtle amber tint, distinct from full anomaly (gray = no signal).
+    private var poorQualityBands: [AnomalyBand] {
+        guard !history.isEmpty else { return [] }
+        let (wStart, wEnd) = windowDates
+        let bucket = win.bucketSeconds
+
+        // Accumulate per-bucket quality sums
+        var sums:   [Int: Float] = [:]
+        var counts: [Int: Int]   = [:]
+        for pt in history where pt.timestamp >= wStart && pt.timestamp < wEnd {
+            guard let q = pt.signalQuality else { continue }
+            let key = Int(pt.timestamp.timeIntervalSince1970 / bucket)
+            sums[key]   = (sums[key]   ?? 0) + q
+            counts[key] = (counts[key] ?? 0) + 1
+        }
+
+        let poorKeys = sums.keys
+            .filter { key in
+                guard let n = counts[key], n > 0, let s = sums[key] else { return false }
+                return (s / Float(n)) < 0.80    // < 80% quality = > 20% artifact rate
+            }
+            .sorted()
+
+        // Merge consecutive buckets into bands
+        var bands: [AnomalyBand] = []
+        var prevKey: Int? = nil
+        for key in poorKeys {
+            let bStart = Date(timeIntervalSince1970: Double(key)     * bucket)
+            let bEnd   = Date(timeIntervalSince1970: Double(key + 1) * bucket)
+            if let pk = prevKey, pk == key - 1, !bands.isEmpty {
+                bands[bands.count - 1] = AnomalyBand(id: bands.last!.id, start: bands.last!.start, end: bEnd)
+            } else {
+                bands.append(AnomalyBand(id: bands.count, start: bStart, end: bEnd))
+            }
+            prevKey = key
+        }
+        return bands
+    }
 
     /// Buckets where raw ticks existed but ALL failed the quality filter.
     /// Adjacent bad buckets are merged into a single continuous span.
@@ -286,13 +329,19 @@ private struct MetricChartCard: View {
     private var points: [ChartPoint] {
         let (start, end) = bucketDates
         let bucket = win.bucketSeconds
-        var sums:   [Int: Double] = [:]
-        var counts: [Int: Int]    = [:]
+        var sums:    [Int: Double] = [:]
+        var counts:  [Int: Int]    = [:]
+        var qualSum: [Int: Float]  = [:]
+        var qualCnt: [Int: Int]    = [:]
         for pt in history where pt.timestamp >= start && pt.timestamp < end {
             guard let v = extract(pt) else { continue }
             let key = Int(pt.timestamp.timeIntervalSince1970 / bucket)
             sums[key]   = (sums[key]   ?? 0) + v
             counts[key] = (counts[key] ?? 0) + 1
+            if let q = pt.signalQuality {
+                qualSum[key] = (qualSum[key] ?? 0) + q
+                qualCnt[key] = (qualCnt[key] ?? 0) + 1
+            }
         }
         return sums.keys
             .sorted()
@@ -301,7 +350,8 @@ private struct MetricChartCard: View {
                 let mid = Double(key) * bucket + bucket / 2
                 var val = sums[key]! / Double(n)
                 if let transform = bucketTransform { val = transform(val) }
-                return ChartPoint(id: key, date: Date(timeIntervalSince1970: mid), val: val)
+                let q: Float? = qualCnt[key].map { (qualSum[key] ?? 0) / Float($0) }
+                return ChartPoint(id: key, date: Date(timeIntervalSince1970: mid), val: val, quality: q)
             }
     }
 
@@ -329,8 +379,13 @@ private struct MetricChartCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(title)
-                        .font(Theme.monoBody)
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(Theme.text)
+                    if !technicalName.isEmpty {
+                        Text(technicalName)
+                            .font(Theme.monoLabel)
+                            .foregroundStyle(Theme.dim)
+                    }
                     if info != nil {
                         Button { showInfo = true } label: {
                             Text("?")
@@ -342,11 +397,11 @@ private struct MetricChartCard: View {
                         }
                         .buttonStyle(.plain)
                     }
-                    Text("·")
-                        .foregroundStyle(Theme.dim)
+                }
+                if !subtitle.isEmpty {
                     Text(subtitle)
                         .font(Theme.monoLabel)
-                        .foregroundStyle(Theme.dim)
+                        .foregroundStyle(Theme.dim.opacity(0.7))
                 }
                 Text(windowLabel)
                     .font(Theme.monoLabel)
@@ -378,11 +433,11 @@ private struct MetricChartCard: View {
     /// 3-point centred rolling average — keeps date/id of the centre point.
     private func smoothed(_ pts: [ChartPoint]) -> [ChartPoint] {
         guard pts.count >= 3 else { return pts }
-        return pts.indices.map { i in
-            let lo  = max(0, i - 1)
-            let hi  = min(pts.count - 1, i + 1)
+        return pts.indices.map { idx in
+            let lo  = max(0, idx - 1)
+            let hi  = min(pts.count - 1, idx + 1)
             let avg = pts[lo...hi].reduce(0.0) { $0 + $1.val } / Double(hi - lo + 1)
-            return ChartPoint(id: pts[i].id, date: pts[i].date, val: avg)
+            return ChartPoint(id: pts[idx].id, date: pts[idx].date, val: avg, quality: pts[idx].quality)
         }
     }
 
@@ -419,7 +474,8 @@ private struct MetricChartCard: View {
 
     private func chart(_ pts: [ChartPoint], domain: ClosedRange<Double>) -> some View {
         let (start, end) = windowDates
-        let bands = anomalyBands
+        let bands        = anomalyBands
+        let poorBands    = poorQualityBands
 
         return HStack(alignment: .center, spacing: 4) {
             Text(yLabel)
@@ -430,12 +486,21 @@ private struct MetricChartCard: View {
                 .frame(width: 14)
 
             Chart {
+                // Poor quality: amber tint (artifact rate > 20%, signal present but noisy)
+                ForEach(poorBands) { band in
+                    RectangleMark(
+                        xStart: .value("poor start", band.start),
+                        xEnd:   .value("poor end",   band.end)
+                    )
+                    .foregroundStyle(Color.orange.opacity(0.12))
+                }
+                // No signal: gray (sensor removed or severe contact failure)
                 ForEach(bands) { band in
                     RectangleMark(
                         xStart: .value("anomaly start", band.start),
                         xEnd:   .value("anomaly end",   band.end)
                     )
-                    .foregroundStyle(Color.gray.opacity(0.18))
+                    .foregroundStyle(Color.gray.opacity(0.22))
                 }
 
                 ForEach(pts) { pt in
@@ -579,11 +644,14 @@ struct MetricsChartsView: View {
 
     var body: some View {
         VStack(spacing: 10) {
+            dcCard
+            rcmseCard
+            pipCard
+            dfa1Card
             lfhfCard
             rsaCard
             vtiCard
             sdnnCard
-            pnn50Card
             hrCard
         }
     }
@@ -592,7 +660,8 @@ struct MetricsChartsView: View {
 
     private var hrCard: some View {
         MetricChartCard(
-            title:    "Heart Rate",
+            title:    "Pulse",
+            technicalName: "Heart Rate",
             subtitle: "average BPM",
             yLabel:   "bpm",
             color:    Theme.warn,
@@ -680,7 +749,8 @@ struct MetricsChartsView: View {
 
     private var vtiCard: some View {
         MetricChartCard(
-            title:   "Vagal Tone Index",
+            title:   "Calm Power",
+            technicalName: "VTI · Vagal Tone Index",
             subtitle: "ln(RMSSD)  — higher = more parasympathetic",
             yLabel:  "VTI",
             color:   Theme.breathe,
@@ -709,8 +779,9 @@ struct MetricsChartsView: View {
 
     private var rsaCard: some View {
         MetricChartCard(
-            title:   "RSA",
-            subtitle: "RR oscillation at breathing freq (peak–trough)",
+            title:   "Conscious Breathing",
+            technicalName: "RSA",
+            subtitle: "",
             yLabel:  "ms",
             color:   Theme.rsa,
             windows: TimeWindow.allCases,
@@ -740,7 +811,8 @@ struct MetricsChartsView: View {
 
     private var sdnnCard: some View {
         MetricChartCard(
-            title:   "SDNN",
+            title:   "Energy Reserve",
+            technicalName: "SDNN",
             subtitle: "overall HRV",
             yLabel:  "ms",
             color:   Theme.hrv,
@@ -792,11 +864,138 @@ struct MetricsChartsView: View {
         ) { $0.pnn50.map(Double.init) }
     }
 
+    // MARK: Deceleration Capacity
+
+    private var dcCard: some View {
+        MetricChartCard(
+            title:    "Calm Reserve",
+            technicalName: "DC · Deceleration Capacity",
+            subtitle: "PRSA vagal modulation  ·  L=64",
+            yLabel:   "ms",
+            color:    Color(red: 0.4, green: 0.7, blue: 1.0),
+            windows:  TimeWindow.allCases,
+            refs: [
+                RefLine(value: 4.5,  label: "high risk (24h)",  color: Theme.warn),
+                RefLine(value: 6.1,  label: "5-min median",     color: Theme.dim),
+                RefLine(value: 10.0, label: "healthy",          color: Theme.coh),
+            ],
+            yDomain: 0...20,
+            win: $sharedWin, selectedX: $sharedSelectedX,
+            smooth: true,
+            dynamicY: true,
+            info: MetricInfo(
+                "Deceleration Capacity quantifies the heart's ability to slow down via vagal activation, computed by Phase-Rectified Signal Averaging (PRSA) over all deceleration anchor points.",
+                physical:    "The PRSA algorithm aligns all beat-to-beat decelerations (beats longer than their predecessor) and averages the surrounding 128-beat window. DC is the Haar wavelet coefficient at the anchor — a measure of how consistently the heart decelerates.",
+                physiology:  "DC reflects vagally-mediated deceleration reserve. High DC = strong parasympathetic brake. Low DC indicates diminished vagal control, seen in heart failure, post-MI patients, and autonomic neuropathy. The original Bauer 2006 Lancet study showed DC < 4.5 ms predicted mortality in post-MI patients better than LVEF.",
+                training:    "Improves with aerobic fitness, HRV biofeedback, and recovery. Responds to training over weeks. Note: the 4.5 ms risk threshold is from 24-hour recordings; 5-minute thresholds are not yet standardized.",
+                sensitivity: "Moderate. Requires ~150+ clean RR intervals. Most meaningful over 5-minute segments. Shows '—' until enough deceleration anchors accumulate.",
+                levels:      "5-min healthy median: ~6.1 ms (IQR 3.9–8.5)\nPost-MI high-risk: < 4.5 ms (24-hour norm)\nHealthy trained: > 10 ms\nNote: 5-min and 24-hour values are not directly comparable"
+            ),
+            history: history, rawHistory: rawHistory, date: date
+        ) { $0.dc.map(Double.init) }
+    }
+
+    // MARK: RCMSE
+
+    private var rcmseCard: some View {
+        MetricChartCard(
+            title:    "Adaptive Power",
+            technicalName: "RCMSE",
+            subtitle: "",
+            yLabel:   "entropy",
+            color:    Color(red: 0.8, green: 0.5, blue: 1.0),
+            windows:  TimeWindow.allCases,
+            refs: [
+                RefLine(value: 1.0, label: "Burnout",    color: Theme.warn),
+                RefLine(value: 1.5, label: "Recovering", color: Theme.dim),
+                RefLine(value: 2.0, label: "Thriving",   color: Theme.coh),
+            ],
+            yDomain: 0.5...3.0,
+            win: $sharedWin, selectedX: $sharedSelectedX,
+            smooth: true,
+            dynamicY: false,
+            info: MetricInfo(
+                "Refined Composite Multiscale Sample Entropy measures the complexity and irregularity of RR interval dynamics across multiple time scales (Wu et al. 2014). Higher values indicate richer, more adaptive cardiac regulation.",
+                physical:    "At each scale τ, the RR series is coarse-grained into τ sub-series. Template-match counts are pooled across all sub-series before computing a single log-ratio — this is the 'refined composite' innovation that avoids undefined entropy at coarse scales.",
+                physiology:  "RCMSE captures fractal-like, multi-scale complexity of cardiac regulation. Healthy hearts show moderate to high entropy across scales (the 1/f complexity signature). Pathological conditions (heart failure, severe stress, aging) produce entropy curves that peak at small scales then collapse — loss of multi-scale complexity.",
+                training:    "Improves slowly with sustained aerobic training and HRV biofeedback. Changes over weeks to months. Requires ≥100 RR intervals for any estimate; ≥200 for reliable values. Parameters: m=2, r=0.15×SD, scales 1–10.",
+                sensitivity: "Low to moderate. Stable over 3-5 minutes of continuous wear. More informative as a trend than a single reading.",
+                levels:      "Healthy young adults (scale 1–5 mean): ~1.4–2.2\nStressed/diseased: < 1.2\nHighly trained: > 2.0\nNote: no universal normative table exists for 5-min HRV"
+            ),
+            history: history, rawHistory: rawHistory, date: date
+        ) { $0.rcmse.map(Double.init) }
+    }
+
+    // MARK: PIP (HR Fragmentation)
+
+    private var pipCard: some View {
+        MetricChartCard(
+            title:    "Inner Noise",
+            technicalName: "HR Fragmentation · PIP",
+            subtitle: "% inflection points  ·  Costa 2017",
+            yLabel:   "%",
+            color:    Color(red: 1.0, green: 0.7, blue: 0.3),
+            windows:  TimeWindow.allCases,
+            refs: [
+                RefLine(value: 40.0, label: "low fragmentation", color: Theme.coh),
+                RefLine(value: 55.0, label: "healthy median",    color: Theme.dim),
+                RefLine(value: 70.0, label: "high fragmentation",color: Theme.warn),
+            ],
+            yDomain: 20...90,
+            win: $sharedWin, selectedX: $sharedSelectedX,
+            smooth: true,
+            dynamicY: false,
+            info: MetricInfo(
+                "HR Fragmentation (PIP) is the percentage of RR intervals that are inflection points — local direction reversals in the heartbeat sequence (Costa et al. 2017). High PIP indicates a fragmented, less coordinated rhythm.",
+                physical:    "An inflection point occurs when consecutive beat-to-beat differences switch sign (the heart alternates between speeding up and slowing down). PIP = inflection count / (N-2). A perfectly regular alternating pattern gives PIP = 100%; a purely monotonic series gives PIP = 0%.",
+                physiology:  "Low-level fragmentation (~55%) is normal — the heart's regulatory loops produce natural short-term direction reversals. High fragmentation (>70%) indicates pathological disruption of autonomic coordination, seen in atrial fibrillation, heart failure, and severe autonomic neuropathy. May reflect disrupted sympatho-vagal oscillation.",
+                training:    "PIP is not directly trainable but reflects underlying autonomic health. Chronic stress and sleep deprivation increase fragmentation. Decreases with improved cardiovascular fitness and HRV biofeedback over weeks. Requires ≥30 RR intervals.",
+                sensitivity: "Moderate-high. Responds relatively quickly to state changes. More stable than entropy metrics for short recordings.",
+                levels:      "24-hour healthy median: 55.4% (IQR 52–59%)\nHigh fragmentation: > 70%\nLow fragmentation: < 45%\nNote: 5-min norms not yet established; 24-hour values used as reference",
+                notes:       "IALS (Inverse Average Segment Length) is also computed internally and reflects the same fragmentation phenomenon from a segment-length perspective."
+            ),
+            history: history, rawHistory: rawHistory, date: date
+        ) { $0.pip.map(Double.init) }
+    }
+
+    // MARK: DFA α1
+
+    private var dfa1Card: some View {
+        MetricChartCard(
+            title:   "Mental Clarity",
+            technicalName: "DFA α1",
+            subtitle: "short-term fractal scaling  ·  scales 4–16 beats",
+            yLabel:  "α1",
+            color:   Theme.ulf,
+            windows: TimeWindow.allCases,
+            refs: [
+                RefLine(value: 0.75, label: "Tunnel Mode",    color: Theme.warn),
+                RefLine(value: 1.0,  label: "Flow State",     color: Theme.coh),
+                RefLine(value: 1.5,  label: "Wandering Mind", color: Theme.warn),
+            ],
+            yDomain: 0.5...1.8,
+            win: $sharedWin, selectedX: $sharedSelectedX,
+            smooth: true,
+            dynamicY: false,
+            info: MetricInfo(
+                "Short-term fractal scaling exponent from Detrended Fluctuation Analysis (Peng et al. 1995). Captures the self-similar correlation structure of RR intervals over 4–16 beat windows.",
+                physical:    "DFA α1 measures how RR interval fluctuations at short time scales are correlated. A value of 1.0 indicates 1/f (pink) noise — the hallmark of a healthy, adaptive heart. Values near 0.5 indicate uncorrelated (white) noise; values near 1.5 indicate Brownian (random-walk) dynamics.",
+                physiology:  "α1 reflects the complexity and adaptability of cardiac regulation. It is closely tied to vagal tone and parasympathetic modulation. Lower values (< 0.75) are linked to reduced cardiac complexity seen in heart failure, aging, and autonomic neuropathy. Values > 1.5 indicate over-correlated dynamics also associated with pathology.",
+                training:    "α1 improves with regular aerobic exercise and HRV biofeedback. Track it over weeks — meaningful changes require consistent training. Acute reductions may appear during heavy exercise or high stress. Best interpreted alongside RMSSD and LF/HF.",
+                sensitivity: "Low to moderate. Requires ≥ 128 RR intervals (~2 min at rest). Computed on a 256-beat rolling window. Updates every 2 seconds but stabilises over 3–5 minutes of continuous wear.",
+                levels:      "Pathological low: < 0.5\nLow:             0.5–0.75\nNormal:          0.75–1.5  (target range)\nIdeal:           ~1.0\nHigh:            > 1.5\nPathological high: > 2.0",
+                notes:       "α1 will display '—' until 128 RR intervals have been collected (~2 minutes of wear). This is a fundamental requirement of the DFA algorithm, not a sensor issue."
+            ),
+            history: history, rawHistory: rawHistory, date: date
+        ) { $0.dfa1.map(Double.init) }
+    }
+
     // MARK: LF/HF Ratio
 
     private var lfhfCard: some View {
         MetricChartCard(
-            title:   "LF/HF Ratio",
+            title:   "Stress Balance",
+            technicalName: "LF/HF Ratio",
             subtitle: "sympathovagal balance",
             yLabel:  "ratio",
             color:   Theme.rsa,
@@ -937,6 +1136,12 @@ private func mockHistory() -> [MetricsHistoryPoint] {
             regularity:     Float(0.8 + 0.1 * sin(phase * 0.4)),
             coherenceScore: Float(0.7 + 0.2 * sin(phase * 0.3)),
             cbi:            Float(0.75 + 0.1 * sin(phase * 0.3)),
+            dfa1:           Float(1.0 + 0.15 * sin(phase * 0.15)),
+            signalQuality:  Float(0.95 + 0.05 * sin(phase * 0.2)),
+            rcmse:          Float(1.4 + 0.2 * sin(phase * 0.12)),
+            pip:            Float(54.0 + 6.0 * sin(phase * 0.09)),
+            ials:           Float(0.51 + 0.04 * sin(phase * 0.11)),
+            dc:             Float(7.0 + 1.5 * sin(phase * 0.08)),
             breathPhases: BreathPhases(
                 breaths:    [],
                 meanIE:     Float(1.4 + 0.4 * sin(phase * 0.4)),
