@@ -1138,6 +1138,7 @@ private func mockHistory() -> [MetricsHistoryPoint] {
             cbi:            Float(0.75 + 0.1 * sin(phase * 0.3)),
             dfa1:           Float(1.0 + 0.15 * sin(phase * 0.15)),
             signalQuality:  Float(0.95 + 0.05 * sin(phase * 0.2)),
+            ecgQuality:     nil,
             rcmse:          Float(1.4 + 0.2 * sin(phase * 0.12)),
             pip:            Float(54.0 + 6.0 * sin(phase * 0.09)),
             ials:           Float(0.51 + 0.04 * sin(phase * 0.11)),

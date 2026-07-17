@@ -81,4 +81,14 @@ final class MetricsTests: XCTestCase {
             XCTAssertTrue((0...1).contains(cbi), "CBI must be in [0, 1], got \(cbi)")
         }
     }
+
+    // MARK: - ECG quality wiring
+
+    func testMetricsEngineComputesECGQuality() {
+        let flatEcg = [Float](repeating: 50, count: 200)   // flatline — simulates lead-off
+        let snapshot = DataSnapshot(ecg: flatEcg, accZ: [], accXYZ: [], rr: [], bpm: [])
+        let tick = MetricsEngine.compute(from: snapshot)
+        XCTAssertEqual(tick.ecgQuality?.tier, .poor)
+        XCTAssertEqual(tick.ecgQuality?.reason, "lead-off")
+    }
 }

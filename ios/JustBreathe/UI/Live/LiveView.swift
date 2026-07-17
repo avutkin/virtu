@@ -218,6 +218,7 @@ private struct DayScrollView: View {
             cbi:             avg(history.compactMap(\.cbi)),
             dfa1:            avg(history.compactMap(\.dfa1)),
             signalQuality:   avg(history.compactMap(\.signalQuality)),
+            ecgQuality:      nil,
             rcmse:           avg(history.compactMap(\.rcmse)),
             pip:             avg(history.compactMap(\.pip)),
             ials:            avg(history.compactMap(\.ials)),
@@ -715,6 +716,7 @@ private func createMockEnvironment() -> AppEnvironment {
         pnn50: 22.1, vti: 12.5, ulfPower: 25, vlfPower: 550, lfPower: 850, hfPower: 1200, lfHF: 0.71,
         rsaMs: 42.0, rsaIdx: 1.41, breathBPM: 6.2, breathHz: 0.103,
         regularity: 0.85, coherenceScore: 0.76, cbi: 0.82, dfa1: 1.02, signalQuality: 0.97,
+        ecgQuality: ECGQualityResult(tier: .good, reason: "clean"),
         rcmse: 1.45, pip: 54.2, ials: 0.51, dc: 7.2,
         breathPhases: nil, psdFreqs: nil, psdValues: nil,
         coherenceFreqs: nil, coherenceValues: nil

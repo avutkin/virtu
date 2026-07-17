@@ -39,6 +39,9 @@ struct MetricsTick {
     // Signal quality
     let signalQuality: Float?
 
+    /// ECG waveform quality (flatline/clipping check) — live-only, not persisted.
+    let ecgQuality: ECGQualityResult?
+
     // Advanced nonlinear HRV (computed on slower cadence — needs 100–350 beats)
     let rcmse: Float?   // Refined Composite Multiscale Entropy mean (scales 1–5)
     let pip:   Float?   // HR Fragmentation: % inflection points (higher = more fragmented)
@@ -73,6 +76,9 @@ enum MetricsEngine {
 
         // --- DFA α1 ---
         let dfa = DFACompute.compute(rrMs: rrMs)
+
+        // --- ECG waveform quality ---
+        let ecgQuality = ECGQualityCompute.compute(ecg: snapshot.ecg)
 
         // --- Advanced nonlinear metrics (need 100–350 beats, more expensive) ---
         let rcmseResult = AdvancedHRVCompute.computeRCMSE(rrMs: rrMs)
@@ -125,6 +131,7 @@ enum MetricsEngine {
             cbi:            cbi,
             dfa1:           dfa?.alpha1,
             signalQuality:  hrv.map { 1 - $0.artifactRate },
+            ecgQuality:     ecgQuality,
             rcmse:          rcmseResult?.meanEntropy,
             pip:            hrfResult?.pip,
             ials:           hrfResult?.ials,
