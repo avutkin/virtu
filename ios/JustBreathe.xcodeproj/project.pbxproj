@@ -50,6 +50,7 @@
 		A141 /* DFACompute.swift in Sources */ = {isa = PBXBuildFile; fileRef = F141 /* DFACompute.swift */; };
 		A142 /* AdvancedHRVCompute.swift in Sources */ = {isa = PBXBuildFile; fileRef = F142 /* AdvancedHRVCompute.swift */; };
 		A143 /* ECGQualityCompute.swift in Sources */ = {isa = PBXBuildFile; fileRef = F143 /* ECGQualityCompute.swift */; };
+		A144 /* SignalQualityTier+Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = F144 /* SignalQualityTier+Theme.swift */; };
 		ARES1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FRES1 /* Assets.xcassets */; };
 		AT01 /* MetricsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT01 /* MetricsTests.swift */; };
 		AT02 /* BLETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT02 /* BLETests.swift */; };
@@ -110,6 +111,7 @@
 		F141 /* DFACompute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DFACompute.swift; sourceTree = "<group>"; };
 		F142 /* AdvancedHRVCompute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedHRVCompute.swift; sourceTree = "<group>"; };
 		F143 /* ECGQualityCompute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ECGQualityCompute.swift; sourceTree = "<group>"; };
+		F144 /* SignalQualityTier+Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SignalQualityTier+Theme.swift"; sourceTree = "<group>"; };
 		FRES1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		FAPP /* JustBreathe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JustBreathe.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FINFO /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -178,6 +180,7 @@
 				F118 /* WaveformRenderer.swift */,
 				F132 /* SplashView.swift */,
 				F133 /* BLENavButton.swift */,
+				F144 /* SignalQualityTier+Theme.swift */,
 			);
 			path = Design;
 			sourceTree = "<group>";
@@ -451,6 +454,7 @@
 				A141 /* DFACompute.swift in Sources */,
 				A142 /* AdvancedHRVCompute.swift in Sources */,
 				A143 /* ECGQualityCompute.swift in Sources */,
+				A144 /* SignalQualityTier+Theme.swift in Sources */,
 				A123 /* ResonateView.swift in Sources */,
 				A124 /* PacerCircleView.swift in Sources */,
 				A125 /* HistoryView.swift in Sources */,

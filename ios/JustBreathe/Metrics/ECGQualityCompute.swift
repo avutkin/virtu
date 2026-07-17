@@ -1,5 +1,4 @@
 import Foundation
-import SwiftUI
 
 // MARK: - Signal Quality Tier
 
@@ -12,25 +11,6 @@ enum SignalQualityTier: Int, Comparable {
 
     static func < (lhs: SignalQualityTier, rhs: SignalQualityTier) -> Bool {
         lhs.rawValue < rhs.rawValue
-    }
-
-    /// Shared color mapping used by every UI surface that renders this tier
-    /// (BLE nav pill dot, BLE connection sheet's signal quality card, etc).
-    var color: Color {
-        switch self {
-        case .good: return Theme.accent
-        case .okay: return Theme.rsa
-        case .poor: return Theme.warn
-        }
-    }
-
-    /// Shared label mapping used by every UI surface that renders this tier.
-    var label: String {
-        switch self {
-        case .good: return "GOOD"
-        case .okay: return "OKAY"
-        case .poor: return "POOR"
-        }
     }
 }
 
