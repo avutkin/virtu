@@ -66,6 +66,28 @@ enum ECGQualityCompute {
         return ECGQualityResult(tier: .good, reason: "clean")
     }
 
+    /// Tiers the existing RR-artifact-based `MetricsTick.signalQuality`
+    /// (`1 - artifactRate`, already computed by `HRVCompute`).
+    static func rrTier(fromSignalQuality q: Float) -> SignalQualityTier {
+        if q >= 0.95 { return .good }
+        if q >= 0.80 { return .okay }
+        return .poor
+    }
+
+    /// Combines the RR-artifact tier and the ECG-waveform tier into one
+    /// overall tier — the worse of the two, since either signal alone being
+    /// bad means the reading can't be fully trusted.
+    static func combinedTier(rrSignalQuality: Float?, ecgResult: ECGQualityResult?) -> CombinedSignalQuality? {
+        let rr  = rrSignalQuality.map(rrTier(fromSignalQuality:))
+        let ecg = ecgResult?.tier
+        guard let overall = [rr, ecg].compactMap({ $0 }).min() else { return nil }
+        return CombinedSignalQuality(
+            tier: overall,
+            rrArtifactPercent: rrSignalQuality.map { Int(((1 - $0) * 100).rounded()) },
+            ecgReason: ecgResult?.reason
+        )
+    }
+
     /// A run of `clipMinRunLength`+ consecutive samples within `clipRunTolerance`
     /// of the window's own min or max counts as "pinned" (saturated at a rail).
     /// Short runs are ignored — a real QRS peak can briefly touch the window max

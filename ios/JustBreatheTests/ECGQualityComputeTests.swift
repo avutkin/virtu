@@ -51,4 +51,30 @@ final class ECGQualityComputeTests: XCTestCase {
         XCTAssertEqual(result?.tier, .good)
         XCTAssertEqual(result?.reason, "clean")
     }
+
+    func testRRTierBoundaries() {
+        XCTAssertEqual(ECGQualityCompute.rrTier(fromSignalQuality: 0.97), .good)
+        XCTAssertEqual(ECGQualityCompute.rrTier(fromSignalQuality: 0.95), .good)
+        XCTAssertEqual(ECGQualityCompute.rrTier(fromSignalQuality: 0.85), .okay)
+        XCTAssertEqual(ECGQualityCompute.rrTier(fromSignalQuality: 0.80), .okay)
+        XCTAssertEqual(ECGQualityCompute.rrTier(fromSignalQuality: 0.50), .poor)
+    }
+
+    func testCombinedTierNilWhenNoData() {
+        XCTAssertNil(ECGQualityCompute.combinedTier(rrSignalQuality: nil, ecgResult: nil))
+    }
+
+    func testCombinedTierTakesWorseOfTwo() {
+        let ecgGood = ECGQualityResult(tier: .good, reason: "clean")
+        let combined = ECGQualityCompute.combinedTier(rrSignalQuality: 0.50, ecgResult: ecgGood)
+        XCTAssertEqual(combined?.tier, .poor)     // RR side is worse (50% artifacts)
+        XCTAssertEqual(combined?.rrArtifactPercent, 50)
+        XCTAssertEqual(combined?.ecgReason, "clean")
+    }
+
+    func testCombinedTierUsesOnlyAvailableSide() {
+        let combined = ECGQualityCompute.combinedTier(rrSignalQuality: 0.97, ecgResult: nil)
+        XCTAssertEqual(combined?.tier, .good)
+        XCTAssertNil(combined?.ecgReason)
+    }
 }
