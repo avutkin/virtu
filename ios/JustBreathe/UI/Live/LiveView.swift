@@ -83,7 +83,7 @@ struct LiveView: View {
                 }
             }
             .sheet(isPresented: $showBLESheet) {
-                BLEConnectionSheet(ble: env.ble)
+                BLEConnectionSheet(ble: env.ble, quality: currentQuality)
             }
         }
     }
@@ -296,8 +296,14 @@ private struct DateNavigator: View {
 // MARK: - BLE Connection Sheet
 
 struct BLEConnectionSheet: View {
-    let ble: BLEService
+    let ble:     BLEService
+    let quality: CombinedSignalQuality?
     @Environment(\.dismiss) private var dismiss
+
+    init(ble: BLEService, quality: CombinedSignalQuality? = nil) {
+        self.ble     = ble
+        self.quality = quality
+    }
 
     var body: some View {
         NavigationStack {
@@ -307,6 +313,7 @@ struct BLEConnectionSheet: View {
                 ScrollView {
                     VStack(spacing: 16) {
                         statusCard
+                        if let quality { signalQualityCard(quality) }
                         actionSection
                         if let err = ble.lastError { errorCard(err) }
                     }
@@ -353,6 +360,77 @@ struct BLEConnectionSheet: View {
             Spacer()
         }
         .cardStyle()
+    }
+
+    private func signalQualityCard(_ q: CombinedSignalQuality) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("SIGNAL QUALITY")
+                    .font(Theme.monoLabel)
+                    .foregroundStyle(Theme.dim)
+                Spacer()
+                HStack(spacing: 5) {
+                    Circle().fill(qualityColor(q.tier)).frame(width: 7, height: 7)
+                    Text(qualityLabel(q.tier))
+                        .font(Theme.monoBody)
+                        .foregroundStyle(qualityColor(q.tier))
+                }
+            }
+            HStack {
+                Text("RR artifacts")
+                    .font(Theme.monoLabel)
+                    .foregroundStyle(Theme.dim)
+                Spacer()
+                Text(q.rrArtifactPercent.map { "\($0)%" } ?? "—")
+                    .font(Theme.monoBody)
+                    .foregroundStyle(Theme.text)
+            }
+            HStack {
+                Text("ECG waveform")
+                    .font(Theme.monoLabel)
+                    .foregroundStyle(Theme.dim)
+                Spacer()
+                Text(q.ecgReason ?? "—")
+                    .font(Theme.monoBody)
+                    .foregroundStyle(Theme.text)
+            }
+            if q.tier != .good {
+                Divider().background(Theme.border)
+                Text("Improving signal quality")
+                    .font(Theme.monoLabel)
+                    .foregroundStyle(Theme.dim)
+                ForEach(Self.improvementTips, id: \.self) { tip in
+                    Text("•  \(tip)")
+                        .font(Theme.monoLabel)
+                        .foregroundStyle(Theme.text.opacity(0.85))
+                }
+            }
+        }
+        .cardStyle()
+    }
+
+    private static let improvementTips = [
+        "Limit movement during measurement",
+        "Ensure the chest strap is moist",
+        "Ensure the strap is tightened appropriately",
+        "Check and replace worn-out chest straps",
+        "Check and replace HR monitor batteries that are low",
+    ]
+
+    private func qualityColor(_ tier: SignalQualityTier) -> Color {
+        switch tier {
+        case .good: return Theme.accent
+        case .okay: return Theme.rsa
+        case .poor: return Theme.warn
+        }
+    }
+
+    private func qualityLabel(_ tier: SignalQualityTier) -> String {
+        switch tier {
+        case .good: return "GOOD"
+        case .okay: return "OKAY"
+        case .poor: return "POOR"
+        }
     }
 
     @ViewBuilder
