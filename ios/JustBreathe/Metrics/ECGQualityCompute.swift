@@ -57,6 +57,42 @@ enum ECGQualityCompute {
             return ECGQualityResult(tier: .poor, reason: "lead-off")
         }
 
+        let clippedFraction = clippedSampleFraction(ecg)
+        if clippedFraction >= clipPoorFraction {
+            return ECGQualityResult(tier: .poor, reason: "clipping")
+        } else if clippedFraction > 0 {
+            return ECGQualityResult(tier: .okay, reason: "clipping")
+        }
         return ECGQualityResult(tier: .good, reason: "clean")
+    }
+
+    /// A run of `clipMinRunLength`+ consecutive samples within `clipRunTolerance`
+    /// of the window's own min or max counts as "pinned" (saturated at a rail).
+    /// Short runs are ignored — a real QRS peak can briefly touch the window max
+    /// without that being clipping.
+    private static let clipRunTolerance: Float = 0.5
+    private static let clipMinRunLength: Int   = 5
+    private static let clipPoorFraction: Float = 0.10
+
+    private static func clippedSampleFraction(_ ecg: [Float]) -> Float {
+        guard let maxVal = ecg.max(), let minVal = ecg.min() else { return 0 }
+
+        func pinnedCount(near rail: Float) -> Int {
+            var total = 0
+            var runLength = 0
+            for v in ecg {
+                if abs(v - rail) <= clipRunTolerance {
+                    runLength += 1
+                } else {
+                    if runLength >= clipMinRunLength { total += runLength }
+                    runLength = 0
+                }
+            }
+            if runLength >= clipMinRunLength { total += runLength }
+            return total
+        }
+
+        let pinned = pinnedCount(near: maxVal) + pinnedCount(near: minVal)
+        return Float(pinned) / Float(ecg.count)
     }
 }
