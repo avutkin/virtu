@@ -6,12 +6,23 @@ import SwiftUI
 // with animated icons and optional BPM readout.
 
 struct BLENavButton: View {
-    let state:  BLEState
-    let bpm:    Float?
-    let action: () -> Void
+    let state:   BLEState
+    let bpm:     Float?
+    let quality: CombinedSignalQuality?
+    let action:  () -> Void
 
     @State private var pulse       = false
     @State private var spinAngle   = 0.0
+
+    init(state: BLEState,
+         bpm: Float?,
+         quality: CombinedSignalQuality? = nil,
+         action: @escaping () -> Void) {
+        self.state   = state
+        self.bpm     = bpm
+        self.quality = quality
+        self.action  = action
+    }
 
     var body: some View {
         Button(action: action) {
@@ -73,6 +84,15 @@ struct BLENavButton: View {
             .padding(.vertical, 5)
             .background(stateBackground)
             .clipShape(Capsule())
+            .overlay(alignment: .topTrailing) {
+                if case .connected = state, let quality {
+                    Circle()
+                        .fill(qualityColor(quality.tier))
+                        .frame(width: 7, height: 7)
+                        .overlay(Circle().strokeBorder(Theme.bg, lineWidth: 1.5))
+                        .offset(x: 2, y: -2)
+                }
+            }
         }
         .onAppear { startAnimations() }
         .onChange(of: state) { startAnimations() }
@@ -118,6 +138,14 @@ struct BLENavButton: View {
             }
         default:
             break
+        }
+    }
+
+    private func qualityColor(_ tier: SignalQualityTier) -> Color {
+        switch tier {
+        case .good: return Theme.accent
+        case .okay: return Theme.rsa
+        case .poor: return Theme.warn
         }
     }
 }

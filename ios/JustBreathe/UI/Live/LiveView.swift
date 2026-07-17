@@ -26,6 +26,13 @@ struct LiveView: View {
     private func goBack()    { if pageIndex > 0 { pageIndex -= 1 } }
     private func goForward() { if !isToday      { pageIndex += 1 } }
 
+    private var currentQuality: CombinedSignalQuality? {
+        ECGQualityCompute.combinedTier(
+            rrSignalQuality: env.latestTick?.signalQuality,
+            ecgResult:       env.latestTick?.ecgQuality
+        )
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -69,7 +76,8 @@ struct LiveView: View {
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     BLENavButton(state: env.ble.state,
-                                 bpm: env.latestTick?.meanBPM) {
+                                 bpm: env.latestTick?.meanBPM,
+                                 quality: currentQuality) {
                         showBLESheet = true
                     }
                 }
