@@ -49,9 +49,11 @@
 		A140 /* RecommendedActionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F140 /* RecommendedActionCard.swift */; };
 		A141 /* DFACompute.swift in Sources */ = {isa = PBXBuildFile; fileRef = F141 /* DFACompute.swift */; };
 		A142 /* AdvancedHRVCompute.swift in Sources */ = {isa = PBXBuildFile; fileRef = F142 /* AdvancedHRVCompute.swift */; };
+		A143 /* ECGQualityCompute.swift in Sources */ = {isa = PBXBuildFile; fileRef = F143 /* ECGQualityCompute.swift */; };
 		ARES1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FRES1 /* Assets.xcassets */; };
 		AT01 /* MetricsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT01 /* MetricsTests.swift */; };
 		AT02 /* BLETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT02 /* BLETests.swift */; };
+		AT03 /* ECGQualityComputeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT03 /* ECGQualityComputeTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -107,11 +109,13 @@
 		F140 /* RecommendedActionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecommendedActionCard.swift; sourceTree = "<group>"; };
 		F141 /* DFACompute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DFACompute.swift; sourceTree = "<group>"; };
 		F142 /* AdvancedHRVCompute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedHRVCompute.swift; sourceTree = "<group>"; };
+		F143 /* ECGQualityCompute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ECGQualityCompute.swift; sourceTree = "<group>"; };
 		FRES1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		FAPP /* JustBreathe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JustBreathe.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FINFO /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		FT01 /* MetricsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricsTests.swift; sourceTree = "<group>"; };
 		FT02 /* BLETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BLETests.swift; sourceTree = "<group>"; };
+		FT03 /* ECGQualityComputeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ECGQualityComputeTests.swift; sourceTree = "<group>"; };
 		FTST /* JustBreatheTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = JustBreatheTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -221,6 +225,7 @@
 				F110 /* CoherenceCompute.swift */,
 				F141 /* DFACompute.swift */,
 				F142 /* AdvancedHRVCompute.swift */,
+				F143 /* ECGQualityCompute.swift */,
 			);
 			path = Metrics;
 			sourceTree = "<group>";
@@ -311,6 +316,7 @@
 			children = (
 				FT01 /* MetricsTests.swift */,
 				FT02 /* BLETests.swift */,
+				FT03 /* ECGQualityComputeTests.swift */,
 			);
 			path = JustBreatheTests;
 			sourceTree = "<group>";
@@ -444,6 +450,7 @@
 				A140 /* RecommendedActionCard.swift in Sources */,
 				A141 /* DFACompute.swift in Sources */,
 				A142 /* AdvancedHRVCompute.swift in Sources */,
+				A143 /* ECGQualityCompute.swift in Sources */,
 				A123 /* ResonateView.swift in Sources */,
 				A124 /* PacerCircleView.swift in Sources */,
 				A125 /* HistoryView.swift in Sources */,
@@ -457,6 +464,7 @@
 			files = (
 				AT01 /* MetricsTests.swift in Sources */,
 				AT02 /* BLETests.swift in Sources */,
+				AT03 /* ECGQualityComputeTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
