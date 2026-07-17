@@ -77,4 +77,37 @@ final class ECGQualityComputeTests: XCTestCase {
         XCTAssertEqual(combined?.tier, .good)
         XCTAssertNil(combined?.ecgReason)
     }
+
+    func testCombinedTierTakesWorseOfTwoWhenECGIsWorse() {
+        let ecgPoor = ECGQualityResult(tier: .poor, reason: "lead-off")
+        let combined = ECGQualityCompute.combinedTier(rrSignalQuality: 0.97, ecgResult: ecgPoor)
+        XCTAssertEqual(combined?.tier, .poor)     // ECG side is worse (lead-off)
+        XCTAssertEqual(combined?.ecgReason, "lead-off")
+    }
+
+    func testCombinedTierUsesOnlyAvailableSideECGOnly() {
+        let ecgGood = ECGQualityResult(tier: .good, reason: "clean")
+        let combined = ECGQualityCompute.combinedTier(rrSignalQuality: nil, ecgResult: ecgGood)
+        XCTAssertEqual(combined?.tier, .good)
+        XCTAssertNil(combined?.rrArtifactPercent)
+        XCTAssertEqual(combined?.ecgReason, "clean")
+    }
+
+    func testClipMinRunLengthBoundaryCountsAsClipping() {
+        var ecg: [Float] = (0..<200).map { i in Float(i % 37) * 17.3 - 300 }
+        let railValue: Float = 1000
+        for i in 50..<55 { ecg[i] = railValue }   // exactly 5 consecutive — the clipMinRunLength boundary
+        let result = ECGQualityCompute.compute(ecg: ecg)
+        XCTAssertEqual(result?.tier, .okay)   // 5/200 = 2.5%, well under the 10% Poor threshold
+        XCTAssertEqual(result?.reason, "clipping")
+    }
+
+    func testClipPoorFractionBoundaryTipsIntoPoor() {
+        var ecg: [Float] = (0..<200).map { i in Float(i % 37) * 17.3 - 300 }
+        let railValue: Float = 1000
+        for i in 50..<70 { ecg[i] = railValue }   // exactly 20 consecutive (10% of window) — the clipPoorFraction boundary
+        let result = ECGQualityCompute.compute(ecg: ecg)
+        XCTAssertEqual(result?.tier, .poor)
+        XCTAssertEqual(result?.reason, "clipping")
+    }
 }

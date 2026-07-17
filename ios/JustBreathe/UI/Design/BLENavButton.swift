@@ -87,7 +87,7 @@ struct BLENavButton: View {
             .overlay(alignment: .topTrailing) {
                 if case .connected = state, let quality {
                     Circle()
-                        .fill(qualityColor(quality.tier))
+                        .fill(quality.tier.color)
                         .frame(width: 7, height: 7)
                         .overlay(Circle().strokeBorder(Theme.bg, lineWidth: 1.5))
                         .offset(x: 2, y: -2)
@@ -138,14 +138,6 @@ struct BLENavButton: View {
             }
         default:
             break
-        }
-    }
-
-    private func qualityColor(_ tier: SignalQualityTier) -> Color {
-        switch tier {
-        case .good: return Theme.accent
-        case .okay: return Theme.rsa
-        case .poor: return Theme.warn
         }
     }
 }

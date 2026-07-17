@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 // MARK: - Signal Quality Tier
 
@@ -11,6 +12,25 @@ enum SignalQualityTier: Int, Comparable {
 
     static func < (lhs: SignalQualityTier, rhs: SignalQualityTier) -> Bool {
         lhs.rawValue < rhs.rawValue
+    }
+
+    /// Shared color mapping used by every UI surface that renders this tier
+    /// (BLE nav pill dot, BLE connection sheet's signal quality card, etc).
+    var color: Color {
+        switch self {
+        case .good: return Theme.accent
+        case .okay: return Theme.rsa
+        case .poor: return Theme.warn
+        }
+    }
+
+    /// Shared label mapping used by every UI surface that renders this tier.
+    var label: String {
+        switch self {
+        case .good: return "GOOD"
+        case .okay: return "OKAY"
+        case .poor: return "POOR"
+        }
     }
 }
 
@@ -92,6 +112,10 @@ enum ECGQualityCompute {
     /// of the window's own min or max counts as "pinned" (saturated at a rail).
     /// Short runs are ignored — a real QRS peak can briefly touch the window max
     /// without that being clipping.
+    /// `clipRunTolerance` is named as a tolerance, but since ECG samples are
+    /// integer-derived µV values, in practice it only matches samples exactly
+    /// equal to the window's min/max — true ADC-rail pinning, not a fuzzy
+    /// near-rail allowance.
     private static let clipRunTolerance: Float = 0.5
     private static let clipMinRunLength: Int   = 5
     private static let clipPoorFraction: Float = 0.10

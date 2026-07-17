@@ -370,10 +370,10 @@ struct BLEConnectionSheet: View {
                     .foregroundStyle(Theme.dim)
                 Spacer()
                 HStack(spacing: 5) {
-                    Circle().fill(qualityColor(q.tier)).frame(width: 7, height: 7)
-                    Text(qualityLabel(q.tier))
+                    Circle().fill(q.tier.color).frame(width: 7, height: 7)
+                    Text(q.tier.label)
                         .font(Theme.monoBody)
-                        .foregroundStyle(qualityColor(q.tier))
+                        .foregroundStyle(q.tier.color)
                 }
             }
             HStack {
@@ -416,22 +416,6 @@ struct BLEConnectionSheet: View {
         "Check and replace worn-out chest straps",
         "Check and replace HR monitor batteries that are low",
     ]
-
-    private func qualityColor(_ tier: SignalQualityTier) -> Color {
-        switch tier {
-        case .good: return Theme.accent
-        case .okay: return Theme.rsa
-        case .poor: return Theme.warn
-        }
-    }
-
-    private func qualityLabel(_ tier: SignalQualityTier) -> String {
-        switch tier {
-        case .good: return "GOOD"
-        case .okay: return "OKAY"
-        case .poor: return "POOR"
-        }
-    }
 
     @ViewBuilder
     private var actionSection: some View {
