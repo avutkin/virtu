@@ -9,19 +9,17 @@ import SwiftData
 private enum ActivitySheet: Identifiable {
     case ble
     case start
-    case startWith(ActivityType)
     case logPast
     case detail(ActivityLog)
     case edit(ActivityLog)
 
     var id: String {
         switch self {
-        case .ble:              return "ble"
-        case .start:            return "start"
-        case .startWith(let t): return "startWith-\(t.rawValue)"
-        case .logPast:          return "logPast"
-        case .detail(let e):    return "detail-\(e.id)"
-        case .edit(let e):      return "edit-\(e.id)"
+        case .ble:           return "ble"
+        case .start:         return "start"
+        case .logPast:       return "logPast"
+        case .detail(let e): return "detail-\(e.id)"
+        case .edit(let e):   return "edit-\(e.id)"
         }
     }
 }
@@ -121,7 +119,7 @@ struct ActivitiesView: View {
                         HStack(spacing: 10) {
                             ForEach(suggested, id: \.self) { type in
                                 SuggestionChip(type: type) {
-                                    activeSheet = .startWith(type)
+                                    env.pendingTabRequest = .train
                                 }
                             }
                         }
@@ -215,10 +213,6 @@ struct ActivitiesView: View {
             BLEConnectionSheet(ble: env.ble)
         case .start:
             StartActivitySheet(preselected: nil) { type, subtype, name in
-                beginActivity(type: type, subtype: subtype, customName: name)
-            }
-        case .startWith(let type):
-            StartActivitySheet(preselected: type) { type, subtype, name in
                 beginActivity(type: type, subtype: subtype, customName: name)
             }
         case .logPast:
