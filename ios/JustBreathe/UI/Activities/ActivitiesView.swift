@@ -1,12 +1,12 @@
 import SwiftUI
 import SwiftData
 
-// MARK: - ActionsView
+// MARK: - ActivitySheet
 
 // Single sheet enum — prevents SwiftUI multiple-sheet chaining bug.
 // Optional associated values cause type-inference issues in @ViewBuilder;
 // use two explicit cases instead.
-private enum ActionSheet: Identifiable {
+private enum ActivitySheet: Identifiable {
     case ble
     case start
     case startWith(ActivityType)
@@ -26,13 +26,13 @@ private enum ActionSheet: Identifiable {
     }
 }
 
-struct ActionsView: View {
+struct ActivitiesView: View {
     @Environment(AppEnvironment.self) var env
     @Environment(\.modelContext) var ctx
     @Query(sort: \ActivityLog.startedAt, order: .reverse)
     private var allEntries: [ActivityLog]
 
-    @State private var activeSheet:  ActionSheet?   = nil
+    @State private var activeSheet:  ActivitySheet?   = nil
 
     private var todayEntries: [ActivityLog] {
         allEntries.filter { Calendar.current.isDateInToday($0.startedAt) && !$0.isActive }
@@ -49,7 +49,7 @@ struct ActionsView: View {
     var body: some View {
         NavigationStack {
             logSection
-                .navigationTitle("ACTIONS")
+                .navigationTitle("ACTIVITIES")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbarBackground(Theme.bg, for: .navigationBar)
                 .toolbarColorScheme(.dark, for: .navigationBar)
@@ -186,7 +186,7 @@ struct ActionsView: View {
     // MARK: - Sheet content
 
     @ViewBuilder
-    private func sheetContent(_ sheet: ActionSheet) -> some View {
+    private func sheetContent(_ sheet: ActivitySheet) -> some View {
         switch sheet {
         case .ble:
             BLEConnectionSheet(ble: env.ble)
