@@ -34,8 +34,31 @@ struct ActivitiesView: View {
 
     @State private var activeSheet:  ActivitySheet?   = nil
 
-    private var todayEntries: [ActivityLog] {
-        allEntries.filter { Calendar.current.isDateInToday($0.startedAt) && !$0.isActive }
+    private struct DayGroup: Identifiable {
+        let id:      Date
+        let label:   String
+        let entries: [ActivityLog]
+    }
+
+    private var dayGroups: [DayGroup] {
+        let cal = Calendar.current
+        let history = allEntries.filter { !$0.isActive }
+        let grouped = Dictionary(grouping: history) { cal.startOfDay(for: $0.startedAt) }
+
+        return grouped.keys.sorted(by: >).map { day in
+            let label: String
+            if cal.isDateInToday(day) {
+                label = "TODAY"
+            } else if cal.isDateInYesterday(day) {
+                label = "YESTERDAY"
+            } else {
+                let fmt = DateFormatter()
+                fmt.dateFormat = "MMM d"
+                label = fmt.string(from: day).uppercased()
+            }
+            let entries = (grouped[day] ?? []).sorted { $0.startedAt > $1.startedAt }
+            return DayGroup(id: day, label: label, entries: entries)
+        }
     }
 
     private var activeEntry: ActivityLog? {
@@ -54,7 +77,7 @@ struct ActivitiesView: View {
                 .toolbarBackground(Theme.bg, for: .navigationBar)
                 .toolbarColorScheme(.dark, for: .navigationBar)
                 .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
+                    ToolbarItem(placement: .topBarTrailing) {
                         BLENavButton(state: env.ble.state,
                                      bpm: env.latestTick?.meanBPM) {
                             activeSheet = .ble
@@ -145,10 +168,10 @@ struct ActivitiesView: View {
                 }
             }
 
-            // ── Today's log ───────────────────────────────────────
-            if !todayEntries.isEmpty {
+            // ── Activity history, grouped by day ──────────────────
+            ForEach(dayGroups) { group in
                 Section {
-                    ForEach(todayEntries) { entry in
+                    ForEach(group.entries) { entry in
                         ActivityLogRow(entry: entry)
                             .contentShape(Rectangle())
                             .onTapGesture { activeSheet = .detail(entry) }
@@ -170,7 +193,7 @@ struct ActivitiesView: View {
                             .listRowInsets(.init(top: 4, leading: 16, bottom: 4, trailing: 16))
                     }
                 } header: {
-                    Text("TODAY")
+                    Text(group.label)
                         .font(Theme.monoLabel)
                         .foregroundStyle(Theme.dim)
                         .textCase(nil)
