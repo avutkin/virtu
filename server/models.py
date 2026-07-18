@@ -61,3 +61,25 @@ class AdminUserRow(BaseModel):
     device_id:   Optional[str]
     last_seen:   Optional[str]
     session_count: int
+
+
+class InsightRequest(BaseModel):
+    activity_type:    str
+    activity_subtype: Optional[str] = None
+    duration_min:     Optional[int] = None
+    before_hr:    Optional[float] = None
+    during_hr:    Optional[float] = None
+    after_hr:     Optional[float] = None
+    before_rsa:   Optional[float] = None
+    during_rsa:   Optional[float] = None
+    after_rsa:    Optional[float] = None
+    before_sdnn:  Optional[float] = None
+    during_sdnn:  Optional[float] = None
+    after_sdnn:   Optional[float] = None
+    before_lf_hf: Optional[float] = None
+    during_lf_hf: Optional[float] = None
+    after_lf_hf:  Optional[float] = None
+
+
+class InsightResponse(BaseModel):
+    text: str
