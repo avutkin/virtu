@@ -57,6 +57,15 @@ _PAYLOAD = {
     "after_rsa": 28.0,
 }
 
+_LIVE_STATE_PAYLOAD = {
+    "mode": "live_state",
+    "window_minutes": 10,
+    "metrics": {
+        "hr":  {"start": 68.0, "end": 62.0, "min": 60.0, "max": 70.0, "mean": 65.0, "direction": "falling"},
+        "rsa": {"start": 22.0, "end": 34.0, "min": 20.0, "max": 36.0, "mean": 28.0, "direction": "rising"},
+    },
+}
+
 
 @pytest.mark.asyncio
 async def test_generate_insight_success():
@@ -101,3 +110,40 @@ def test_get_openai_client_requires_api_key(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     with pytest.raises(RuntimeError):
         get_openai_client()
+
+
+@pytest.mark.asyncio
+async def test_generate_live_state_insight_success():
+    app.dependency_overrides[get_openai_client] = lambda: _FakeOpenAIClient(
+        content="  Your heart rate has been gradually settling over the last 10 minutes.  "
+    )
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.post("/insights", json=_LIVE_STATE_PAYLOAD)
+    finally:
+        app.dependency_overrides.pop(get_openai_client, None)
+
+    assert r.status_code == 200
+    assert r.json()["text"] == "Your heart rate has been gradually settling over the last 10 minutes."
+
+
+@pytest.mark.asyncio
+async def test_generate_live_state_insight_missing_metrics_returns_422():
+    app.dependency_overrides[get_openai_client] = lambda: _FakeOpenAIClient()
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.post("/insights", json={"mode": "live_state", "window_minutes": 10})
+    finally:
+        app.dependency_overrides.pop(get_openai_client, None)
+    assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_generate_activity_insight_missing_activity_type_returns_422():
+    app.dependency_overrides[get_openai_client] = lambda: _FakeOpenAIClient()
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.post("/insights", json={"mode": "activity"})
+    finally:
+        app.dependency_overrides.pop(get_openai_client, None)
+    assert r.status_code == 422

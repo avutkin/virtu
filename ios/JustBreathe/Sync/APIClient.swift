@@ -57,6 +57,27 @@ struct InsightPayload: Codable {
     }
 }
 
+struct MetricTrendPayload: Codable {
+    let start: Float?
+    let end:   Float?
+    let min:   Float?
+    let max:   Float?
+    let mean:  Float?
+    let direction: String?
+}
+
+struct LiveStateInsightPayload: Codable {
+    let mode: String            // always "live_state"
+    let windowMinutes: Int
+    let metrics: [String: MetricTrendPayload]
+
+    enum CodingKeys: String, CodingKey {
+        case mode
+        case windowMinutes = "window_minutes"
+        case metrics
+    }
+}
+
 struct InsightResponse: Codable {
     let text: String
 }
@@ -106,6 +127,13 @@ struct APIClient {
         return try JSONDecoder().decode(InsightResponse.self, from: data)
     }
 
+    func generateLiveStateInsight(_ payload: LiveStateInsightPayload) async throws -> InsightResponse {
+        var req = request(path: "/insights", method: "POST")
+        req.httpBody = try JSONEncoder().encode(payload)
+        let (data, _) = try await session.data(for: req)
+        return try JSONDecoder().decode(InsightResponse.self, from: data)
+    }
+
     // MARK: Helpers
 
     private func request(path: String, method: String) -> URLRequest {
@@ -119,10 +147,11 @@ struct APIClient {
 
 // MARK: - InsightAPIClient
 
-/// Narrow protocol over `APIClient.generateInsight` so `InsightGenerator`
-/// can be tested with a fake instead of a real network call.
+/// Narrow protocol over `APIClient.generateInsight` and `APIClient.generateLiveStateInsight` so
+/// `InsightGenerator` can be tested with a fake instead of a real network call.
 protocol InsightAPIClient {
     func generateInsight(_ payload: InsightPayload) async throws -> InsightResponse
+    func generateLiveStateInsight(_ payload: LiveStateInsightPayload) async throws -> InsightResponse
 }
 
 extension APIClient: InsightAPIClient {}
@@ -182,5 +211,24 @@ extension InsightPayload {
         self.beforeRSA  = entry.beforeRSA;  self.duringRSA  = entry.duringRSA;  self.afterRSA  = entry.afterRSA
         self.beforeSDNN = entry.beforeSDNN; self.duringSDNN = entry.duringSDNN; self.afterSDNN = entry.afterSDNN
         self.beforeLFHF = entry.beforeLFHF; self.duringLFHF = entry.duringLFHF; self.afterLFHF = entry.afterLFHF
+    }
+}
+
+extension MetricTrendPayload {
+    init(from trend: MetricTrend) {
+        self.start = trend.start
+        self.end   = trend.end
+        self.min   = trend.min
+        self.max   = trend.max
+        self.mean  = trend.mean
+        self.direction = trend.direction
+    }
+}
+
+extension LiveStateInsightPayload {
+    init(windowMinutes: Int, trends: [String: MetricTrend]) {
+        self.mode = "live_state"
+        self.windowMinutes = windowMinutes
+        self.metrics = trends.mapValues { MetricTrendPayload(from: $0) }
     }
 }

@@ -12,7 +12,7 @@ import os
 from fastapi import APIRouter, Depends, HTTPException
 from openai import AsyncOpenAI, OpenAIError
 
-from ..models import InsightRequest, InsightResponse
+from ..models import InsightRequest, InsightResponse, MetricTrend
 
 router = APIRouter(tags=["insights"])
 
@@ -22,6 +22,16 @@ _SYSTEM_PROMPT = (
     "user provides, then end with exactly one concrete, forward-looking "
     "suggestion for their next session. Keep the whole reply to 2-3 sentences. "
     "Do not use markdown formatting."
+)
+
+_LIVE_STATE_SYSTEM_PROMPT = (
+    "You are a physiologist describing a live trend in heart-rate-variability "
+    "(HRV) metrics over the last few minutes. Interpret the direction and "
+    "magnitude of change across the metrics provided into a short, purely "
+    "descriptive account of the person's current nervous-system state — no "
+    "recommendations or suggested actions, this is a live status readout, not "
+    "post-activity feedback. Keep the whole reply to 2-3 sentences. Do not "
+    "use markdown formatting."
 )
 
 
@@ -52,19 +62,41 @@ def _format_metrics(req: InsightRequest) -> str:
     return "\n".join(lines)
 
 
+def _format_live_state(req: InsightRequest) -> str:
+    lines = [f"Window: last {req.window_minutes} minutes"]
+    for name, trend in (req.metrics or {}).items():
+        lines.append(
+            f"{name}: start={trend.start} end={trend.end} "
+            f"min={trend.min} max={trend.max} mean={trend.mean} "
+            f"direction={trend.direction}"
+        )
+    return "\n".join(lines)
+
+
 @router.post("/insights", response_model=InsightResponse)
 async def generate_insight(
     req: InsightRequest,
     client: AsyncOpenAI = Depends(get_openai_client),
 ):
+    if req.mode == "live_state":
+        if not req.metrics:
+            raise HTTPException(status_code=422, detail="metrics is required for live_state mode")
+        system_prompt = _LIVE_STATE_SYSTEM_PROMPT
+        user_content = _format_live_state(req)
+    else:
+        if not req.activity_type:
+            raise HTTPException(status_code=422, detail="activity_type is required for activity mode")
+        system_prompt = _SYSTEM_PROMPT
+        user_content = _format_metrics(req)
+
     try:
         response = await client.chat.completions.create(
             model="gpt-4o-mini",
             max_tokens=150,
             temperature=0.6,
             messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": _format_metrics(req)},
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content},
             ],
         )
     except OpenAIError as e:

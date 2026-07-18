@@ -47,16 +47,20 @@
 		A138 /* PolyvagalState.swift in Sources */ = {isa = PBXBuildFile; fileRef = F138 /* PolyvagalState.swift */; };
 		A139 /* CurrentStateCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F139 /* CurrentStateCard.swift */; };
 		A140 /* RecommendedActionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F140 /* RecommendedActionCard.swift */; };
+		A147 /* LiveStateWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F147 /* LiveStateWidget.swift */; };
 		A141 /* DFACompute.swift in Sources */ = {isa = PBXBuildFile; fileRef = F141 /* DFACompute.swift */; };
 		A142 /* AdvancedHRVCompute.swift in Sources */ = {isa = PBXBuildFile; fileRef = F142 /* AdvancedHRVCompute.swift */; };
 		A143 /* ECGQualityCompute.swift in Sources */ = {isa = PBXBuildFile; fileRef = F143 /* ECGQualityCompute.swift */; };
 		A144 /* SignalQualityTier+Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = F144 /* SignalQualityTier+Theme.swift */; };
 		A145 /* InsightGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F145 /* InsightGenerator.swift */; };
+		A146 /* LiveStateTrendCompute.swift in Sources */ = {isa = PBXBuildFile; fileRef = F146 /* LiveStateTrendCompute.swift */; };
 		ARES1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FRES1 /* Assets.xcassets */; };
 		AT01 /* MetricsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT01 /* MetricsTests.swift */; };
 		AT02 /* BLETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT02 /* BLETests.swift */; };
 		AT03 /* ECGQualityComputeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT03 /* ECGQualityComputeTests.swift */; };
 		AT04 /* InsightGeneratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT04 /* InsightGeneratorTests.swift */; };
+		AT05 /* LiveStateTrendComputeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT05 /* LiveStateTrendComputeTests.swift */; };
+		AT06 /* PayloadBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT06 /* PayloadBuilderTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -110,11 +114,13 @@
 		F138 /* PolyvagalState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolyvagalState.swift; sourceTree = "<group>"; };
 		F139 /* CurrentStateCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrentStateCard.swift; sourceTree = "<group>"; };
 		F140 /* RecommendedActionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecommendedActionCard.swift; sourceTree = "<group>"; };
+		F147 /* LiveStateWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveStateWidget.swift; sourceTree = "<group>"; };
 		F141 /* DFACompute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DFACompute.swift; sourceTree = "<group>"; };
 		F142 /* AdvancedHRVCompute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedHRVCompute.swift; sourceTree = "<group>"; };
 		F143 /* ECGQualityCompute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ECGQualityCompute.swift; sourceTree = "<group>"; };
 		F144 /* SignalQualityTier+Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SignalQualityTier+Theme.swift"; sourceTree = "<group>"; };
 		F145 /* InsightGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightGenerator.swift; sourceTree = "<group>"; };
+		F146 /* LiveStateTrendCompute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveStateTrendCompute.swift; sourceTree = "<group>"; };
 		FRES1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		FAPP /* JustBreathe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JustBreathe.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FINFO /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -122,6 +128,8 @@
 		FT02 /* BLETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BLETests.swift; sourceTree = "<group>"; };
 		FT03 /* ECGQualityComputeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ECGQualityComputeTests.swift; sourceTree = "<group>"; };
 		FT04 /* InsightGeneratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightGeneratorTests.swift; sourceTree = "<group>"; };
+		FT05 /* LiveStateTrendComputeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveStateTrendComputeTests.swift; sourceTree = "<group>"; };
+		FT06 /* PayloadBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PayloadBuilderTests.swift; sourceTree = "<group>"; };
 		FTST /* JustBreatheTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = JustBreatheTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -218,6 +226,7 @@
 				F131 /* HRVAnalysisView.swift */,
 				F139 /* CurrentStateCard.swift */,
 				F140 /* RecommendedActionCard.swift */,
+				F147 /* LiveStateWidget.swift */,
 			);
 			path = Live;
 			sourceTree = "<group>";
@@ -233,6 +242,7 @@
 				F141 /* DFACompute.swift */,
 				F142 /* AdvancedHRVCompute.swift */,
 				F143 /* ECGQualityCompute.swift */,
+				F146 /* LiveStateTrendCompute.swift */,
 			);
 			path = Metrics;
 			sourceTree = "<group>";
@@ -326,6 +336,8 @@
 				FT02 /* BLETests.swift */,
 				FT03 /* ECGQualityComputeTests.swift */,
 				FT04 /* InsightGeneratorTests.swift */,
+				FT05 /* LiveStateTrendComputeTests.swift */,
+				FT06 /* PayloadBuilderTests.swift */,
 			);
 			path = JustBreatheTests;
 			sourceTree = "<group>";
@@ -458,10 +470,12 @@
 				A138 /* PolyvagalState.swift in Sources */,
 				A139 /* CurrentStateCard.swift in Sources */,
 				A140 /* RecommendedActionCard.swift in Sources */,
+				A147 /* LiveStateWidget.swift in Sources */,
 				A141 /* DFACompute.swift in Sources */,
 				A142 /* AdvancedHRVCompute.swift in Sources */,
 				A143 /* ECGQualityCompute.swift in Sources */,
 				A144 /* SignalQualityTier+Theme.swift in Sources */,
+				A146 /* LiveStateTrendCompute.swift in Sources */,
 				A123 /* ResonateView.swift in Sources */,
 				A124 /* PacerCircleView.swift in Sources */,
 				A125 /* HistoryView.swift in Sources */,
@@ -477,6 +491,8 @@
 				AT02 /* BLETests.swift in Sources */,
 				AT03 /* ECGQualityComputeTests.swift in Sources */,
 				AT04 /* InsightGeneratorTests.swift in Sources */,
+				AT05 /* LiveStateTrendComputeTests.swift in Sources */,
+				AT06 /* PayloadBuilderTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
