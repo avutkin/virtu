@@ -551,11 +551,28 @@ struct ActivityDetailView: View {
     @Environment(\.dismiss) var dismiss
     @Bindable var entry: ActivityLog
 
+    @State private var chartPoints: [MetricsHistoryPoint] = []
+
     private var timeStr: String {
         let fmt = DateFormatter()
         fmt.dateStyle = .medium
         fmt.timeStyle = .short
         return fmt.string(from: entry.startedAt)
+    }
+
+    private func loadChartPoints() {
+        let beforeStart = entry.startedAt.addingTimeInterval(-300)
+        let afterEnd    = (entry.endedAt ?? entry.startedAt).addingTimeInterval(600)
+        let predicate = #Predicate<HRVSample> {
+            $0.timestamp >= beforeStart && $0.timestamp <= afterEnd
+        }
+        var desc = FetchDescriptor<HRVSample>(
+            predicate: predicate,
+            sortBy: [SortDescriptor(\.timestamp)]
+        )
+        desc.fetchLimit = 2_000
+        let samples = (try? ctx.fetch(desc)) ?? []
+        chartPoints = MetricsQualityFilter.filter(samples.map { MetricsHistoryPoint(from: $0) })
     }
 
     var body: some View {
@@ -584,22 +601,21 @@ struct ActivityDetailView: View {
                             Spacer()
                         }
 
-                        // Metric table: BEFORE / DURING / AFTER
-                        VStack(spacing: 0) {
-                            MetricTableHeader()
-                            Divider().background(Theme.border)
-                            MetricRow(label: "HR",   unit: "bpm",
-                                      before: entry.beforeHR,    during: entry.duringHR,    after: entry.afterHR,    fmt: { MetricFormat.bpm($0) })
-                            MetricRow(label: "SDNN", unit: "ms",
-                                      before: entry.beforeSDNN,  during: entry.duringSDNN,  after: entry.afterSDNN,  fmt: { MetricFormat.ms($0) })
-                            MetricRow(label: "RSA",  unit: "ms",
-                                      before: entry.beforeRSA,   during: entry.duringRSA,   after: entry.afterRSA,   fmt: { MetricFormat.ms($0) })
-                            MetricRow(label: "VTI",  unit: "",
-                                      before: entry.beforeVTI,   during: entry.duringVTI,   after: entry.afterVTI,   fmt: { MetricFormat.ratio($0) })
-                            MetricRow(label: "LF/HF", unit: "",
-                                      before: entry.beforeLFHF,  during: entry.duringLFHF,  after: entry.afterLFHF,  fmt: { MetricFormat.ratio($0) })
-                        }
-                        .cardStyle()
+                        // 9-metric summary
+                        ActivityMetricsGrid(entry: entry)
+
+                        // Before/during/after charts, one per metric — same
+                        // order as the grid above.
+                        let windowEnd = entry.endedAt ?? entry.startedAt
+                        ActivityWindowChart(title: "Harmony",             techLabel: "DFA α1", unit: "",    color: entry.activityTypeEnum.color, points: chartPoints, startedAt: entry.startedAt, endedAt: windowEnd) { $0.dfa1.map(Double.init) }
+                        ActivityWindowChart(title: "Conscious Breathing", techLabel: "RSA",    unit: "ms",  color: entry.activityTypeEnum.color, points: chartPoints, startedAt: entry.startedAt, endedAt: windowEnd) { $0.rsaMs.map(Double.init) }
+                        ActivityWindowChart(title: "Energy Reserve",      techLabel: "HRV",    unit: "ms",  color: entry.activityTypeEnum.color, points: chartPoints, startedAt: entry.startedAt, endedAt: windowEnd) { $0.rmssd.map(Double.init) }
+                        ActivityWindowChart(title: "Adaptive Power",      techLabel: "RCMSE",  unit: "",    color: entry.activityTypeEnum.color, points: chartPoints, startedAt: entry.startedAt, endedAt: windowEnd) { $0.rcmse.map(Double.init) }
+                        ActivityWindowChart(title: "Inner Noise",         techLabel: "PIP",    unit: "%",   color: entry.activityTypeEnum.color, points: chartPoints, startedAt: entry.startedAt, endedAt: windowEnd) { $0.pip.map(Double.init) }
+                        ActivityWindowChart(title: "Calm Reserve",        techLabel: "DC",     unit: "ms",  color: entry.activityTypeEnum.color, points: chartPoints, startedAt: entry.startedAt, endedAt: windowEnd) { $0.dc.map(Double.init) }
+                        ActivityWindowChart(title: "Calm Power",          techLabel: "VTI",    unit: "",    color: entry.activityTypeEnum.color, points: chartPoints, startedAt: entry.startedAt, endedAt: windowEnd) { $0.vti.map(Double.init) }
+                        ActivityWindowChart(title: "Stress Balance",      techLabel: "LF/HF",  unit: "",    color: entry.activityTypeEnum.color, points: chartPoints, startedAt: entry.startedAt, endedAt: windowEnd) { $0.lfHF.map(Double.init) }
+                        ActivityWindowChart(title: "Pulse",               techLabel: "HR",     unit: "bpm", color: entry.activityTypeEnum.color, points: chartPoints, startedAt: entry.startedAt, endedAt: windowEnd) { $0.meanBPM.map(Double.init) }
 
                         // Notes
                         VStack(alignment: .leading, spacing: 6) {
@@ -635,83 +651,9 @@ struct ActivityDetailView: View {
                     .foregroundStyle(Theme.accent)
                 }
             }
+            .onAppear { loadChartPoints() }
         }
     }
-
-private struct MetricTableHeader: View {
-    var body: some View {
-        HStack {
-            Text("METRIC")
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Text("BEFORE")
-                .frame(width: 60, alignment: .center)
-            Text("DURING")
-                .frame(width: 60, alignment: .center)
-            Text("AFTER")
-                .frame(width: 60, alignment: .center)
-            Text("Δ")
-                .frame(width: 50, alignment: .trailing)
-        }
-        .font(Theme.monoLabel)
-        .foregroundStyle(Theme.dim)
-        .padding(.vertical, 6)
-    }
-}
-
-private struct MetricRow: View {
-    let label:  String
-    let unit:   String
-    let before: Float?
-    let during: Float?
-    let after:  Float?
-    let fmt:    (Float?) -> String
-
-    private var delta: Float? {
-        guard let a = after, let b = before else { return nil }
-        return a - b
-    }
-
-    var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(label)
-                    .font(Theme.monoBody)
-                    .foregroundStyle(Theme.text)
-                if !unit.isEmpty {
-                    Text(unit)
-                        .font(Theme.monoLabel)
-                        .foregroundStyle(Theme.dim)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Text(fmt(before))
-                .frame(width: 60, alignment: .center)
-            Text(fmt(during))
-                .frame(width: 60, alignment: .center)
-            Text(fmt(after))
-                .frame(width: 60, alignment: .center)
-
-            Group {
-                if let d = delta {
-                    let sign = d >= 0 ? "+" : ""
-                    Text("\(sign)\(String(format: "%.1f", d))")
-                        .foregroundStyle(d >= 0 ? Theme.accent : Theme.warn)
-                } else {
-                    Text("—").foregroundStyle(Theme.dim)
-                }
-            }
-            .font(Theme.monoLabel)
-            .frame(width: 50, alignment: .trailing)
-        }
-        .font(Theme.monoLabel)
-        .foregroundStyle(Theme.text)
-        .padding(.vertical, 8)
-        .overlay(alignment: .bottom) {
-            Theme.border.frame(height: 0.5).opacity(0.6)
-        }
-    }
-}
 
 // MARK: - StartActivitySheet
 
