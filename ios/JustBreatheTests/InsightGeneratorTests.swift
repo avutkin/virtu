@@ -21,6 +21,7 @@ final class InsightGeneratorTests: XCTestCase {
         }
     }
 
+    @MainActor
     func testGenerateSetsInsightTextOnSuccess() async {
         let context = makeContext()
         let entry = ActivityLog(activityType: "Breathwork", startedAt: .now, endedAt: .now, isManual: true)
@@ -32,6 +33,7 @@ final class InsightGeneratorTests: XCTestCase {
         XCTAssertEqual(entry.insightText, "Nice recovery.")
     }
 
+    @MainActor
     func testGenerateLeavesInsightTextNilOnFailure() async {
         let context = makeContext()
         let entry = ActivityLog(activityType: "Breathwork", startedAt: .now, endedAt: .now, isManual: true)
@@ -43,6 +45,7 @@ final class InsightGeneratorTests: XCTestCase {
         XCTAssertNil(entry.insightText)
     }
 
+    @MainActor
     func testFlushPendingGeneratesForAllPendingActivities() async {
         let context = makeContext()
         let a = ActivityLog(activityType: "Walk", startedAt: .now, endedAt: .now, isManual: true)
@@ -59,6 +62,7 @@ final class InsightGeneratorTests: XCTestCase {
         XCTAssertEqual(b.insightText, "Solid.")
     }
 
+    @MainActor
     func testPendingActivitiesFiltersEndedAndMissingInsight() {
         let context = makeContext()
 
@@ -76,6 +80,7 @@ final class InsightGeneratorTests: XCTestCase {
         XCTAssertEqual(result.map(\.id), [pending.id])
     }
 
+    @MainActor
     func testPendingActivitiesOrdersMostRecentFirstAndCaps() {
         let context = makeContext()
         let base = Date()

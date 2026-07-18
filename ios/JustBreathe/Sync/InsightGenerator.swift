@@ -2,9 +2,15 @@ import Foundation
 import SwiftData
 
 /// Generates OpenAI-backed insights for completed activities, and retries
-/// any that failed while offline. Same shape as `SessionUploader` — an
-/// actor wrapping a client, used for foreground-triggered catch-up work.
-actor InsightGenerator {
+/// any that failed while offline. Same call shape as `SessionUploader`
+/// (a client-wrapping type used for foreground-triggered catch-up work),
+/// but `@MainActor`-isolated rather than a plain actor: `ModelContext` is
+/// not `Sendable` and is only ever touched on the main thread (it's
+/// `modelContainer.mainContext`, shared with `AppEnvironment` and
+/// `@Environment(\.modelContext)`), so the read/write around the network
+/// call must run on the main actor, not an arbitrary actor executor.
+@MainActor
+final class InsightGenerator {
 
     private let client: InsightAPIClient
 
@@ -17,6 +23,11 @@ actor InsightGenerator {
     /// `flushPending` call on foreground.
     func generate(for entry: ActivityLog, context: ModelContext) async {
         guard let response = try? await client.generateInsight(InsightPayload(from: entry)) else { return }
+        // Another concurrent `generate` call for the same entry (e.g. an
+        // activity-end trigger racing the foreground retry sweep) may have
+        // already succeeded while this call was awaiting the network —
+        // don't clobber it or double-save.
+        guard entry.insightText == nil else { return }
         entry.insightText = response.text
         try? context.save()
     }
