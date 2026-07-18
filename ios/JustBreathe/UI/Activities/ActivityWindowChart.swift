@@ -46,6 +46,23 @@ struct ActivityWindowChart: View {
         }
     }
 
+    private func average(from start: Date, to end: Date) -> Double? {
+        let vals = points.filter { $0.timestamp >= start && $0.timestamp < end }.compactMap(extract)
+        guard !vals.isEmpty else { return nil }
+        return vals.reduce(0, +) / Double(vals.count)
+    }
+
+    private var beforeAvg: Double? { average(from: windowStart, to: startedAt) }
+    private var duringAvg: Double? { average(from: startedAt, to: endedAt) }
+    private var afterAvg:  Double? { average(from: endedAt, to: windowEnd) }
+
+    /// % difference vs the before-phase average — nil if there's no before
+    /// average to compare against, or it's exactly zero.
+    private func percentVsBefore(_ avg: Double?) -> Double? {
+        guard let avg, let base = beforeAvg, base != 0 else { return nil }
+        return (avg - base) / base * 100
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -112,6 +129,53 @@ struct ActivityWindowChart: View {
                                 .font(.system(size: 8, design: .monospaced))
                                 .foregroundStyle(Theme.dim)
                         }
+
+                    if let avg = beforeAvg {
+                        RuleMark(y: .value("before avg", avg))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                            .foregroundStyle(Theme.dim.opacity(0.5))
+                            .annotation(position: .top, alignment: .trailing, spacing: 2) {
+                                Text(String(format: "%.1f", avg))
+                                    .font(.system(size: 8, design: .monospaced))
+                                    .foregroundStyle(Theme.dim)
+                            }
+                    }
+
+                    if let avg = duringAvg {
+                        RuleMark(y: .value("during avg", avg))
+                            .lineStyle(StrokeStyle(lineWidth: 1.5))
+                            .foregroundStyle(color.opacity(0.9))
+                            .annotation(position: .top, alignment: .trailing, spacing: 2) {
+                                HStack(spacing: 3) {
+                                    if let pct = percentVsBefore(avg) {
+                                        Text(String(format: "%+.0f%%", pct))
+                                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                            .foregroundStyle(color)
+                                    }
+                                    Text(String(format: "%.1f", avg))
+                                        .font(.system(size: 8, design: .monospaced))
+                                        .foregroundStyle(Theme.dim)
+                                }
+                            }
+                    }
+
+                    if let avg = afterAvg {
+                        RuleMark(y: .value("after avg", avg))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 2]))
+                            .foregroundStyle(Theme.dim.opacity(0.5))
+                            .annotation(position: .bottom, alignment: .trailing, spacing: 2) {
+                                HStack(spacing: 3) {
+                                    if let pct = percentVsBefore(avg) {
+                                        Text(String(format: "%+.0f%%", pct))
+                                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                            .foregroundStyle(Theme.dim)
+                                    }
+                                    Text(String(format: "%.1f", avg))
+                                        .font(.system(size: 8, design: .monospaced))
+                                        .foregroundStyle(Theme.dim)
+                                }
+                            }
+                    }
 
                     ForEach(pts) { pt in
                         LineMark(
