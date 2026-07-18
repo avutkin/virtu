@@ -308,6 +308,7 @@ struct ActionsView: View {
             EditActivitySheet(entry: entry) { ctx in
                 entry.computeHRVWindows(context: ctx)
                 try? ctx.save()
+                Task { await InsightGenerator(client: env.sync.client).generate(for: entry, context: ctx) }
             }
         }
     }
@@ -367,6 +368,7 @@ struct ActionsView: View {
         entry.endedAt = .now
         entry.computeHRVWindows(context: ctx)
         try? ctx.save()
+        Task { await InsightGenerator(client: env.sync.client).generate(for: entry, context: ctx) }
     }
 
     private func logPast(type: ActivityType, subtype: String?, customName: String?,
@@ -383,6 +385,7 @@ struct ActionsView: View {
         entry.computeHRVWindows(context: ctx)
         ctx.insert(entry)
         try? ctx.save()
+        Task { await InsightGenerator(client: env.sync.client).generate(for: entry, context: ctx) }
     }
 
     private func deleteEntry(_ entry: ActivityLog) {
