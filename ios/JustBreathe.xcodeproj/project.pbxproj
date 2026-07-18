@@ -43,7 +43,7 @@
 		A134 /* TrainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F134 /* TrainView.swift */; };
 		A135 /* TrainSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = F135 /* TrainSession.swift */; };
 		A136 /* ActivityLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F136 /* ActivityLog.swift */; };
-		A137 /* ActionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F137 /* ActionsView.swift */; };
+		A137 /* ActivitiesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F137 /* ActivitiesView.swift */; };
 		A138 /* PolyvagalState.swift in Sources */ = {isa = PBXBuildFile; fileRef = F138 /* PolyvagalState.swift */; };
 		A139 /* CurrentStateCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F139 /* CurrentStateCard.swift */; };
 		A140 /* RecommendedActionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F140 /* RecommendedActionCard.swift */; };
@@ -104,7 +104,7 @@
 		F134 /* TrainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainView.swift; sourceTree = "<group>"; };
 		F135 /* TrainSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainSession.swift; sourceTree = "<group>"; };
 		F136 /* ActivityLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityLog.swift; sourceTree = "<group>"; };
-		F137 /* ActionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionsView.swift; sourceTree = "<group>"; };
+		F137 /* ActivitiesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivitiesView.swift; sourceTree = "<group>"; };
 		F138 /* PolyvagalState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolyvagalState.swift; sourceTree = "<group>"; };
 		F139 /* CurrentStateCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrentStateCard.swift; sourceTree = "<group>"; };
 		F140 /* RecommendedActionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecommendedActionCard.swift; sourceTree = "<group>"; };
@@ -247,12 +247,12 @@
 			path = Models;
 			sourceTree = "<group>";
 		};
-		GAPP_ACT /* Actions */ = {
+		GAPP_ACT /* Activities */ = {
 			isa = PBXGroup;
 			children = (
-				F137 /* ActionsView.swift */,
+				F137 /* ActivitiesView.swift */,
 			);
-			path = Actions;
+			path = Activities;
 			sourceTree = "<group>";
 		};
 		GAPP_RES /* Resonate */ = {
@@ -288,7 +288,7 @@
 				GAPP_DES /* Design */,
 				GAPP_LIV /* Live */,
 				GAPP_TRN /* Train */,
-				GAPP_ACT /* Actions */,
+				GAPP_ACT /* Activities */,
 				GAPP_RES /* Resonate */,
 				GAPP_HIS /* History */,
 				GAPP_SET /* Settings */,
@@ -447,7 +447,7 @@
 				A131 /* HRVAnalysisView.swift in Sources */,
 				A134 /* TrainView.swift in Sources */,
 				A136 /* ActivityLog.swift in Sources */,
-				A137 /* ActionsView.swift in Sources */,
+				A137 /* ActivitiesView.swift in Sources */,
 				A138 /* PolyvagalState.swift in Sources */,
 				A139 /* CurrentStateCard.swift in Sources */,
 				A140 /* RecommendedActionCard.swift in Sources */,

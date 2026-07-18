@@ -38,6 +38,12 @@ final class AppEnvironment {
     var currentSession:  HRVSession?
     var latestTick:      MetricsTick?
 
+    // MARK: Cross-tab navigation
+
+    /// Set by any tab to request ContentView switch the selected tab.
+    /// ContentView observes this and resets it to nil after acting on it.
+    var pendingTabRequest: AppTab? = nil
+
     /// Lightweight scalar-only history for charts. Capped at 24 h of 2-s ticks.
     /// Uses a ring-buffer trim strategy (batch removal every trimBatch ticks)
     /// to avoid O(n) removeFirst on every append once the buffer is full.

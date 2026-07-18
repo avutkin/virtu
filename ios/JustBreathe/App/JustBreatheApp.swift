@@ -56,7 +56,7 @@ struct JustBreatheApp: App {
 
 // MARK: - App Tab
 
-enum AppTab: Hashable { case train, actions, live, track, settings }
+enum AppTab: Hashable { case train, activities, live, track, settings }
 
 // MARK: - Root Tab View
 
@@ -68,8 +68,8 @@ struct ContentView: View {
         TabView(selection: $selectedTab) {
             TrainView()
                 .tag(AppTab.train)
-            ActionsView()
-                .tag(AppTab.actions)
+            ActivitiesView()
+                .tag(AppTab.activities)
             LiveView()
                 .tag(AppTab.live)
             HistoryView()
@@ -82,6 +82,11 @@ struct ContentView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             AppTabBar(selected: $selectedTab)
         }
+        .onChange(of: env.pendingTabRequest) { _, newValue in
+            guard let tab = newValue else { return }
+            selectedTab = tab
+            env.pendingTabRequest = nil
+        }
     }
 }
 
@@ -93,8 +98,8 @@ struct AppTabBar: View {
     var body: some View {
         HStack(spacing: 0) {
             // Left pair
-            TabBarButton(tab: .train,   icon: "figure.run",                label: "Train",   selected: $selected)
-            TabBarButton(tab: .actions, icon: "list.bullet.clipboard",     label: "Actions", selected: $selected)
+            TabBarButton(tab: .train,      icon: "figure.run",                label: "Train",      selected: $selected)
+            TabBarButton(tab: .activities, icon: "list.bullet.clipboard",     label: "Activities", selected: $selected)
 
             // Live — prominent center button (position 3 of 5)
             Button { selected = .live } label: {
