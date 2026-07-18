@@ -63,8 +63,20 @@ class AdminUserRow(BaseModel):
     session_count: int
 
 
+class MetricTrend(BaseModel):
+    start: Optional[float] = None
+    end:   Optional[float] = None
+    min:   Optional[float] = None
+    max:   Optional[float] = None
+    mean:  Optional[float] = None
+    direction: Optional[str] = None   # "rising" | "falling" | "stable"
+
+
 class InsightRequest(BaseModel):
-    activity_type:    str
+    mode: str = "activity"            # "activity" | "live_state"
+
+    # "activity" mode fields
+    activity_type:    Optional[str] = None
     activity_subtype: Optional[str] = None
     duration_min:     Optional[int] = None
     before_hr:    Optional[float] = None
@@ -79,6 +91,10 @@ class InsightRequest(BaseModel):
     before_lf_hf: Optional[float] = None
     during_lf_hf: Optional[float] = None
     after_lf_hf:  Optional[float] = None
+
+    # "live_state" mode fields
+    window_minutes: Optional[int] = None
+    metrics: Optional[dict[str, MetricTrend]] = None
 
 
 class InsightResponse(BaseModel):
