@@ -53,6 +53,7 @@
 		A144 /* SignalQualityTier+Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = F144 /* SignalQualityTier+Theme.swift */; };
 		A145 /* MetricTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = F145 /* MetricTile.swift */; };
 		A146 /* ActivityMetricsGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = F146 /* ActivityMetricsGrid.swift */; };
+		A147 /* ActivityWindowChart.swift in Sources */ = {isa = PBXBuildFile; fileRef = F147 /* ActivityWindowChart.swift */; };
 		ARES1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FRES1 /* Assets.xcassets */; };
 		AT01 /* MetricsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT01 /* MetricsTests.swift */; };
 		AT02 /* BLETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT02 /* BLETests.swift */; };
@@ -116,6 +117,7 @@
 		F144 /* SignalQualityTier+Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SignalQualityTier+Theme.swift"; sourceTree = "<group>"; };
 		F145 /* MetricTile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricTile.swift; sourceTree = "<group>"; };
 		F146 /* ActivityMetricsGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityMetricsGrid.swift; sourceTree = "<group>"; };
+		F147 /* ActivityWindowChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityWindowChart.swift; sourceTree = "<group>"; };
 		FRES1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		FAPP /* JustBreathe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JustBreathe.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FINFO /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -257,6 +259,7 @@
 			children = (
 				F137 /* ActivitiesView.swift */,
 				F146 /* ActivityMetricsGrid.swift */,
+				F147 /* ActivityWindowChart.swift */,
 			);
 			path = Activities;
 			sourceTree = "<group>";
@@ -463,6 +466,7 @@
 				A144 /* SignalQualityTier+Theme.swift in Sources */,
 				A145 /* MetricTile.swift in Sources */,
 				A146 /* ActivityMetricsGrid.swift in Sources */,
+				A147 /* ActivityWindowChart.swift in Sources */,
 				A123 /* ResonateView.swift in Sources */,
 				A124 /* PacerCircleView.swift in Sources */,
 				A125 /* HistoryView.swift in Sources */,
