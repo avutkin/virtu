@@ -879,6 +879,19 @@ struct ActivityDetailView: View {
                         }
                         .cardStyle()
 
+                        // Insight
+                        if let insight = entry.insightText {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("INSIGHT")
+                                    .font(Theme.monoLabel)
+                                    .foregroundStyle(Theme.dim)
+                                Text(insight)
+                                    .font(Theme.monoBody)
+                                    .foregroundStyle(Theme.text)
+                            }
+                            .cardStyle()
+                        }
+
                         // Notes
                         VStack(alignment: .leading, spacing: 6) {
                             Text("NOTES")
