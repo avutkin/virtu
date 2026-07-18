@@ -82,6 +82,11 @@ struct ContentView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             AppTabBar(selected: $selectedTab)
         }
+        .onChange(of: env.pendingTabRequest) { _, newValue in
+            guard let tab = newValue else { return }
+            selectedTab = tab
+            env.pendingTabRequest = nil
+        }
     }
 }
 
