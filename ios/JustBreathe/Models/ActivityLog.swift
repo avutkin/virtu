@@ -118,6 +118,11 @@ final class ActivityLog {
     var beforeRSA:   Float?;  var duringRSA:   Float?;  var afterRSA:   Float?
     var beforeVTI:   Float?;  var duringVTI:   Float?;  var afterVTI:   Float?
     var beforeLFHF:  Float?;  var duringLFHF:  Float?;  var afterLFHF:  Float?
+    var beforeRMSSD: Float?;  var duringRMSSD: Float?;  var afterRMSSD: Float?
+    var beforeRCMSE: Float?;  var duringRCMSE: Float?;  var afterRCMSE: Float?
+    var beforePIP:   Float?;  var duringPIP:   Float?;  var afterPIP:   Float?
+    var beforeDC:    Float?;  var duringDC:    Float?;  var afterDC:    Float?
+    var beforeDFA1:  Float?;  var duringDFA1:  Float?;  var afterDFA1:  Float?
 
     init(activityType:    String,
          activitySubtype: String? = nil,
@@ -224,5 +229,10 @@ final class ActivityLog {
         beforeRSA   = avg(before, \.rsaMs);      duringRSA   = avg(during, \.rsaMs);      afterRSA   = avg(after, \.rsaMs)
         beforeVTI   = vtiFromRMSSD(before);      duringVTI   = vtiFromRMSSD(during);      afterVTI   = vtiFromRMSSD(after)
         beforeLFHF  = avg(before, \.lfHF);       duringLFHF  = avg(during, \.lfHF);       afterLFHF  = avg(after, \.lfHF)
+        beforeRMSSD = avg(before, \.rmssd);      duringRMSSD = avg(during, \.rmssd);      afterRMSSD = avg(after, \.rmssd)
+        beforeRCMSE = avg(before, \.rcmse);      duringRCMSE = avg(during, \.rcmse);      afterRCMSE = avg(after, \.rcmse)
+        beforePIP   = avg(before, \.pip);        duringPIP   = avg(during, \.pip);        afterPIP   = avg(after, \.pip)
+        beforeDC    = avg(before, \.dc);         duringDC    = avg(during, \.dc);         afterDC    = avg(after, \.dc)
+        beforeDFA1  = avg(before, \.dfa1);       duringDFA1  = avg(during, \.dfa1);       afterDFA1  = avg(after, \.dfa1)
     }
 }
