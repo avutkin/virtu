@@ -52,6 +52,7 @@
 		A143 /* ECGQualityCompute.swift in Sources */ = {isa = PBXBuildFile; fileRef = F143 /* ECGQualityCompute.swift */; };
 		A144 /* SignalQualityTier+Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = F144 /* SignalQualityTier+Theme.swift */; };
 		A145 /* MetricTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = F145 /* MetricTile.swift */; };
+		A146 /* ActivityMetricsCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F146 /* ActivityMetricsCard.swift */; };
 		ARES1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FRES1 /* Assets.xcassets */; };
 		AT01 /* MetricsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT01 /* MetricsTests.swift */; };
 		AT02 /* BLETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT02 /* BLETests.swift */; };
@@ -114,6 +115,7 @@
 		F143 /* ECGQualityCompute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ECGQualityCompute.swift; sourceTree = "<group>"; };
 		F144 /* SignalQualityTier+Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SignalQualityTier+Theme.swift"; sourceTree = "<group>"; };
 		F145 /* MetricTile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricTile.swift; sourceTree = "<group>"; };
+		F146 /* ActivityMetricsCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityMetricsCard.swift; sourceTree = "<group>"; };
 		FRES1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		FAPP /* JustBreathe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JustBreathe.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FINFO /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -254,6 +256,7 @@
 			isa = PBXGroup;
 			children = (
 				F137 /* ActivitiesView.swift */,
+				F146 /* ActivityMetricsCard.swift */,
 			);
 			path = Activities;
 			sourceTree = "<group>";
@@ -459,6 +462,7 @@
 				A143 /* ECGQualityCompute.swift in Sources */,
 				A144 /* SignalQualityTier+Theme.swift in Sources */,
 				A145 /* MetricTile.swift in Sources */,
+				A146 /* ActivityMetricsCard.swift in Sources */,
 				A123 /* ResonateView.swift in Sources */,
 				A124 /* PacerCircleView.swift in Sources */,
 				A125 /* HistoryView.swift in Sources */,
