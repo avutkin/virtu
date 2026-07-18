@@ -19,6 +19,9 @@ final class InsightGeneratorTests: XCTestCase {
         func generateInsight(_ payload: InsightPayload) async throws -> InsightResponse {
             try result.get()
         }
+        func generateLiveStateInsight(_ payload: LiveStateInsightPayload) async throws -> InsightResponse {
+            try result.get()
+        }
     }
 
     @MainActor

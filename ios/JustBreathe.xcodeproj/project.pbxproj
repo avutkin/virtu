@@ -59,6 +59,7 @@
 		AT03 /* ECGQualityComputeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT03 /* ECGQualityComputeTests.swift */; };
 		AT04 /* InsightGeneratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT04 /* InsightGeneratorTests.swift */; };
 		AT05 /* LiveStateTrendComputeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT05 /* LiveStateTrendComputeTests.swift */; };
+		AT06 /* PayloadBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT06 /* PayloadBuilderTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -126,6 +127,7 @@
 		FT03 /* ECGQualityComputeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ECGQualityComputeTests.swift; sourceTree = "<group>"; };
 		FT04 /* InsightGeneratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightGeneratorTests.swift; sourceTree = "<group>"; };
 		FT05 /* LiveStateTrendComputeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveStateTrendComputeTests.swift; sourceTree = "<group>"; };
+		FT06 /* PayloadBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PayloadBuilderTests.swift; sourceTree = "<group>"; };
 		FTST /* JustBreatheTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = JustBreatheTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -332,6 +334,7 @@
 				FT03 /* ECGQualityComputeTests.swift */,
 				FT04 /* InsightGeneratorTests.swift */,
 				FT05 /* LiveStateTrendComputeTests.swift */,
+				FT06 /* PayloadBuilderTests.swift */,
 			);
 			path = JustBreatheTests;
 			sourceTree = "<group>";
@@ -485,6 +488,7 @@
 				AT03 /* ECGQualityComputeTests.swift in Sources */,
 				AT04 /* InsightGeneratorTests.swift in Sources */,
 				AT05 /* LiveStateTrendComputeTests.swift in Sources */,
+				AT06 /* PayloadBuilderTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
