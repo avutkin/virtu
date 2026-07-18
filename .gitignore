@@ -5,6 +5,7 @@ just-breathe.db-shm
 just-breathe.db-wal
 __pycache__/
 *.pyc
+.venv/
 .worktrees/
 just-breathe.log
 .CFUserTextEncoding

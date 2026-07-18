@@ -5,14 +5,29 @@ Set DATABASE_URL env var before running:
 """
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 import pytest
+from asgi_lifespan import LifespanManager
 from httpx import AsyncClient, ASGITransport
 from server.main import app
 
 
+@asynccontextmanager
+async def _client():
+    """
+    httpx's ASGITransport does not drive the ASGI lifespan protocol on its
+    own, so FastAPI's `lifespan` (which calls init_pool()) never runs unless
+    something else triggers it — LifespanManager does that explicitly.
+    """
+    async with LifespanManager(app) as manager:
+        async with AsyncClient(transport=ASGITransport(app=manager.app), base_url="http://test") as client:
+            yield client
+
+
 @pytest.mark.asyncio
 async def test_health():
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with _client() as client:
         r = await client.get("/health")
     assert r.status_code == 200
     assert r.json()["status"] == "ok"
@@ -35,7 +50,7 @@ async def test_upload_session():
             }
         ],
     }
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with _client() as client:
         r = await client.post("/sessions", json=payload,
                               headers={"X-User-ID": "test-device-001"})
     assert r.status_code == 200
@@ -44,7 +59,7 @@ async def test_upload_session():
 
 @pytest.mark.asyncio
 async def test_list_sessions():
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with _client() as client:
         r = await client.get("/sessions", headers={"X-User-ID": "test-device-001"})
     assert r.status_code == 200
     assert isinstance(r.json(), list)
