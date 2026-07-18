@@ -37,6 +37,30 @@ struct TickPayload: Codable {
     let breathBPM: Float?
 }
 
+struct InsightPayload: Codable {
+    let activityType:    String
+    let activitySubtype: String?
+    let durationMin:     Int?
+    let beforeHR: Float?;    let duringHR: Float?;    let afterHR: Float?
+    let beforeRSA: Float?;   let duringRSA: Float?;   let afterRSA: Float?
+    let beforeSDNN: Float?;  let duringSDNN: Float?;  let afterSDNN: Float?
+    let beforeLFHF: Float?;  let duringLFHF: Float?;  let afterLFHF: Float?
+
+    enum CodingKeys: String, CodingKey {
+        case activityType    = "activity_type"
+        case activitySubtype = "activity_subtype"
+        case durationMin     = "duration_min"
+        case beforeHR = "before_hr"; case duringHR = "during_hr"; case afterHR = "after_hr"
+        case beforeRSA = "before_rsa"; case duringRSA = "during_rsa"; case afterRSA = "after_rsa"
+        case beforeSDNN = "before_sdnn"; case duringSDNN = "during_sdnn"; case afterSDNN = "after_sdnn"
+        case beforeLFHF = "before_lf_hf"; case duringLFHF = "during_lf_hf"; case afterLFHF = "after_lf_hf"
+    }
+}
+
+struct InsightResponse: Codable {
+    let text: String
+}
+
 struct ServerSession: Codable {
     let id:           String
     let startedAt:    String
@@ -73,6 +97,15 @@ struct APIClient {
         return try JSONDecoder().decode([ServerSession].self, from: data)
     }
 
+    // MARK: Insights
+
+    func generateInsight(_ payload: InsightPayload) async throws -> InsightResponse {
+        var req = request(path: "/insights", method: "POST")
+        req.httpBody = try JSONEncoder().encode(payload)
+        let (data, _) = try await session.data(for: req)
+        return try JSONDecoder().decode(InsightResponse.self, from: data)
+    }
+
     // MARK: Helpers
 
     private func request(path: String, method: String) -> URLRequest {
@@ -83,6 +116,16 @@ struct APIClient {
         return r
     }
 }
+
+// MARK: - InsightAPIClient
+
+/// Narrow protocol over `APIClient.generateInsight` so `InsightGenerator`
+/// can be tested with a fake instead of a real network call.
+protocol InsightAPIClient {
+    func generateInsight(_ payload: InsightPayload) async throws -> InsightResponse
+}
+
+extension APIClient: InsightAPIClient {}
 
 // MARK: - Payload builders
 
@@ -127,5 +170,17 @@ extension TickPayload {
         self.coherence = tick.coherenceScore
         self.cbi       = tick.cbi
         self.breathBPM = tick.breathBPM
+    }
+}
+
+extension InsightPayload {
+    init(from entry: ActivityLog) {
+        self.activityType    = entry.activityType
+        self.activitySubtype = entry.activitySubtype
+        self.durationMin     = entry.duration.map { Int($0 / 60) }
+        self.beforeHR   = entry.beforeHR;   self.duringHR   = entry.duringHR;   self.afterHR   = entry.afterHR
+        self.beforeRSA  = entry.beforeRSA;  self.duringRSA  = entry.duringRSA;  self.afterRSA  = entry.afterRSA
+        self.beforeSDNN = entry.beforeSDNN; self.duringSDNN = entry.duringSDNN; self.afterSDNN = entry.afterSDNN
+        self.beforeLFHF = entry.beforeLFHF; self.duringLFHF = entry.duringLFHF; self.afterLFHF = entry.afterLFHF
     }
 }
