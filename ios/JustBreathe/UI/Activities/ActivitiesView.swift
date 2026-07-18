@@ -1,28 +1,6 @@
 import SwiftUI
 import SwiftData
 
-// MARK: - Actions Section
-
-private enum ActionsSection: String, CaseIterable {
-    case log    = "LOG"
-    case impact = "IMPACT"
-}
-
-// MARK: - Impact Sort
-
-private enum ImpactSort: String, CaseIterable {
-    case rsa  = "RSA"
-    case vti  = "VTI"
-    case sdnn = "SDNN"
-
-    var unit: String {
-        switch self {
-        case .rsa, .sdnn: return "ms"
-        case .vti:        return ""
-        }
-    }
-}
-
 // MARK: - ActionsView
 
 // Single sheet enum — prevents SwiftUI multiple-sheet chaining bug.
@@ -54,7 +32,6 @@ struct ActionsView: View {
     @Query(sort: \ActivityLog.startedAt, order: .reverse)
     private var allEntries: [ActivityLog]
 
-    @State private var section:      ActionsSection = .log
     @State private var activeSheet:  ActionSheet?   = nil
 
     private var todayEntries: [ActivityLog] {
@@ -71,49 +48,22 @@ struct ActionsView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // ── Section picker ────────────────────────────────
-                HStack(spacing: 0) {
-                    ForEach(ActionsSection.allCases, id: \.self) { s in
-                        Button(s.rawValue) {
-                            withAnimation(.easeInOut(duration: 0.2)) { section = s }
+            logSection
+                .navigationTitle("ACTIONS")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbarBackground(Theme.bg, for: .navigationBar)
+                .toolbarColorScheme(.dark, for: .navigationBar)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        BLENavButton(state: env.ble.state,
+                                     bpm: env.latestTick?.meanBPM) {
+                            activeSheet = .ble
                         }
-                        .font(Theme.monoLabel)
-                        .foregroundStyle(section == s ? Theme.bg : Theme.accent)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity)
-                        .background(section == s ? Theme.accent : Color.clear)
                     }
                 }
-                .background(Theme.card)
-                .clipShape(Capsule())
-                .overlay(Capsule().strokeBorder(Theme.border, lineWidth: 0.5))
-                .padding(.horizontal, 16)
-                .padding(.top, 10)
-                .padding(.bottom, 6)
-
-                if section == .log {
-                    logSection
-                } else {
-                    impactSection
+                .sheet(item: $activeSheet) { sheet in
+                    sheetContent(sheet)
                 }
-            }
-            .background(Theme.bg)
-            .navigationTitle("ACTIONS")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(Theme.bg, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    BLENavButton(state: env.ble.state,
-                                 bpm: env.latestTick?.meanBPM) {
-                        activeSheet = .ble
-                    }
-                }
-            }
-            .sheet(item: $activeSheet) { sheet in
-                sheetContent(sheet)
-            }
         }
     }
 
@@ -233,55 +183,6 @@ struct ActionsView: View {
         .background(Theme.bg)
     }
 
-    // MARK: - Impact Section
-
-    @State private var impactSort: ImpactSort = .rsa
-
-    private var impactSection: some View {
-        ScrollView {
-            VStack(spacing: 14) {
-
-                // Sort picker
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("RANKED BY")
-                        .font(Theme.monoLabel)
-                        .foregroundStyle(Theme.dim)
-
-                    HStack(spacing: 8) {
-                        ForEach(ImpactSort.allCases, id: \.self) { s in
-                            Button(s.rawValue) { impactSort = s }
-                                .font(Theme.monoLabel)
-                                .foregroundStyle(impactSort == s ? Theme.bg : Theme.accent)
-                                .padding(.vertical, 6)
-                                .padding(.horizontal, 12)
-                                .background(impactSort == s ? Theme.accent : Theme.card)
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .cardStyle()
-
-                let ranked = rankedActivities()
-                if ranked.isEmpty {
-                    Text("Log activities to see their HRV impact.")
-                        .font(Theme.monoBody)
-                        .foregroundStyle(Theme.dim)
-                        .multilineTextAlignment(.center)
-                        .padding(.vertical, 40)
-                } else {
-                    ForEach(ranked, id: \.type) { summary in
-                        ActivityImpactCard(summary: summary, sortBy: impactSort)
-                    }
-                }
-            }
-            .padding(.horizontal)
-            .padding(.top, 8)
-            .padding(.bottom, 20)
-        }
-        .background(Theme.bg)
-    }
-
     // MARK: - Sheet content
 
     @ViewBuilder
@@ -390,70 +291,6 @@ struct ActionsView: View {
         try? ctx.save()
     }
 
-    // MARK: - Impact aggregation
-
-    struct ActivityTypeSummary {
-        let type:  String
-        let icon:  String
-        let color: Color
-        let count: Int
-        // during - before: what changed while the activity was happening
-        let duringRSADelta:  Float?
-        let duringVTIDelta:  Float?
-        let duringSDNNDelta: Float?
-        // after - before: net recovery / adaptation effect
-        let afterRSADelta:   Float?
-        let afterVTIDelta:   Float?
-        let afterSDNNDelta:  Float?
-    }
-
-    private func rankedActivities() -> [ActivityTypeSummary] {
-        let completed = allEntries.filter { $0.endedAt != nil }
-        var grouped: [String: [ActivityLog]] = [:]
-        for e in completed { grouped[e.activityType, default: []].append(e) }
-
-        var summaries = grouped.compactMap { (type, entries) -> ActivityTypeSummary? in
-            guard !entries.isEmpty else { return nil }
-
-            func avgDelta(_ a: KeyPath<ActivityLog, Float?>, _ b: KeyPath<ActivityLog, Float?>) -> Float? {
-                let vals = entries.compactMap { e -> Float? in
-                    guard let av = e[keyPath: a], let bv = e[keyPath: b] else { return nil }
-                    return av - bv
-                }
-                guard !vals.isEmpty else { return nil }
-                return vals.reduce(0, +) / Float(vals.count)
-            }
-
-            let typeEnum = ActivityType(rawValue: type) ?? .custom
-            return ActivityTypeSummary(
-                type:  type,
-                icon:  typeEnum.icon,
-                color: typeEnum.color,
-                count: entries.count,
-                // during - before
-                duringRSADelta:  avgDelta(\.duringRSA,  \.beforeRSA),
-                duringVTIDelta:  avgDelta(\.duringVTI,  \.beforeVTI),
-                duringSDNNDelta: avgDelta(\.duringSDNN, \.beforeSDNN),
-                // after - before
-                afterRSADelta:   avgDelta(\.afterRSA,   \.beforeRSA),
-                afterVTIDelta:   avgDelta(\.afterVTI,   \.beforeVTI),
-                afterSDNNDelta:  avgDelta(\.afterSDNN,  \.beforeSDNN)
-            )
-        }
-
-        // Sort by during-delta of selected metric (descending)
-        summaries.sort {
-            let a: Float?
-            let b: Float?
-            switch impactSort {
-            case .rsa:  a = $0.duringRSADelta;  b = $1.duringRSADelta
-            case .vti:  a = $0.duringVTIDelta;  b = $1.duringVTIDelta
-            case .sdnn: a = $0.duringSDNNDelta; b = $1.duringSDNNDelta
-            }
-            return (a ?? -.infinity) > (b ?? -.infinity)
-        }
-        return summaries
-    }
 }
 
 // MARK: - SuggestionChip
@@ -687,135 +524,6 @@ private struct DeltaChip: View {
             .padding(.vertical, 3)
             .background(color.opacity(0.12))
             .clipShape(Capsule())
-    }
-}
-
-// MARK: - ActivityImpactCard
-
-private struct ActivityImpactCard: View {
-    let summary: ActionsView.ActivityTypeSummary
-    let sortBy:  ImpactSort
-
-    private var duringDelta: Float? {
-        switch sortBy {
-        case .rsa:  return summary.duringRSADelta
-        case .vti:  return summary.duringVTIDelta
-        case .sdnn: return summary.duringSDNNDelta
-        }
-    }
-
-    private var afterDelta: Float? {
-        switch sortBy {
-        case .rsa:  return summary.afterRSADelta
-        case .vti:  return summary.afterVTIDelta
-        case .sdnn: return summary.afterSDNNDelta
-        }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            // Header
-            HStack {
-                HStack(spacing: 8) {
-                    ZStack {
-                        Circle()
-                            .fill(summary.color.opacity(0.15))
-                            .frame(width: 30, height: 30)
-                        Image(systemName: summary.icon)
-                            .font(.system(size: 13))
-                            .foregroundStyle(summary.color)
-                    }
-                    Text(summary.type)
-                        .font(Theme.mono(13))
-                        .foregroundStyle(Theme.text)
-                }
-                Spacer()
-                Text("\(summary.count) log\(summary.count == 1 ? "" : "s")")
-                    .font(Theme.monoLabel)
-                    .foregroundStyle(Theme.dim)
-            }
-
-            // Primary: during delta (big)
-            if let d = duringDelta {
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    let sign = d >= 0 ? "+" : ""
-                    Text("\(sign)\(String(format: "%.1f", d))")
-                        .font(Theme.mono(28))
-                        .foregroundStyle(d >= 0 ? Theme.accent : Theme.warn)
-                    if !sortBy.unit.isEmpty {
-                        Text(sortBy.unit)
-                            .font(Theme.monoLabel)
-                            .foregroundStyle(Theme.dim)
-                    }
-                    Text("\(sortBy.rawValue) during")
-                        .font(Theme.monoLabel)
-                        .foregroundStyle(Theme.dim)
-                        .padding(.leading, 4)
-                }
-            } else {
-                Text("Not enough data")
-                    .font(Theme.monoLabel)
-                    .foregroundStyle(Theme.dim)
-            }
-
-            // Supplemental: during vs after for all three metrics
-            VStack(spacing: 0) {
-                HStack {
-                    Text("")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Text("DURING")
-                        .frame(width: 70, alignment: .center)
-                    Text("AFTER")
-                        .frame(width: 70, alignment: .center)
-                }
-                .font(Theme.monoLabel)
-                .foregroundStyle(Theme.dim.opacity(0.6))
-                .padding(.bottom, 4)
-
-                MiniDeltaRow(label: "RSA",  unit: "ms",
-                             during: summary.duringRSADelta,  after: summary.afterRSADelta)
-                MiniDeltaRow(label: "VTI",  unit: "",
-                             during: summary.duringVTIDelta,  after: summary.afterVTIDelta)
-                MiniDeltaRow(label: "SDNN", unit: "ms",
-                             during: summary.duringSDNNDelta, after: summary.afterSDNNDelta)
-            }
-        }
-        .cardStyle()
-    }
-}
-
-private struct MiniDeltaRow: View {
-    let label:  String
-    let unit:   String
-    let during: Float?
-    let after:  Float?
-
-    var body: some View {
-        HStack {
-            Text(label)
-                .font(Theme.monoLabel)
-                .foregroundStyle(Theme.dim)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            deltaText(during)
-                .frame(width: 70, alignment: .center)
-            deltaText(after)
-                .frame(width: 70, alignment: .center)
-        }
-        .padding(.vertical, 3)
-    }
-
-    @ViewBuilder
-    private func deltaText(_ v: Float?) -> some View {
-        if let v {
-            let sign = v >= 0 ? "+" : ""
-            Text("\(sign)\(String(format: "%.1f", v))\(unit.isEmpty ? "" : " \(unit)")")
-                .font(Theme.monoLabel)
-                .foregroundStyle(v >= 0 ? Theme.accent : Theme.warn)
-        } else {
-            Text("—")
-                .font(Theme.monoLabel)
-                .foregroundStyle(Theme.dim)
-        }
     }
 }
 
