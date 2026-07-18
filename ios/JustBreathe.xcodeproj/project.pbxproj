@@ -47,6 +47,7 @@
 		A138 /* PolyvagalState.swift in Sources */ = {isa = PBXBuildFile; fileRef = F138 /* PolyvagalState.swift */; };
 		A139 /* CurrentStateCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F139 /* CurrentStateCard.swift */; };
 		A140 /* RecommendedActionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F140 /* RecommendedActionCard.swift */; };
+		A147 /* LiveStateWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F147 /* LiveStateWidget.swift */; };
 		A141 /* DFACompute.swift in Sources */ = {isa = PBXBuildFile; fileRef = F141 /* DFACompute.swift */; };
 		A142 /* AdvancedHRVCompute.swift in Sources */ = {isa = PBXBuildFile; fileRef = F142 /* AdvancedHRVCompute.swift */; };
 		A143 /* ECGQualityCompute.swift in Sources */ = {isa = PBXBuildFile; fileRef = F143 /* ECGQualityCompute.swift */; };
@@ -113,6 +114,7 @@
 		F138 /* PolyvagalState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolyvagalState.swift; sourceTree = "<group>"; };
 		F139 /* CurrentStateCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrentStateCard.swift; sourceTree = "<group>"; };
 		F140 /* RecommendedActionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecommendedActionCard.swift; sourceTree = "<group>"; };
+		F147 /* LiveStateWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveStateWidget.swift; sourceTree = "<group>"; };
 		F141 /* DFACompute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DFACompute.swift; sourceTree = "<group>"; };
 		F142 /* AdvancedHRVCompute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedHRVCompute.swift; sourceTree = "<group>"; };
 		F143 /* ECGQualityCompute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ECGQualityCompute.swift; sourceTree = "<group>"; };
@@ -224,6 +226,7 @@
 				F131 /* HRVAnalysisView.swift */,
 				F139 /* CurrentStateCard.swift */,
 				F140 /* RecommendedActionCard.swift */,
+				F147 /* LiveStateWidget.swift */,
 			);
 			path = Live;
 			sourceTree = "<group>";
@@ -467,6 +470,7 @@
 				A138 /* PolyvagalState.swift in Sources */,
 				A139 /* CurrentStateCard.swift in Sources */,
 				A140 /* RecommendedActionCard.swift in Sources */,
+				A147 /* LiveStateWidget.swift in Sources */,
 				A141 /* DFACompute.swift in Sources */,
 				A142 /* AdvancedHRVCompute.swift in Sources */,
 				A143 /* ECGQualityCompute.swift in Sources */,

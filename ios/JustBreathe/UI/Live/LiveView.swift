@@ -128,6 +128,8 @@ private struct DayScrollView: View {
 
                 // ── Autonomic state (today only) ────────────────────
                 if isToday {
+                    LiveStateWidget()
+                        .padding(.horizontal)
                     let state = PolyvagalState.infer(from: env.latestTick)
                     CurrentStateCard(tick: env.latestTick, state: state)
                         .padding(.horizontal)
