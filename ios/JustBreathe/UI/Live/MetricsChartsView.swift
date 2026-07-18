@@ -962,16 +962,16 @@ struct MetricsChartsView: View {
 
     private var dfa1Card: some View {
         MetricChartCard(
-            title:   "Mental Clarity",
+            title:   "Harmony",
             technicalName: "DFA α1",
             subtitle: "short-term fractal scaling  ·  scales 4–16 beats",
             yLabel:  "α1",
             color:   Theme.ulf,
             windows: TimeWindow.allCases,
             refs: [
-                RefLine(value: 0.75, label: "Tunnel Mode",    color: Theme.warn),
-                RefLine(value: 1.0,  label: "Flow State",     color: Theme.coh),
-                RefLine(value: 1.5,  label: "Wandering Mind", color: Theme.warn),
+                RefLine(value: 0.75, label: "Drifting",    color: Theme.warn),
+                RefLine(value: 1.0,  label: "In Harmony",  color: Theme.coh),
+                RefLine(value: 1.5,  label: "Strained",    color: Theme.warn),
             ],
             yDomain: 0.5...1.8,
             win: $sharedWin, selectedX: $sharedSelectedX,

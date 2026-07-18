@@ -671,7 +671,7 @@ private struct MetricsTableView: View {
 
     var body: some View {
         LazyVGrid(columns: cols, spacing: 10) {
-            MetricTile(label: "Mental Clarity",       techLabel: "DFA α1",  value: dfa1String,                       unit: "",    delta: delta(tick?.dfa1,    comparison?.dfa1),    higherBetter: false)
+            MetricTile(label: "Harmony",               techLabel: "DFA α1",  value: dfa1String,                       unit: "",    delta: delta(tick?.dfa1,    comparison?.dfa1),    higherBetter: false)
             MetricTile(label: "Conscious Breathing",  techLabel: "RSA",     value: MetricFormat.ms(tick?.rsaMs),    unit: "ms",  delta: delta(tick?.rsaMs,   comparison?.rsaMs),   higherBetter: true)
             MetricTile(label: "Energy Reserve",       techLabel: "HRV",     value: MetricFormat.ms(tick?.rmssd),    unit: "ms",  delta: delta(tick?.rmssd,   comparison?.rmssd),   higherBetter: true)
             MetricTile(label: "Adaptive Power",       techLabel: "RCMSE",   value: rcmseString,                      unit: "",    delta: delta(tick?.rcmse,   comparison?.rcmse),   higherBetter: true)
