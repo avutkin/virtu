@@ -98,4 +98,42 @@ struct MetricsHistoryPoint {
         ials          = sample.ials
         dc            = sample.dc
     }
+
+    /// Convenience initializer for constructing a snapshot directly by field,
+    /// without going through MetricsTick's full field list. Unlisted fields
+    /// default to nil.
+    init(
+        timestamp: Date,
+        meanBPM:   Float? = nil,
+        rmssd:     Float? = nil,
+        rsaMs:     Float? = nil,
+        sdnn:      Float? = nil,
+        lfHF:      Float? = nil,
+        coherence: Float? = nil,
+        breathBPM: Float? = nil,
+        cbi:       Float? = nil
+    ) {
+        self.timestamp = timestamp
+        self.ieRatio = nil
+        self.vti = nil
+        self.rmssd = rmssd
+        self.rsaMs = rsaMs
+        self.sdnn = sdnn
+        self.pnn50 = nil
+        self.ulfPower = nil
+        self.vlfPower = nil
+        self.lfPower = nil
+        self.hfPower = nil
+        self.lfHF = lfHF
+        self.coherence = coherence
+        self.cbi = cbi
+        self.breathBPM = breathBPM
+        self.meanBPM = meanBPM
+        self.dfa1 = nil
+        self.signalQuality = nil
+        self.rcmse = nil
+        self.pip = nil
+        self.ials = nil
+        self.dc = nil
+    }
 }
