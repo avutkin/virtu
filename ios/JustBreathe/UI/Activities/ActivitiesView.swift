@@ -570,7 +570,7 @@ struct ActivityDetailView: View {
             predicate: predicate,
             sortBy: [SortDescriptor(\.timestamp)]
         )
-        desc.fetchLimit = 2_000
+        desc.fetchLimit = 10_000
         let samples = (try? ctx.fetch(desc)) ?? []
         chartPoints = MetricsQualityFilter.filter(samples.map { MetricsHistoryPoint(from: $0) })
     }
