@@ -112,6 +112,11 @@ final class ActivityLog {
     var notes:           String?
     var isManual:        Bool    // true = retrospective entry
 
+    /// OpenAI-generated interpretation + recommendation for this activity's
+    /// HRV response. `nil` means "not yet generated" — eligible for retry
+    /// by `InsightGenerator.flushPending`.
+    var insightText:     String?
+
     // HRV averages: 5-min before / during / 10-min after
     var beforeHR:    Float?;  var duringHR:    Float?;  var afterHR:    Float?
     var beforeSDNN:  Float?;  var duringSDNN:  Float?;  var afterSDNN:  Float?

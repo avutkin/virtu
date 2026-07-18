@@ -62,6 +62,7 @@ final class AppEnvironment {
                 // Returning to foreground — merge any samples saved during background
                 // into tickHistory so intraday charts show the full picture.
                 reloadRecentHistory()
+                retryPendingInsights()
             }
         }
     }
@@ -188,6 +189,13 @@ final class AppEnvironment {
         if tickHistory.count > maxTickHistory + trimBatch {
             tickHistory.removeFirst(tickHistory.count - maxTickHistory)
         }
+    }
+
+    /// Retry any activities that finished without a generated insight,
+    /// e.g. because the device was offline when the activity ended.
+    private func retryPendingInsights() {
+        let context = modelContainer.mainContext
+        Task { await InsightGenerator(client: sync.client).flushPending(context: context) }
     }
 
     // MARK: BLE → DataBuffer → MetricsEngine pipeline

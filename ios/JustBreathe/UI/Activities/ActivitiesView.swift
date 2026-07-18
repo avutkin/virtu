@@ -226,6 +226,7 @@ struct ActivitiesView: View {
             EditActivitySheet(entry: entry) { ctx in
                 entry.computeHRVWindows(context: ctx)
                 try? ctx.save()
+                Task { await InsightGenerator(client: env.sync.client).generate(for: entry, context: ctx) }
             }
         }
     }
@@ -285,6 +286,7 @@ struct ActivitiesView: View {
         entry.endedAt = .now
         entry.computeHRVWindows(context: ctx)
         try? ctx.save()
+        Task { await InsightGenerator(client: env.sync.client).generate(for: entry, context: ctx) }
     }
 
     private func logPast(type: ActivityType, subtype: String?, customName: String?,
@@ -301,6 +303,7 @@ struct ActivitiesView: View {
         entry.computeHRVWindows(context: ctx)
         ctx.insert(entry)
         try? ctx.save()
+        Task { await InsightGenerator(client: env.sync.client).generate(for: entry, context: ctx) }
     }
 
     private func deleteEntry(_ entry: ActivityLog) {
@@ -600,6 +603,19 @@ struct ActivityDetailView: View {
                                       before: entry.beforeLFHF,  during: entry.duringLFHF,  after: entry.afterLFHF,  fmt: { MetricFormat.ratio($0) })
                         }
                         .cardStyle()
+
+                        // Insight
+                        if let insight = entry.insightText {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("INSIGHT")
+                                    .font(Theme.monoLabel)
+                                    .foregroundStyle(Theme.dim)
+                                Text(insight)
+                                    .font(Theme.monoBody)
+                                    .foregroundStyle(Theme.text)
+                            }
+                            .cardStyle()
+                        }
 
                         // Notes
                         VStack(alignment: .leading, spacing: 6) {
