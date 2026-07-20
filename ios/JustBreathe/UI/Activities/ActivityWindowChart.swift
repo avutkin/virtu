@@ -149,12 +149,17 @@ struct ActivityWindowChart: View {
                             .lineStyle(StrokeStyle(lineWidth: 1.5))
                     }
 
-                    // Peak dot (halo + point) with uplift annotation
-                    if let pv = stats.peakValue, let pd = stats.peakDate {
-                        PointMark(x: .value("peak time", pd), y: .value("peak", pv))
+                    // Peak dot (halo + point) with uplift annotation — snapped
+                    // onto the drawn (bucketed) line so it sits on the curve
+                    // rather than floating at the raw sample value.
+                    if let pd = stats.peakDate,
+                       let onLine = pts.min(by: {
+                           abs($0.date.timeIntervalSince(pd)) < abs($1.date.timeIntervalSince(pd))
+                       }) {
+                        PointMark(x: .value("peak time", onLine.date), y: .value("peak", onLine.val))
                             .symbolSize(160)
                             .foregroundStyle(color.opacity(0.25))
-                        PointMark(x: .value("peak time", pd), y: .value("peak", pv))
+                        PointMark(x: .value("peak time", onLine.date), y: .value("peak", onLine.val))
                             .symbolSize(60)
                             .foregroundStyle(color)
                             .annotation(position: .top, spacing: 3) {
@@ -172,7 +177,8 @@ struct ActivityWindowChart: View {
                             .symbolSize(40)
                             .foregroundStyle(Theme.dim)
                             .annotation(position: .bottom, spacing: 2) {
-                                Text(String(format: "↩ ~%.0fm", (stats.timeToBaselineSeconds ?? 0) / 60))
+                                let secs = stats.timeToBaselineSeconds ?? 0
+                                Text(secs < 60 ? "↩ <1m" : String(format: "↩ ~%.0fm", secs / 60))
                                     .font(.system(size: 8, design: .monospaced))
                                     .foregroundStyle(Theme.dim)
                             }
