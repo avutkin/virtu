@@ -47,15 +47,15 @@ struct ActivityWindowChart: View {
     /// (green = better, red = worse — matching the tiles).
     @ViewBuilder
     private func avgLabel(value: Double, pct: Double?) -> some View {
-        HStack(spacing: 3) {
+        HStack(spacing: 4) {
+            Text(def.format(value))
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .foregroundStyle(Theme.text.opacity(0.9))
             if let p = pct {
                 Text(String(format: "%+.0f%%", p))
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .foregroundStyle(p >= 0 ? Theme.accent : Theme.warn)
             }
-            Text(def.format(value))
-                .font(.system(size: 8, design: .monospaced))
-                .foregroundStyle(Theme.text.opacity(0.8))
         }
     }
 

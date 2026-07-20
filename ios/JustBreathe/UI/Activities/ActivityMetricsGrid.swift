@@ -43,7 +43,7 @@ struct ActivityMetricsGrid: View {
                 MetricTile(
                     label:         m.def.label,
                     techLabel:     m.def.techLabel,
-                    value:         m.def.format(m.stats.peakValue),
+                    value:         m.def.format(m.stats.duringMean),
                     unit:          m.def.unit,
                     peakUpliftPct: m.stats.peakUpliftPct.map { Float($0) },
                     avgUpliftPct:  m.stats.avgUpliftPct.map { Float($0) }
