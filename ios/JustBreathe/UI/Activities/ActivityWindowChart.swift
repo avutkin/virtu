@@ -102,19 +102,14 @@ struct ActivityWindowChart: View {
                     RectangleMark(xStart: .value("as", endedAt), xEnd: .value("ae", windowEnd))
                         .foregroundStyle(Theme.dim.opacity(0.06))
 
-                    // Start / end rules
+                    // Start / end boundary lines (the shaded during band and
+                    // the per-segment average lines carry the phase labeling).
                     RuleMark(x: .value("start", startedAt))
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
                         .foregroundStyle(Theme.dim.opacity(0.5))
-                        .annotation(position: .top, alignment: .leading, spacing: 2) {
-                            Text("START").font(.system(size: 8, design: .monospaced)).foregroundStyle(Theme.dim)
-                        }
                     RuleMark(x: .value("end", endedAt))
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
                         .foregroundStyle(Theme.dim.opacity(0.5))
-                        .annotation(position: .top, alignment: .leading, spacing: 2) {
-                            Text("END").font(.system(size: 8, design: .monospaced)).foregroundStyle(Theme.dim)
-                        }
 
                     // Phase-average lines — one short white line per segment
                     // (before / during / after), each spanning only its own
@@ -172,13 +167,6 @@ struct ActivityWindowChart: View {
                         PointMark(x: .value("peak time", onLine.date), y: .value("peak", onLine.val))
                             .symbolSize(60)
                             .foregroundStyle(color)
-                            .annotation(position: .top, spacing: 3) {
-                                if let p = stats.peakUpliftPct {
-                                    Text(String(format: "%@ %+.0f%%", p >= 0 ? "▲" : "▼", p))
-                                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                        .foregroundStyle(p >= 0 ? Theme.accent : Theme.warn)
-                                }
-                            }
                     }
 
                     // Return-to-baseline marker in the after window
