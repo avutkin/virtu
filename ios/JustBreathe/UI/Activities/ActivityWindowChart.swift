@@ -91,7 +91,7 @@ struct ActivityWindowChart: View {
                         .foregroundStyle(Theme.dim)
                     Spacer()
                 }
-                .frame(height: 120)
+                .frame(height: 132)
             } else {
                 Chart {
                     // Phase bands
@@ -111,39 +111,31 @@ struct ActivityWindowChart: View {
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
                         .foregroundStyle(Theme.dim.opacity(0.5))
 
-                    // Phase-average lines — one short white line per segment
+                    // Phase-average lines — one dotted white line per segment
                     // (before / during / after), each spanning only its own
-                    // phase and labeled on top with its average value; during
-                    // and after also show % vs the before average.
+                    // phase. The numeric labels are drawn pinned to the top of
+                    // the plot (chartOverlay below) so the curve never covers
+                    // them.
                     if let b = stats.baseline {
                         RuleMark(xStart: .value("before start", windowStart),
                                  xEnd:   .value("before end",   startedAt),
                                  y:      .value("before avg",   b))
-                            .lineStyle(StrokeStyle(lineWidth: 2))
-                            .foregroundStyle(Theme.text)
-                            .annotation(position: .top, alignment: .center, spacing: 2) {
-                                avgLabel(value: b, pct: nil)
-                            }
+                            .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [2, 3]))
+                            .foregroundStyle(Theme.text.opacity(0.85))
                     }
                     if let d = stats.duringMean {
                         RuleMark(xStart: .value("during start", startedAt),
                                  xEnd:   .value("during end",   endedAt),
                                  y:      .value("during avg",   d))
-                            .lineStyle(StrokeStyle(lineWidth: 2))
-                            .foregroundStyle(Theme.text)
-                            .annotation(position: .top, alignment: .center, spacing: 2) {
-                                avgLabel(value: d, pct: stats.avgUpliftPct)
-                            }
+                            .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [2, 3]))
+                            .foregroundStyle(Theme.text.opacity(0.85))
                     }
                     if let a = stats.afterMean {
                         RuleMark(xStart: .value("after start", endedAt),
                                  xEnd:   .value("after end",   windowEnd),
                                  y:      .value("after avg",   a))
-                            .lineStyle(StrokeStyle(lineWidth: 2))
-                            .foregroundStyle(Theme.text)
-                            .annotation(position: .top, alignment: .center, spacing: 2) {
-                                avgLabel(value: a, pct: stats.afterUpliftPct)
-                            }
+                            .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [2, 3]))
+                            .foregroundStyle(Theme.text.opacity(0.85))
                     }
 
                     // The line
@@ -199,7 +191,46 @@ struct ActivityWindowChart: View {
                             .foregroundStyle(Theme.dim)
                     }
                 }
-                .frame(height: 120)
+                .chartOverlay { proxy in
+                    GeometryReader { geo in
+                        let pf = proxy.plotFrame.map { geo[$0] } ?? CGRect(origin: .zero, size: geo.size)
+                        // Center x of a segment, clamped inside the plot so
+                        // edge labels don't clip.
+                        let midX: (Date, Date) -> CGFloat = { s, e in
+                            let mid = Date(timeIntervalSince1970:
+                                (s.timeIntervalSince1970 + e.timeIntervalSince1970) / 2)
+                            let raw = (proxy.position(forX: mid) ?? 0) + pf.origin.x
+                            return min(max(raw, pf.minX + 24), pf.maxX - 24)
+                        }
+                        let boundX: (Date) -> CGFloat = { d in
+                            (proxy.position(forX: d) ?? 0) + pf.origin.x
+                        }
+                        ZStack {
+                            // Per-segment average numbers pinned to the top,
+                            // clear of the plotted line.
+                            if let b = stats.baseline {
+                                avgLabel(value: b, pct: nil).fixedSize()
+                                    .position(x: midX(windowStart, startedAt), y: pf.minY + 9)
+                            }
+                            if let d = stats.duringMean {
+                                avgLabel(value: d, pct: stats.avgUpliftPct).fixedSize()
+                                    .position(x: midX(startedAt, endedAt), y: pf.minY + 9)
+                            }
+                            if let a = stats.afterMean {
+                                avgLabel(value: a, pct: stats.afterUpliftPct).fixedSize()
+                                    .position(x: midX(endedAt, windowEnd), y: pf.minY + 9)
+                            }
+                            // Practice start / end pinned to the bottom.
+                            Text("START").font(.system(size: 8, design: .monospaced))
+                                .foregroundStyle(Theme.dim).fixedSize()
+                                .position(x: boundX(startedAt), y: pf.maxY - 8)
+                            Text("END").font(.system(size: 8, design: .monospaced))
+                                .foregroundStyle(Theme.dim).fixedSize()
+                                .position(x: boundX(endedAt), y: pf.maxY - 8)
+                        }
+                    }
+                }
+                .frame(height: 132)
             }
         }
         .cardStyle()

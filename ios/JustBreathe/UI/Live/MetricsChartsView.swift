@@ -445,9 +445,17 @@ private struct MetricChartCard: View {
     private var chartBody: some View {
         let raw = points
         let pts = smooth ? smoothed(raw) : raw
+        // Auto-fit the y-axis to whatever is actually visible in the current
+        // x-window (plus any reference lines) with a little padding, so the
+        // whole curve is always in frame rather than clipped by a fixed domain.
         let domain: ClosedRange<Double> = {
-            guard dynamicY, let maxVal = pts.map(\.val).max(), maxVal > 0 else { return yDomain }
-            return yDomain.lowerBound...(maxVal * 1.3)
+            let (wStart, wEnd) = windowDates
+            let vals = pts.filter { $0.date >= wStart && $0.date <= wEnd }.map(\.val)
+                     + refs.map(\.value)
+            guard let lo = vals.min(), let hi = vals.max() else { return yDomain }
+            let span = hi - lo
+            let pad  = span > 0 ? span * 0.12 : max(abs(lo) * 0.1, 1)
+            return (lo - pad)...(hi + pad)
         }()
         if pts.isEmpty {
             noDataPlaceholder
