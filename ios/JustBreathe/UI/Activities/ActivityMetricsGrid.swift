@@ -1,53 +1,55 @@
 import SwiftUI
 
-/// 3×3 grid of the same 9 metrics shown live in LiveView's MetricsTableView,
-/// using "during" as the primary value. Each tile shows a large, bold %
-/// difference plus a small secondary absolute delta. For 8 metrics the
-/// comparison is "during vs before"; DFA α1 (Harmony) is compared against
-/// 1.0 instead — the "in harmony" reference point — since its meaningful
-/// question isn't "did it change" but "how close is it to balanced."
-/// Used inside ActivityDetailView, which renders its own header separately.
+/// One metric's presentation + data-access definition. Shared by the tile
+/// grid and the stacked charts so the two views cannot drift.
+struct ActivityMetricDef: Identifiable {
+    var id: String { label }
+    let label:     String
+    let techLabel: String
+    let unit:      String
+    let direction: BenefitDirection
+    let extract:   (MetricsHistoryPoint) -> Double?
+    let format:    (Double?) -> String
+}
+
+private func f2(_ v: Double?) -> String { v.map { String(format: "%.2f", $0) } ?? "—" }
+private func f1(_ v: Double?) -> String { v.map { String(format: "%.1f", $0) } ?? "—" }
+private func fFloat(_ v: Double?, _ fmt: (Float?) -> String) -> String { fmt(v.map { Float($0) }) }
+
+/// The 9 metrics, in display order, matching LiveView's MetricsTableView.
+let activityMetricDefs: [ActivityMetricDef] = [
+    .init(label: "Harmony",             techLabel: "DFA α1", unit: "",    direction: .target(1.0), extract: { $0.dfa1.map(Double.init) },    format: f2),
+    .init(label: "Conscious Breathing", techLabel: "RSA",    unit: "ms",  direction: .higher,      extract: { $0.rsaMs.map(Double.init) },   format: { fFloat($0, MetricFormat.ms) }),
+    .init(label: "Energy Reserve",      techLabel: "HRV",    unit: "ms",  direction: .higher,      extract: { $0.rmssd.map(Double.init) },   format: { fFloat($0, MetricFormat.ms) }),
+    .init(label: "Adaptive Power",      techLabel: "RCMSE",  unit: "",    direction: .higher,      extract: { $0.rcmse.map(Double.init) },   format: f2),
+    .init(label: "Inner Noise",         techLabel: "PIP",    unit: "%",   direction: .lower,       extract: { $0.pip.map(Double.init) },     format: f1),
+    .init(label: "Calm Reserve",        techLabel: "DC",     unit: "ms",  direction: .higher,      extract: { $0.dc.map(Double.init) },      format: f1),
+    .init(label: "Calm Power",          techLabel: "VTI",    unit: "",    direction: .higher,      extract: { $0.vti.map(Double.init) },     format: { fFloat($0, MetricFormat.ratio) }),
+    .init(label: "Stress Balance",      techLabel: "LF/HF",  unit: "",    direction: .lower,       extract: { $0.lfHF.map(Double.init) },    format: { fFloat($0, MetricFormat.ratio) }),
+    .init(label: "Pulse",               techLabel: "HR",     unit: "bpm", direction: .lower,       extract: { $0.meanBPM.map(Double.init) }, format: { fFloat($0, MetricFormat.bpm) }),
+]
+
+/// 3×3 grid of the 9 metrics. Each tile shows the peak-during value with a
+/// large benefit-signed peak-uplift % and a small avg-during %. Used inside
+/// ActivityDetailView, which renders its own header separately.
 struct ActivityMetricsGrid: View {
-    let entry: ActivityLog
+    let metrics: [(def: ActivityMetricDef, stats: ActivityMetricStats)]
 
     private let cols = Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
 
     var body: some View {
         LazyVGrid(columns: cols, spacing: 10) {
-            MetricTile(label: "Harmony",             techLabel: "DFA α1", value: dfa1String,                          unit: "",    delta: dfa1TargetDelta,                            percent: dfa1TargetPercent,                            higherBetter: false)
-            MetricTile(label: "Conscious Breathing", techLabel: "RSA",    value: MetricFormat.ms(entry.duringRSA),    unit: "ms",  delta: delta(entry.duringRSA,   entry.beforeRSA),   percent: percent(entry.duringRSA,   entry.beforeRSA),   higherBetter: true)
-            MetricTile(label: "Energy Reserve",      techLabel: "HRV",    value: MetricFormat.ms(entry.duringRMSSD),  unit: "ms",  delta: delta(entry.duringRMSSD, entry.beforeRMSSD), percent: percent(entry.duringRMSSD, entry.beforeRMSSD), higherBetter: true)
-            MetricTile(label: "Adaptive Power",      techLabel: "RCMSE",  value: rcmseString,                          unit: "",    delta: delta(entry.duringRCMSE, entry.beforeRCMSE), percent: percent(entry.duringRCMSE, entry.beforeRCMSE), higherBetter: true)
-            MetricTile(label: "Inner Noise",         techLabel: "PIP",    value: pipString,                            unit: "%",   delta: delta(entry.duringPIP,   entry.beforePIP),   percent: percent(entry.duringPIP,   entry.beforePIP),   higherBetter: false)
-            MetricTile(label: "Calm Reserve",        techLabel: "DC",     value: dcString,                             unit: "ms",  delta: delta(entry.duringDC,    entry.beforeDC),    percent: percent(entry.duringDC,    entry.beforeDC),    higherBetter: true)
-            MetricTile(label: "Calm Power",          techLabel: "VTI",    value: MetricFormat.ratio(entry.duringVTI),  unit: "",    delta: delta(entry.duringVTI,   entry.beforeVTI),   percent: percent(entry.duringVTI,   entry.beforeVTI),   higherBetter: true)
-            MetricTile(label: "Stress Balance",      techLabel: "LF/HF",  value: MetricFormat.ratio(entry.duringLFHF), unit: "",    delta: delta(entry.duringLFHF,  entry.beforeLFHF),  percent: percent(entry.duringLFHF,  entry.beforeLFHF),  higherBetter: false)
-            MetricTile(label: "Pulse",               techLabel: "HR",     value: MetricFormat.bpm(entry.duringHR),    unit: "bpm", delta: delta(entry.duringHR,    entry.beforeHR),    percent: percent(entry.duringHR,    entry.beforeHR),    higherBetter: false)
+            ForEach(metrics, id: \.def.id) { m in
+                MetricTile(
+                    label:         m.def.label,
+                    techLabel:     m.def.techLabel,
+                    value:         m.def.format(m.stats.peakValue),
+                    unit:          m.def.unit,
+                    peakUpliftPct: m.stats.peakUpliftPct.map { Float($0) },
+                    avgUpliftPct:  m.stats.avgUpliftPct.map { Float($0) }
+                )
+            }
         }
         .cardStyle()
-    }
-
-    private var dfa1String:  String { entry.duringDFA1.map  { String(format: "%.2f", $0) } ?? "—" }
-    private var rcmseString: String { entry.duringRCMSE.map { String(format: "%.2f", $0) } ?? "—" }
-    private var pipString:   String { entry.duringPIP.map   { String(format: "%.1f", $0) } ?? "—" }
-    private var dcString:    String { entry.duringDC.map    { String(format: "%.1f", $0) } ?? "—" }
-
-    /// DFA α1's distance from 1.0 (the "in harmony" reference point), not from "before".
-    private var dfa1TargetDelta: Float? {
-        entry.duringDFA1.map { $0 - 1.0 }
-    }
-
-    private var dfa1TargetPercent: Float? {
-        entry.duringDFA1.map { ($0 - 1.0) * 100 }
-    }
-
-    private func delta(_ current: Float?, _ base: Float?) -> Float? {
-        guard let c = current, let b = base else { return nil }
-        return c - b
-    }
-
-    private func percent(_ current: Float?, _ base: Float?) -> Float? {
-        guard let c = current, let b = base, b != 0 else { return nil }
-        return (c - b) / b * 100
     }
 }

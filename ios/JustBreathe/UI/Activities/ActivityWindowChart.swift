@@ -1,21 +1,18 @@
 import Charts
 import SwiftUI
 
-/// A single metric's before/during/after time series for one activity.
-/// Not a reuse of MetricsChartsView's MetricChartCard — that view is built
-/// around a fixed TimeWindow (30m/2h/24h) anchored to "now" or a full
-/// calendar day, which doesn't fit an activity's arbitrary past
-/// [start, end] span of variable length. This is a smaller, purpose-built
-/// chart for exactly that case.
+/// A single metric's before/during/after time series for one activity, with
+/// the peak-during point marked and recovery (retention + return-to-baseline)
+/// surfaced in the 10-min-after window. Purpose-built for an activity's
+/// arbitrary past [start, end] span (not a reuse of MetricsChartsView's
+/// day/now-anchored MetricChartCard).
 struct ActivityWindowChart: View {
-    let title:     String   // consumer name, e.g. "Harmony"
-    let techLabel: String   // e.g. "DFA α1"
-    let unit:      String
-    let color:     Color    // activityTypeEnum.color — tints the "during" band
+    let def:       ActivityMetricDef
+    let color:     Color
     let points:    [MetricsHistoryPoint]
     let startedAt: Date
     let endedAt:   Date
-    let extract:   (MetricsHistoryPoint) -> Double?
+    let stats:     ActivityMetricStats
 
     private struct Pt: Identifiable {
         let id:   Int
@@ -26,8 +23,7 @@ struct ActivityWindowChart: View {
     private var windowStart: Date { startedAt.addingTimeInterval(-300) }
     private var windowEnd:   Date { endedAt.addingTimeInterval(600) }
 
-    /// Buckets to ~120 points regardless of activity length, same density
-    /// target as MetricsChartsView's TimeWindow.bucketSeconds convention.
+    /// Buckets to ~120 points regardless of activity length.
     private var bucketed: [Pt] {
         let span = windowEnd.timeIntervalSince(windowStart)
         guard span > 0 else { return [] }
@@ -35,7 +31,7 @@ struct ActivityWindowChart: View {
         var sums:   [Int: Double] = [:]
         var counts: [Int: Int]    = [:]
         for pt in points {
-            guard let v = extract(pt) else { continue }
+            guard let v = def.extract(pt) else { continue }
             let key = Int(pt.timestamp.timeIntervalSince(windowStart) / bucketSeconds)
             sums[key]   = (sums[key]   ?? 0) + v
             counts[key] = (counts[key] ?? 0) + 1
@@ -46,37 +42,28 @@ struct ActivityWindowChart: View {
         }
     }
 
-    private func average(from start: Date, to end: Date) -> Double? {
-        let vals = points.filter { $0.timestamp >= start && $0.timestamp < end }.compactMap(extract)
-        guard !vals.isEmpty else { return nil }
-        return vals.reduce(0, +) / Double(vals.count)
+    private func pctText(_ p: Double?) -> String? {
+        p.map { String(format: "%+.0f%%", $0) }
     }
 
-    private var beforeAvg: Double? { average(from: windowStart, to: startedAt) }
-    private var duringAvg: Double? { average(from: startedAt, to: endedAt) }
-    private var afterAvg:  Double? { average(from: endedAt, to: windowEnd) }
-
-    /// % difference vs the before-phase average — nil if there's no before
-    /// average to compare against, or it's exactly zero.
-    private func percentVsBefore(_ avg: Double?) -> Double? {
-        guard let avg, let base = beforeAvg, base != 0 else { return nil }
-        return (avg - base) / base * 100
+    private var returnDate: Date? {
+        stats.timeToBaselineSeconds.map { endedAt.addingTimeInterval($0) }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(title)
+                Text(def.label)
                     .font(.system(size: 12, weight: .semibold, design: .monospaced))
                     .foregroundStyle(Theme.text)
-                if !techLabel.isEmpty {
-                    Text(techLabel)
+                if !def.techLabel.isEmpty {
+                    Text(def.techLabel)
                         .font(.system(size: 10, design: .monospaced))
                         .foregroundStyle(Theme.dim)
                 }
                 Spacer()
-                if !unit.isEmpty {
-                    Text(unit)
+                if !def.unit.isEmpty {
+                    Text(def.unit)
                         .font(.system(size: 10, design: .monospaced))
                         .foregroundStyle(Theme.dim)
                 }
@@ -91,100 +78,104 @@ struct ActivityWindowChart: View {
                         .foregroundStyle(Theme.dim)
                     Spacer()
                 }
-                .frame(height: 110)
+                .frame(height: 120)
             } else {
                 Chart {
-                    RectangleMark(
-                        xStart: .value("before start", windowStart),
-                        xEnd:   .value("before end",   startedAt)
-                    )
-                    .foregroundStyle(Theme.dim.opacity(0.06))
+                    // Phase bands
+                    RectangleMark(xStart: .value("bs", windowStart), xEnd: .value("be", startedAt))
+                        .foregroundStyle(Theme.dim.opacity(0.06))
+                    RectangleMark(xStart: .value("ds", startedAt), xEnd: .value("de", endedAt))
+                        .foregroundStyle(color.opacity(0.08))
+                    RectangleMark(xStart: .value("as", endedAt), xEnd: .value("ae", windowEnd))
+                        .foregroundStyle(Theme.dim.opacity(0.06))
 
-                    RectangleMark(
-                        xStart: .value("during start", startedAt),
-                        xEnd:   .value("during end",   endedAt)
-                    )
-                    .foregroundStyle(color.opacity(0.08))
-
-                    RectangleMark(
-                        xStart: .value("after start", endedAt),
-                        xEnd:   .value("after end",   windowEnd)
-                    )
-                    .foregroundStyle(Theme.dim.opacity(0.06))
-
+                    // Start / end rules
                     RuleMark(x: .value("start", startedAt))
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
                         .foregroundStyle(Theme.dim.opacity(0.5))
                         .annotation(position: .top, alignment: .leading, spacing: 2) {
-                            Text("START")
-                                .font(.system(size: 8, design: .monospaced))
-                                .foregroundStyle(Theme.dim)
+                            Text("START").font(.system(size: 8, design: .monospaced)).foregroundStyle(Theme.dim)
                         }
-
                     RuleMark(x: .value("end", endedAt))
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
                         .foregroundStyle(Theme.dim.opacity(0.5))
                         .annotation(position: .top, alignment: .leading, spacing: 2) {
-                            Text("END")
-                                .font(.system(size: 8, design: .monospaced))
-                                .foregroundStyle(Theme.dim)
+                            Text("END").font(.system(size: 8, design: .monospaced)).foregroundStyle(Theme.dim)
                         }
 
-                    if let avg = beforeAvg {
-                        RuleMark(y: .value("before avg", avg))
+                    // Phase-average reference lines
+                    if let b = stats.baseline {
+                        RuleMark(y: .value("before avg", b))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
                             .foregroundStyle(Theme.dim.opacity(0.5))
                             .annotation(position: .top, alignment: .trailing, spacing: 2) {
-                                Text(String(format: "%.1f", avg))
-                                    .font(.system(size: 8, design: .monospaced))
-                                    .foregroundStyle(Theme.dim)
+                                Text(String(format: "%.1f", b)).font(.system(size: 8, design: .monospaced)).foregroundStyle(Theme.dim)
                             }
                     }
-
-                    if let avg = duringAvg {
-                        RuleMark(y: .value("during avg", avg))
+                    if let d = stats.duringMean {
+                        RuleMark(y: .value("during avg", d))
                             .lineStyle(StrokeStyle(lineWidth: 1.5))
                             .foregroundStyle(color.opacity(0.9))
                             .annotation(position: .top, alignment: .trailing, spacing: 2) {
                                 HStack(spacing: 3) {
-                                    if let pct = percentVsBefore(avg) {
-                                        Text(String(format: "%+.0f%%", pct))
-                                            .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                            .foregroundStyle(color)
+                                    if let p = pctText(stats.avgUpliftPct) {
+                                        Text(p).font(.system(size: 11, weight: .bold, design: .monospaced)).foregroundStyle(color)
                                     }
-                                    Text(String(format: "%.1f", avg))
-                                        .font(.system(size: 8, design: .monospaced))
-                                        .foregroundStyle(Theme.dim)
+                                    Text(String(format: "%.1f", d)).font(.system(size: 8, design: .monospaced)).foregroundStyle(Theme.dim)
                                 }
                             }
                     }
-
-                    if let avg = afterAvg {
-                        RuleMark(y: .value("after avg", avg))
+                    if let a = stats.afterMean {
+                        RuleMark(y: .value("after avg", a))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 2]))
                             .foregroundStyle(Theme.dim.opacity(0.5))
                             .annotation(position: .bottom, alignment: .trailing, spacing: 2) {
                                 HStack(spacing: 3) {
-                                    if let pct = percentVsBefore(avg) {
-                                        Text(String(format: "%+.0f%%", pct))
-                                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                    if let held = stats.retainedPct {
+                                        Text(String(format: "%.0f%% held", max(0, min(held, 999))))
+                                            .font(.system(size: 9, weight: .bold, design: .monospaced))
                                             .foregroundStyle(Theme.dim)
                                     }
-                                    Text(String(format: "%.1f", avg))
-                                        .font(.system(size: 8, design: .monospaced))
-                                        .foregroundStyle(Theme.dim)
+                                    Text(String(format: "%.1f", a)).font(.system(size: 8, design: .monospaced)).foregroundStyle(Theme.dim)
                                 }
                             }
                     }
 
+                    // The line
                     ForEach(pts) { pt in
-                        LineMark(
-                            x: .value("time", pt.date),
-                            y: .value(title, pt.val)
-                        )
-                        .foregroundStyle(color)
-                        .interpolationMethod(.catmullRom)
-                        .lineStyle(StrokeStyle(lineWidth: 1.5))
+                        LineMark(x: .value("time", pt.date), y: .value(def.label, pt.val))
+                            .foregroundStyle(color)
+                            .interpolationMethod(.catmullRom)
+                            .lineStyle(StrokeStyle(lineWidth: 1.5))
+                    }
+
+                    // Peak dot (halo + point) with uplift annotation
+                    if let pv = stats.peakValue, let pd = stats.peakDate {
+                        PointMark(x: .value("peak time", pd), y: .value("peak", pv))
+                            .symbolSize(160)
+                            .foregroundStyle(color.opacity(0.25))
+                        PointMark(x: .value("peak time", pd), y: .value("peak", pv))
+                            .symbolSize(60)
+                            .foregroundStyle(color)
+                            .annotation(position: .top, spacing: 3) {
+                                if let p = stats.peakUpliftPct {
+                                    Text(String(format: "%@ %+.0f%%", p >= 0 ? "▲" : "▼", p))
+                                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                        .foregroundStyle(p >= 0 ? Theme.accent : Theme.warn)
+                                }
+                            }
+                    }
+
+                    // Return-to-baseline marker in the after window
+                    if let rd = returnDate, let b = stats.baseline {
+                        PointMark(x: .value("return", rd), y: .value("baseline", b))
+                            .symbolSize(40)
+                            .foregroundStyle(Theme.dim)
+                            .annotation(position: .bottom, spacing: 2) {
+                                Text(String(format: "↩ ~%.0fm", (stats.timeToBaselineSeconds ?? 0) / 60))
+                                    .font(.system(size: 8, design: .monospaced))
+                                    .foregroundStyle(Theme.dim)
+                            }
                     }
                 }
                 .chartXScale(domain: windowStart...windowEnd)
@@ -204,7 +195,7 @@ struct ActivityWindowChart: View {
                             .foregroundStyle(Theme.dim)
                     }
                 }
-                .frame(height: 110)
+                .frame(height: 120)
             }
         }
         .cardStyle()

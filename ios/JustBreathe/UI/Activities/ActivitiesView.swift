@@ -604,21 +604,30 @@ struct ActivityDetailView: View {
                             Spacer()
                         }
 
-                        // 9-metric summary
-                        ActivityMetricsGrid(entry: entry)
-
-                        // Before/during/after charts, one per metric — same
-                        // order as the grid above.
+                        // Compute peak/uplift/recovery once per metric, shared
+                        // by the summary grid and the charts so they can't drift.
                         let windowEnd = entry.endedAt ?? entry.startedAt
-                        ActivityWindowChart(title: "Harmony",             techLabel: "DFA α1", unit: "",    color: entry.activityTypeEnum.color, points: chartPoints, startedAt: entry.startedAt, endedAt: windowEnd) { $0.dfa1.map(Double.init) }
-                        ActivityWindowChart(title: "Conscious Breathing", techLabel: "RSA",    unit: "ms",  color: entry.activityTypeEnum.color, points: chartPoints, startedAt: entry.startedAt, endedAt: windowEnd) { $0.rsaMs.map(Double.init) }
-                        ActivityWindowChart(title: "Energy Reserve",      techLabel: "HRV",    unit: "ms",  color: entry.activityTypeEnum.color, points: chartPoints, startedAt: entry.startedAt, endedAt: windowEnd) { $0.rmssd.map(Double.init) }
-                        ActivityWindowChart(title: "Adaptive Power",      techLabel: "RCMSE",  unit: "",    color: entry.activityTypeEnum.color, points: chartPoints, startedAt: entry.startedAt, endedAt: windowEnd) { $0.rcmse.map(Double.init) }
-                        ActivityWindowChart(title: "Inner Noise",         techLabel: "PIP",    unit: "%",   color: entry.activityTypeEnum.color, points: chartPoints, startedAt: entry.startedAt, endedAt: windowEnd) { $0.pip.map(Double.init) }
-                        ActivityWindowChart(title: "Calm Reserve",        techLabel: "DC",     unit: "ms",  color: entry.activityTypeEnum.color, points: chartPoints, startedAt: entry.startedAt, endedAt: windowEnd) { $0.dc.map(Double.init) }
-                        ActivityWindowChart(title: "Calm Power",          techLabel: "VTI",    unit: "",    color: entry.activityTypeEnum.color, points: chartPoints, startedAt: entry.startedAt, endedAt: windowEnd) { $0.vti.map(Double.init) }
-                        ActivityWindowChart(title: "Stress Balance",      techLabel: "LF/HF",  unit: "",    color: entry.activityTypeEnum.color, points: chartPoints, startedAt: entry.startedAt, endedAt: windowEnd) { $0.lfHF.map(Double.init) }
-                        ActivityWindowChart(title: "Pulse",               techLabel: "HR",     unit: "bpm", color: entry.activityTypeEnum.color, points: chartPoints, startedAt: entry.startedAt, endedAt: windowEnd) { $0.meanBPM.map(Double.init) }
+                        let metrics = activityMetricDefs.map { def in
+                            (def: def,
+                             stats: ActivityMetricStats(points: chartPoints,
+                                                        extract: def.extract,
+                                                        direction: def.direction,
+                                                        startedAt: entry.startedAt,
+                                                        endedAt: windowEnd))
+                        }
+
+                        // 9-metric summary
+                        ActivityMetricsGrid(metrics: metrics)
+
+                        // Before/during/after charts, one per metric — same order.
+                        ForEach(metrics, id: \.def.id) { m in
+                            ActivityWindowChart(def: m.def,
+                                                color: entry.activityTypeEnum.color,
+                                                points: chartPoints,
+                                                startedAt: entry.startedAt,
+                                                endedAt: windowEnd,
+                                                stats: m.stats)
+                        }
 
                         // Insight
                         if let insight = entry.insightText {
