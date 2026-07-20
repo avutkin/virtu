@@ -116,30 +116,37 @@ struct ActivityWindowChart: View {
                             Text("END").font(.system(size: 8, design: .monospaced)).foregroundStyle(Theme.dim)
                         }
 
-                    // Phase-average reference lines — three white lines
-                    // (before / during / after), each labeled with its average
-                    // value; during and after also show % vs the before average.
+                    // Phase-average lines — one short white line per segment
+                    // (before / during / after), each spanning only its own
+                    // phase and labeled on top with its average value; during
+                    // and after also show % vs the before average.
                     if let b = stats.baseline {
-                        RuleMark(y: .value("before avg", b))
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                            .foregroundStyle(Theme.text.opacity(0.7))
-                            .annotation(position: .top, alignment: .leading, spacing: 2) {
+                        RuleMark(xStart: .value("before start", windowStart),
+                                 xEnd:   .value("before end",   startedAt),
+                                 y:      .value("before avg",   b))
+                            .lineStyle(StrokeStyle(lineWidth: 2))
+                            .foregroundStyle(Theme.text)
+                            .annotation(position: .top, alignment: .center, spacing: 2) {
                                 avgLabel(value: b, pct: nil)
                             }
                     }
                     if let d = stats.duringMean {
-                        RuleMark(y: .value("during avg", d))
-                            .lineStyle(StrokeStyle(lineWidth: 1.5))
+                        RuleMark(xStart: .value("during start", startedAt),
+                                 xEnd:   .value("during end",   endedAt),
+                                 y:      .value("during avg",   d))
+                            .lineStyle(StrokeStyle(lineWidth: 2))
                             .foregroundStyle(Theme.text)
-                            .annotation(position: .top, alignment: .trailing, spacing: 2) {
+                            .annotation(position: .top, alignment: .center, spacing: 2) {
                                 avgLabel(value: d, pct: stats.avgUpliftPct)
                             }
                     }
                     if let a = stats.afterMean {
-                        RuleMark(y: .value("after avg", a))
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 2]))
-                            .foregroundStyle(Theme.text.opacity(0.7))
-                            .annotation(position: .bottom, alignment: .trailing, spacing: 2) {
+                        RuleMark(xStart: .value("after start", endedAt),
+                                 xEnd:   .value("after end",   windowEnd),
+                                 y:      .value("after avg",   a))
+                            .lineStyle(StrokeStyle(lineWidth: 2))
+                            .foregroundStyle(Theme.text)
+                            .annotation(position: .top, alignment: .center, spacing: 2) {
                                 avgLabel(value: a, pct: stats.afterUpliftPct)
                             }
                     }
