@@ -555,12 +555,38 @@ struct ActivityDetailView: View {
     @Bindable var entry: ActivityLog
 
     @State private var chartPoints: [MetricsHistoryPoint] = []
+    @State private var twoMonthAvg: [String: Double] = [:]
 
     private var timeStr: String {
         let fmt = DateFormatter()
         fmt.dateStyle = .medium
         fmt.timeStyle = .short
         return fmt.string(from: entry.startedAt)
+    }
+
+    /// Average benefit-signed uplift % per metric across all completed sessions
+    /// of the same activity type in the past ~2 months. Keyed by metric id.
+    private func loadTwoMonthAverages() {
+        let cutoff = Calendar.current.date(byAdding: .day, value: -60, to: .now) ?? .distantPast
+        let type   = entry.activityType
+        let predicate = #Predicate<ActivityLog> {
+            $0.activityType == type && $0.startedAt >= cutoff && $0.endedAt != nil
+        }
+        let sessions = (try? ctx.fetch(FetchDescriptor<ActivityLog>(predicate: predicate))) ?? []
+
+        var result: [String: Double] = [:]
+        for def in activityMetricDefs {
+            let uplifts: [Double] = sessions.compactMap { s in
+                guard let bF = s[keyPath: def.beforeKey], let dF = s[keyPath: def.duringKey] else { return nil }
+                let bb = def.direction.benefit(Double(bF))
+                guard bb != 0 else { return nil }
+                return (def.direction.benefit(Double(dF)) - bb) / abs(bb) * 100
+            }
+            if !uplifts.isEmpty {
+                result[def.id] = uplifts.reduce(0, +) / Double(uplifts.count)
+            }
+        }
+        twoMonthAvg = result
     }
 
     private func loadChartPoints() {
@@ -617,7 +643,7 @@ struct ActivityDetailView: View {
                         }
 
                         // 9-metric summary
-                        ActivityMetricsGrid(metrics: metrics)
+                        ActivityMetricsGrid(metrics: metrics, history: twoMonthAvg)
 
                         // Section title — names the activity these charts belong
                         // to (custom name for custom activities), re-establishing
@@ -685,7 +711,10 @@ struct ActivityDetailView: View {
                     .foregroundStyle(Theme.accent)
                 }
             }
-            .onAppear { loadChartPoints() }
+            .onAppear {
+                loadChartPoints()
+                loadTwoMonthAverages()
+            }
         }
     }
 

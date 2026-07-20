@@ -9,11 +9,13 @@ struct MetricTile: View {
     let percent:       Float?   // legacy: when set (and no peak mode), shown large/bold
     let peakUpliftPct: Float?   // max (peak) uplift — smallest line in peak mode
     let avgUpliftPct:  Float?   // average uplift — the big headline in peak mode
+    let historyPct:    Float?   // 2-month avg uplift for this activity type
     let higherBetter:  Bool
 
     init(label: String, techLabel: String = "", value: String, unit: String,
          delta: Float? = nil, percent: Float? = nil,
          peakUpliftPct: Float? = nil, avgUpliftPct: Float? = nil,
+         historyPct: Float? = nil,
          higherBetter: Bool = true) {
         self.label         = label
         self.techLabel     = techLabel
@@ -23,6 +25,7 @@ struct MetricTile: View {
         self.percent       = percent
         self.peakUpliftPct = peakUpliftPct
         self.avgUpliftPct  = avgUpliftPct
+        self.historyPct    = historyPct
         self.higherBetter  = higherBetter
     }
 
@@ -93,6 +96,13 @@ struct MetricTile: View {
                         .font(.system(size: 9, design: .monospaced))
                         .foregroundStyle(Theme.dim)
                 }
+
+                // 2-month average uplift for this activity type
+                if let h = historyPct {
+                    Text(String(format: "2mo %+.0f%%", h))
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .foregroundStyle((h >= 0 ? Theme.accent : Theme.warn).opacity(0.85))
+                }
             } else {
                 // Legacy (Live tab): value big, then delta / percent
                 Text(value)
@@ -124,7 +134,7 @@ struct MetricTile: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity, minHeight: (isPeakMode || percent != nil) ? 104 : 90, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: isPeakMode ? 120 : (percent != nil ? 104 : 90), alignment: .leading)
         .padding(12)
         .background(Theme.surface)
         .clipShape(RoundedRectangle(cornerRadius: 12))
