@@ -104,25 +104,33 @@ private struct DayScrollView: View {
 
     private var isToday: Bool { Calendar.current.isDateInToday(date) }
 
-    private var currentHistory: [MetricsHistoryPoint] {
-        let raw = isToday
-            ? env.tickHistory.filter { Calendar.current.isDateInToday($0.timestamp) }
-            : dayHistory
-        return MetricsQualityFilter.filter(raw)
+    /// Half-open [startOfDay, nextDay) for `date` — computed once instead of
+    /// calling Calendar.isDateInToday per history element.
+    private var dayRange: Range<Date>? {
+        let cal   = Calendar.current
+        let start = cal.startOfDay(for: date)
+        guard let end = cal.date(byAdding: .day, value: 1, to: start) else { return nil }
+        return start..<end
     }
 
-    /// Unfiltered history — used by MetricsChartsView for anomaly band detection.
+    /// Unfiltered history for this day. For today, filter env.tickHistory by a
+    /// cheap timestamp range (not per-element Calendar calls); other days use
+    /// the once-loaded @State array.
     private var rawCurrentHistory: [MetricsHistoryPoint] {
-        isToday
-            ? env.tickHistory.filter { Calendar.current.isDateInToday($0.timestamp) }
-            : rawDayHistory
-    }
-
-    private var currentTick: MetricsTick? {
-        dayAverageTick(from: currentHistory)
+        guard isToday else { return rawDayHistory }
+        guard let range = dayRange else { return env.tickHistory }
+        return env.tickHistory.filter { range.contains($0.timestamp) }
     }
 
     var body: some View {
+        // Compute the derived arrays ONCE per render — SwiftUI re-runs computed
+        // properties on every access, and body re-evaluates every 2 s on the
+        // today page (latestTick/tickHistory both mutate), so recomputing these
+        // O(n) passes 2–3× per render was the dominant scroll-jank cost.
+        let raw      = rawCurrentHistory
+        let filtered = MetricsQualityFilter.filter(raw)
+        let dayAvg   = dayAverageTick(from: filtered)
+
         ScrollView {
             VStack(spacing: 12) {
 
@@ -142,7 +150,7 @@ private struct DayScrollView: View {
                             .font(Theme.monoLabel)
                             .foregroundStyle(Theme.dim)
                         Spacer()
-                        if isToday && currentTick != nil {
+                        if isToday && dayAvg != nil {
                             Text("Δ vs today avg")
                                 .font(Theme.monoLabel)
                                 .foregroundStyle(Theme.dim.opacity(0.6))
@@ -150,20 +158,20 @@ private struct DayScrollView: View {
                     }
                     .padding(.horizontal)
                     MetricsTableView(
-                        tick:       isToday ? env.latestTick : currentTick,
-                        comparison: isToday ? currentTick    : nil
+                        tick:       isToday ? env.latestTick : dayAvg,
+                        comparison: isToday ? dayAvg         : nil
                     )
                     .padding(.horizontal)
                 }
 
                 // ── Historical metric charts ────────────────────────
-                if !currentHistory.isEmpty {
+                if !filtered.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("METRICS HISTORY")
                             .font(Theme.monoLabel)
                             .foregroundStyle(Theme.dim)
                             .padding(.horizontal)
-                        MetricsChartsView(history: currentHistory, rawHistory: rawCurrentHistory, date: date)
+                        MetricsChartsView(history: filtered, rawHistory: raw, date: date)
                     }
                 } else if !isToday {
                     Text("No data for this day")
