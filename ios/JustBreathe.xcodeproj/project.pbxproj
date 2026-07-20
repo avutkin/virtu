@@ -57,6 +57,7 @@
 		A148 /* MetricTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = F148 /* MetricTile.swift */; };
 		A149 /* ActivityMetricsGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = F149 /* ActivityMetricsGrid.swift */; };
 		A150 /* ActivityWindowChart.swift in Sources */ = {isa = PBXBuildFile; fileRef = F150 /* ActivityWindowChart.swift */; };
+		A151 /* ActivityMetricStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = F151 /* ActivityMetricStats.swift */; };
 		ARES1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FRES1 /* Assets.xcassets */; };
 		AT01 /* MetricsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT01 /* MetricsTests.swift */; };
 		AT02 /* BLETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT02 /* BLETests.swift */; };
@@ -64,6 +65,7 @@
 		AT04 /* InsightGeneratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT04 /* InsightGeneratorTests.swift */; };
 		AT05 /* LiveStateTrendComputeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT05 /* LiveStateTrendComputeTests.swift */; };
 		AT06 /* PayloadBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT06 /* PayloadBuilderTests.swift */; };
+		AT07 /* ActivityMetricStatsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT07 /* ActivityMetricStatsTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -127,6 +129,7 @@
 		F148 /* MetricTile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricTile.swift; sourceTree = "<group>"; };
 		F149 /* ActivityMetricsGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityMetricsGrid.swift; sourceTree = "<group>"; };
 		F150 /* ActivityWindowChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityWindowChart.swift; sourceTree = "<group>"; };
+		F151 /* ActivityMetricStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityMetricStats.swift; sourceTree = "<group>"; };
 		FRES1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		FAPP /* JustBreathe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JustBreathe.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FINFO /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -136,6 +139,7 @@
 		FT04 /* InsightGeneratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightGeneratorTests.swift; sourceTree = "<group>"; };
 		FT05 /* LiveStateTrendComputeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveStateTrendComputeTests.swift; sourceTree = "<group>"; };
 		FT06 /* PayloadBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PayloadBuilderTests.swift; sourceTree = "<group>"; };
+		FT07 /* ActivityMetricStatsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityMetricStatsTests.swift; sourceTree = "<group>"; };
 		FTST /* JustBreatheTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = JustBreatheTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -250,6 +254,7 @@
 				F142 /* AdvancedHRVCompute.swift */,
 				F143 /* ECGQualityCompute.swift */,
 				F146 /* LiveStateTrendCompute.swift */,
+				F151 /* ActivityMetricStats.swift */,
 			);
 			path = Metrics;
 			sourceTree = "<group>";
@@ -347,6 +352,7 @@
 				FT04 /* InsightGeneratorTests.swift */,
 				FT05 /* LiveStateTrendComputeTests.swift */,
 				FT06 /* PayloadBuilderTests.swift */,
+				FT07 /* ActivityMetricStatsTests.swift */,
 			);
 			path = JustBreatheTests;
 			sourceTree = "<group>";
@@ -488,6 +494,7 @@
 				A148 /* MetricTile.swift in Sources */,
 				A149 /* ActivityMetricsGrid.swift in Sources */,
 				A150 /* ActivityWindowChart.swift in Sources */,
+				A151 /* ActivityMetricStats.swift in Sources */,
 				A123 /* ResonateView.swift in Sources */,
 				A124 /* PacerCircleView.swift in Sources */,
 				A125 /* HistoryView.swift in Sources */,
@@ -505,6 +512,7 @@
 				AT04 /* InsightGeneratorTests.swift in Sources */,
 				AT05 /* LiveStateTrendComputeTests.swift in Sources */,
 				AT06 /* PayloadBuilderTests.swift in Sources */,
+				AT07 /* ActivityMetricStatsTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
