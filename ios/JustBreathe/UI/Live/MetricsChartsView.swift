@@ -164,13 +164,17 @@ private struct MetricChartCard: View {
 
     @Binding var win: TimeWindow
     @Binding var selectedX: Date?
+    @Binding var panOffset: TimeInterval   // seconds the window is panned from its newest edge (≤ 0)
     @State private var showInfo = false
+    @State private var isPanning = false
+    @State private var panStart: TimeInterval = 0
 
     init(title: String, technicalName: String = "", subtitle: String, yLabel: String,
          color: Color, windows: [TimeWindow], refs: [RefLine],
          yDomain: ClosedRange<Double>,
          win: Binding<TimeWindow>,
          selectedX: Binding<Date?>,
+         panOffset: Binding<TimeInterval>,
          smooth: Bool = false,
          dynamicY: Bool = false,
          info: MetricInfo? = nil,
@@ -197,6 +201,7 @@ private struct MetricChartCard: View {
         self.extract         = extract
         _win       = win
         _selectedX = selectedX
+        _panOffset = panOffset
     }
 
     // MARK: Anomaly bands
@@ -293,32 +298,37 @@ private struct MetricChartCard: View {
         return (s, s.addingTimeInterval(86_400))
     }
 
-    /// Visible chart domain. When a point is selected all charts align to
-    /// show a window centred on that time. Otherwise right edge = now (today)
-    /// or start-of-day anchor (past days).
+    /// Newest edge the window can reach (right edge at pan 0): now for today,
+    /// end-of-day for a past day.
+    private var anchorEnd: Date {
+        let cal = Calendar.current
+        return cal.isDateInToday(date)
+            ? Date()
+            : cal.startOfDay(for: date).addingTimeInterval(86_400)
+    }
+
+    /// Allowed pan range in seconds (≤ 0). Panning back is bounded by the
+    /// earliest data; you can't pan past the newest edge (0).
+    private var panBounds: ClosedRange<TimeInterval> {
+        let span = anchorEnd.timeIntervalSince(bucketDates.start) - win.seconds
+        return min(0, -span)...0
+    }
+
+    /// Visible chart domain. The window is a fixed `win.seconds` wide and is
+    /// dragged through time via `panOffset` (0 = newest edge). Selecting a
+    /// point only shows an inspection cursor; it no longer moves the window.
     private var windowDates: (start: Date, end: Date) {
-        let cal     = Calendar.current
-        let isToday = cal.isDateInToday(date)
-
-        if let sel = selectedX {
-            // Centre the window on the selected time, clamped so end ≤ now.
-            let half   = win.seconds / 2
-            let maxEnd = isToday ? Date() : cal.startOfDay(for: date).addingTimeInterval(86_400)
-            let end    = min(sel.addingTimeInterval(half), maxEnd)
-            return (end.addingTimeInterval(-win.seconds), end)
-        }
-
-        if isToday {
-            let e = Date()
-            return (e.addingTimeInterval(-win.seconds), e)
-        }
-        let s = cal.startOfDay(for: date)
-        return (s, s.addingTimeInterval(win.seconds))
+        let clamped = min(max(panOffset, panBounds.lowerBound), panBounds.upperBound)
+        let end     = anchorEnd.addingTimeInterval(clamped)
+        return (end.addingTimeInterval(-win.seconds), end)
     }
 
     private var windowLabel: String {
-        if selectedX != nil {
-            return "aligned to selection  ·  \(win.bucketLabel)"
+        // Panned back from the newest edge → show the window's start time.
+        if panOffset < -1 {
+            let fmt = DateFormatter()
+            fmt.dateFormat = "HH:mm"
+            return "\(fmt.string(from: windowDates.start))  ·  \(win.bucketLabel)"
         }
         if Calendar.current.isDateInToday(date) {
             return "last \(win.rawValue)  ·  \(win.bucketLabel)"
@@ -560,7 +570,6 @@ private struct MetricChartCard: View {
             }
             .chartXScale(domain: start...end)
             .chartYScale(domain: domain)
-            .chartXSelection(value: $selectedX)
             .chartOverlay { proxy in chartOverlay(pts: pts, proxy: proxy) }
             .chartXAxis {
                 AxisMarks(values: .automatic(desiredCount: 4)) {
@@ -587,17 +596,25 @@ private struct MetricChartCard: View {
 
     // MARK: Selection overlay
 
-    @ViewBuilder
     private func chartOverlay(pts: [ChartPoint], proxy: ChartProxy) -> some View {
-        if let selX = selectedX,
-           let nearest = pts.min(by: {
-               abs($0.date.timeIntervalSince(selX)) < abs($1.date.timeIntervalSince(selX))
-           }) {
-            GeometryReader { geo in
-                let pf  = proxy.plotFrame.map { geo[$0] } ?? CGRect(origin: .zero, size: geo.size)
-                let xPt = (proxy.position(forX: nearest.date) ?? 0) + pf.origin.x
-                let yPt = (proxy.position(forY: nearest.val)  ?? 0) + pf.origin.y
-                ZStack(alignment: .topLeading) {
+        GeometryReader { geo in
+            let pf = proxy.plotFrame.map { geo[$0] } ?? CGRect(origin: .zero, size: geo.size)
+            ZStack(alignment: .topLeading) {
+                // Transparent layer that captures drag-to-pan / tap-to-inspect.
+                Rectangle()
+                    .fill(Color.clear)
+                    .contentShape(Rectangle())
+                    .gesture(panGesture(proxy: proxy,
+                                        plotWidth: pf.width,
+                                        plotOriginX: pf.origin.x))
+
+                // Inspection cursor for the selected point.
+                if let selX = selectedX,
+                   let nearest = pts.min(by: {
+                       abs($0.date.timeIntervalSince(selX)) < abs($1.date.timeIntervalSince(selX))
+                   }) {
+                    let xPt = (proxy.position(forX: nearest.date) ?? 0) + pf.origin.x
+                    let yPt = (proxy.position(forY: nearest.val)  ?? 0) + pf.origin.y
                     Rectangle()
                         .fill(color.opacity(0.35))
                         .frame(width: 1, height: pf.height)
@@ -615,6 +632,34 @@ private struct MetricChartCard: View {
                 }
             }
         }
+    }
+
+    /// Drag left/right to pan the shared time window 1:1 with the finger; a
+    /// tap (no real movement) drops an inspection cursor instead of moving the
+    /// window.
+    private func panGesture(proxy: ChartProxy, plotWidth: CGFloat, plotOriginX: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                let dx = value.translation.width
+                let moved = abs(dx) > 8 || abs(value.translation.height) > 8
+                if moved {
+                    if !isPanning {
+                        isPanning = true
+                        panStart  = panOffset
+                        selectedX = nil
+                    }
+                    // 1:1 — one point of finger travel = one point of time.
+                    let scale = win.seconds / Double(max(plotWidth, 1))
+                    let raw   = panStart - Double(dx) * scale
+                    panOffset = min(max(raw, panBounds.lowerBound), panBounds.upperBound)
+                } else if !isPanning {
+                    // Still a tap: live-inspect the touched time.
+                    if let d: Date = proxy.value(atX: value.location.x - plotOriginX) {
+                        selectedX = d
+                    }
+                }
+            }
+            .onEnded { _ in isPanning = false }
     }
 
     private func selectionBubble(_ pt: ChartPoint) -> some View {
@@ -649,6 +694,7 @@ struct MetricsChartsView: View {
 
     @State private var sharedWin: TimeWindow = .h24
     @State private var sharedSelectedX: Date? = nil
+    @State private var sharedPanOffset: TimeInterval = 0
 
     var body: some View {
         VStack(spacing: 10) {
@@ -661,6 +707,10 @@ struct MetricsChartsView: View {
             vtiCard
             sdnnCard
             hrCard
+        }
+        .onChange(of: date) { _, _ in
+            sharedPanOffset = 0
+            sharedSelectedX = nil
         }
     }
 
@@ -680,7 +730,7 @@ struct MetricsChartsView: View {
                 RefLine(value: 100, label: "100 bpm  elevated", color: Theme.warn),
             ],
             yDomain: 40...160,
-            win: $sharedWin, selectedX: $sharedSelectedX,
+            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             dynamicY: true,
             info: MetricInfo(
                 "Average heart rate over the selected time window, expressed in beats per minute.",
@@ -709,7 +759,7 @@ struct MetricsChartsView: View {
                 RefLine(value: 1000, label:  "60 bpm", color: Theme.coh),
             ],
             yDomain: 350...1500,
-            win: $sharedWin, selectedX: $sharedSelectedX,
+            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             info: MetricInfo(
                 "Time between consecutive heartbeats in milliseconds. Calculated as 60,000 ÷ BPM.",
                 physical:    "The R-R interval is the gap between successive QRS complexes on an ECG. It varies continuously due to autonomic nervous system modulation — this variability is the basis of HRV analysis.",
@@ -740,7 +790,7 @@ struct MetricsChartsView: View {
                 RefLine(value: 2.0, label: "strong vagal  ≥ 2.0", color: Theme.coh),
             ],
             yDomain: 0...2.8,
-            win: $sharedWin, selectedX: $sharedSelectedX,
+            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             info: MetricInfo(
                 "Ratio of exhale duration to inhale duration, averaged across breaths in the window.",
                 physical:    "Inhalation expands the thorax, lowering intrathoracic pressure and briefly inhibiting vagal outflow. Exhalation reverses this, activating the vagal brake and slowing HR. A longer exhale therefore produces stronger parasympathetic activation.",
@@ -769,7 +819,7 @@ struct MetricsChartsView: View {
                 RefLine(value: 4.6, label: "good (≈100ms)", color: Theme.coh),
             ],
             yDomain: 2.0...5.5,
-            win: $sharedWin, selectedX: $sharedSelectedX,
+            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             info: MetricInfo(
                 "Natural logarithm of RMSSD — a normalised, scale-independent index of parasympathetic tone.",
                 physical:    "RMSSD is the root mean square of successive RR differences — the most validated time-domain HRV measure for vagal activity. Taking ln() compresses its skewed distribution into a roughly normal one, making it more suitable for tracking and comparison.",
@@ -800,7 +850,7 @@ struct MetricsChartsView: View {
                 RefLine(value: 90, label: "strong", color: Theme.coh),
             ],
             yDomain: 0...120,
-            win: $sharedWin, selectedX: $sharedSelectedX,
+            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             smooth:  true,
             info: MetricInfo(
                 "Amplitude of the heart rate oscillation driven specifically by breathing — the peak-to-trough RR swing at your current breathing frequency.",
@@ -831,7 +881,7 @@ struct MetricsChartsView: View {
                 RefLine(value: 100, label: "healthy",   color: Theme.coh),
             ],
             yDomain: 0...160,
-            win: $sharedWin, selectedX: $sharedSelectedX,
+            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             info: MetricInfo(
                 "Standard deviation of all RR intervals in the window — the broadest measure of total heart rate variability.",
                 physical:    "SDNN captures variability across all time scales simultaneously: ultra-slow hormonal rhythms, baroreceptor loops (LF), and respiratory modulation (HF). It reflects the total power of the ANS's influence on heart rhythm.",
@@ -859,7 +909,7 @@ struct MetricsChartsView: View {
                 RefLine(value: 20, label: "good",   color: Theme.coh),
             ],
             yDomain: 0...80,
-            win: $sharedWin, selectedX: $sharedSelectedX,
+            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             info: MetricInfo(
                 "Percentage of consecutive RR interval pairs that differ by more than 50 ms.",
                 physical:    "Each pair of adjacent beats is checked: if |RR[n+1] − RR[n]| > 50 ms, it counts. pNN50 is the proportion of such pairs. It is highly correlated with HF power and captures rapid, breath-linked parasympathetic fluctuations.",
@@ -888,7 +938,7 @@ struct MetricsChartsView: View {
                 RefLine(value: 10.0, label: "healthy",          color: Theme.coh),
             ],
             yDomain: 0...20,
-            win: $sharedWin, selectedX: $sharedSelectedX,
+            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             smooth: true,
             dynamicY: true,
             info: MetricInfo(
@@ -919,7 +969,7 @@ struct MetricsChartsView: View {
                 RefLine(value: 2.0, label: "Thriving",   color: Theme.coh),
             ],
             yDomain: 0.5...3.0,
-            win: $sharedWin, selectedX: $sharedSelectedX,
+            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             smooth: true,
             dynamicY: false,
             info: MetricInfo(
@@ -950,7 +1000,7 @@ struct MetricsChartsView: View {
                 RefLine(value: 70.0, label: "high fragmentation",color: Theme.warn),
             ],
             yDomain: 20...90,
-            win: $sharedWin, selectedX: $sharedSelectedX,
+            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             smooth: true,
             dynamicY: false,
             info: MetricInfo(
@@ -982,7 +1032,7 @@ struct MetricsChartsView: View {
                 RefLine(value: 1.5,  label: "Strained",    color: Theme.warn),
             ],
             yDomain: 0.5...1.8,
-            win: $sharedWin, selectedX: $sharedSelectedX,
+            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             smooth: true,
             dynamicY: false,
             info: MetricInfo(
@@ -1014,7 +1064,7 @@ struct MetricsChartsView: View {
                 RefLine(value: 2.0, label: "sympathetic",     color: Theme.warn),
             ],
             yDomain: 0...5,
-            win: $sharedWin, selectedX: $sharedSelectedX,
+            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             dynamicY: true,
             info: MetricInfo(
                 "Ratio of low-frequency (LF, 0.04–0.15 Hz) to high-frequency (HF, 0.15–0.40 Hz) spectral power.",
@@ -1040,7 +1090,7 @@ struct MetricsChartsView: View {
             windows: TimeWindow.allCases,
             refs: [],
             yDomain: 0...50,
-            win: $sharedWin, selectedX: $sharedSelectedX,
+            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             dynamicY: true,
             info: MetricInfo(
                 "Spectral power in the very low frequency band (0.003–0.04 Hz) — oscillations with cycles of 25 seconds to 5 minutes.",
@@ -1066,7 +1116,7 @@ struct MetricsChartsView: View {
             windows: TimeWindow.allCases,
             refs: [],
             yDomain: 0...50,
-            win: $sharedWin, selectedX: $sharedSelectedX,
+            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             dynamicY: true,
             info: MetricInfo(
                 "Spectral power in the ultra low frequency band (< 0.003 Hz) — oscillations slower than one cycle per 5 minutes.",
@@ -1096,7 +1146,7 @@ struct MetricsChartsView: View {
                 RefLine(value: 0.80, label: "excellent", color: Theme.coh),
             ],
             yDomain: 0...1,
-            win: $sharedWin, selectedX: $sharedSelectedX,
+            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             info: MetricInfo(
                 "Degree of synchronisation between RR interval oscillations and the breathing cycle, scored 0–1.",
                 physical:    "Computed as the normalised cross-spectral coherence between the RR tachogram and the ACC-derived breathing signal at the dominant breathing frequency. A score of 1.0 means the heart rate oscillation is perfectly phase-locked to breathing; 0 means no coupling.",
