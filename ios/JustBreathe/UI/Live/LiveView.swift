@@ -185,8 +185,15 @@ private struct DayScrollView: View {
             }
             .padding(.top, 8)
         }
-        .onAppear {
-            if !isToday { loadDayHistory() }
+        .task(id: date) {
+            guard !isToday else { return }
+            // Debounce: if the user swipes past this day within 150 ms, the task
+            // is cancelled during the sleep and the fetch never fires — keeps fast
+            // swiping smooth and avoids piling up background fetches for days you
+            // only pass through.
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled else { return }
+            await loadDayHistory()
         }
         .sheet(isPresented: $showResonate) {
             ResonateView()
@@ -196,18 +203,32 @@ private struct DayScrollView: View {
 
     // MARK: - Data helpers
 
-    private func loadDayHistory() {
+    /// Loads a past day's history off the main thread. The synchronous 43k-row
+    /// SwiftData fetch used to run in `onAppear` on the main thread, blocking the
+    /// horizontal swipe animation; here it runs on a background ModelContext and
+    /// only the (Sendable) plain-struct result is handed back to the main actor.
+    @MainActor
+    private func loadDayHistory() async {
+        guard rawDayHistory.isEmpty else { return }   // already loaded for this day
+        let container = ctx.container
         let cal   = Calendar.current
         let start = cal.startOfDay(for: date)
-        let end   = cal.date(byAdding: .day, value: 1, to: start)!
-        var desc  = FetchDescriptor<HRVSample>(
-            predicate: #Predicate { $0.timestamp >= start && $0.timestamp < end },
-            sortBy:    [SortDescriptor(\.timestamp)]
-        )
-        desc.fetchLimit = 43_200
-        let allPts = ((try? ctx.fetch(desc)) ?? []).map { MetricsHistoryPoint(from: $0) }
-        rawDayHistory = allPts
-        dayHistory    = MetricsQualityFilter.filter(allPts)
+        guard let end = cal.date(byAdding: .day, value: 1, to: start) else { return }
+
+        let result: ([MetricsHistoryPoint], [MetricsHistoryPoint]) = await Task.detached {
+            let bg = ModelContext(container)
+            var desc = FetchDescriptor<HRVSample>(
+                predicate: #Predicate { $0.timestamp >= start && $0.timestamp < end },
+                sortBy:    [SortDescriptor(\.timestamp)]
+            )
+            desc.fetchLimit = 43_200
+            let pts = ((try? bg.fetch(desc)) ?? []).map { MetricsHistoryPoint(from: $0) }
+            return (pts, MetricsQualityFilter.filter(pts))
+        }.value
+
+        guard !Task.isCancelled else { return }
+        rawDayHistory = result.0
+        dayHistory    = result.1
     }
 
     private func dayAverageTick(from history: [MetricsHistoryPoint]) -> MetricsTick? {
