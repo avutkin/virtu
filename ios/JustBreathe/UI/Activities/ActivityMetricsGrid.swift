@@ -39,8 +39,8 @@ let activityMetricDefs: [ActivityMetricDef] = [
 /// ActivityDetailView, which renders its own header separately.
 struct ActivityMetricsGrid: View {
     let metrics: [(def: ActivityMetricDef, stats: ActivityMetricStats)]
-    /// Metric id → average benefit-signed uplift % across the same activity
-    /// type over the past 2 months.
+    /// Metric id → average absolute "during" value across other sessions of
+    /// the same activity type over the past 2 months (the baseline).
     let history: [String: Double]
 
     private let cols = Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
@@ -48,17 +48,27 @@ struct ActivityMetricsGrid: View {
     var body: some View {
         LazyVGrid(columns: cols, spacing: 10) {
             ForEach(metrics, id: \.def.id) { m in
+                let base = history[m.def.id]
                 MetricTile(
-                    label:         m.def.label,
-                    techLabel:     m.def.techLabel,
-                    value:         m.def.format(m.stats.duringMean),
-                    unit:          m.def.unit,
-                    peakUpliftPct: m.stats.peakUpliftPct.map { Float($0) },
-                    avgUpliftPct:  m.stats.avgUpliftPct.map { Float($0) },
-                    historyPct:    history[m.def.id].map { Float($0) }
+                    label:           m.def.label,
+                    techLabel:       m.def.techLabel,
+                    value:           m.def.format(m.stats.duringMean),
+                    unit:            m.def.unit,
+                    avgUpliftPct:    m.stats.avgUpliftPct.map { Float($0) },
+                    historyValue:    base.map { m.def.format($0) },
+                    historyDeltaPct: historyDelta(m.def, current: m.stats.duringMean, base: base)
                 )
             }
         }
         .cardStyle()
+    }
+
+    /// Benefit-signed % of this session's during-average vs the 2-month
+    /// baseline (green = better, matching the tiles).
+    private func historyDelta(_ def: ActivityMetricDef, current: Double?, base: Double?) -> Float? {
+        guard let c = current, let b = base else { return nil }
+        let bb = def.direction.benefit(b)
+        guard bb != 0 else { return nil }
+        return Float((def.direction.benefit(c) - bb) / abs(bb) * 100)
     }
 }
