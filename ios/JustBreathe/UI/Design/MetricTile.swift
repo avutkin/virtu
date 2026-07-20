@@ -68,27 +68,26 @@ struct MetricTile: View {
             }
 
             if isPeakMode {
-                // Big: average uplift %
-                Text(avgHeadline)
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .foregroundStyle(hasData ? avgColor : Theme.dim.opacity(0.4))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                    .frame(minHeight: 28)
-
-                // Smaller: absolute value + unit
-                HStack(spacing: 3) {
-                    Text(value)
-                        .font(.system(size: 13, weight: .medium, design: .monospaced))
-                        .foregroundStyle(hasData ? Theme.text : Theme.dim.opacity(0.4))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                    if !unit.isEmpty {
-                        Text(unit)
-                            .font(.system(size: 9, design: .monospaced))
-                            .foregroundStyle(Theme.dim)
+                // Big average uplift % with the smaller absolute value + unit
+                // on the same line.
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(avgHeadline)
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .foregroundStyle(hasData ? avgColor : Theme.dim.opacity(0.4))
+                    if hasData {
+                        Text(value)
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Theme.text.opacity(0.85))
+                        if !unit.isEmpty {
+                            Text(unit)
+                                .font(.system(size: 8, design: .monospaced))
+                                .foregroundStyle(Theme.dim)
+                        }
                     }
                 }
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .frame(minHeight: 28)
 
                 // Smallest: max (peak) delta %
                 if hasData, peakUpliftPct != nil {
@@ -134,7 +133,7 @@ struct MetricTile: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity, minHeight: isPeakMode ? 120 : (percent != nil ? 104 : 90), alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: isPeakMode ? 108 : (percent != nil ? 104 : 90), alignment: .leading)
         .padding(12)
         .background(Theme.surface)
         .clipShape(RoundedRectangle(cornerRadius: 12))
