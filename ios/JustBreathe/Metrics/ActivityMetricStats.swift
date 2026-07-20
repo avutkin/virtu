@@ -29,6 +29,7 @@ struct ActivityMetricStats {
 
     let peakUpliftPct: Double?  // benefit-signed, peak vs baseline
     let avgUpliftPct:  Double?  // benefit-signed, during-mean vs baseline
+    let afterUpliftPct: Double? // benefit-signed, after-mean vs baseline
     let retainedPct:   Double?  // how much of the during-peak gain persists after
     let timeToBaselineSeconds: Double?  // endedAt → first near-baseline return
 
@@ -67,6 +68,7 @@ struct ActivityMetricStats {
         }
         self.peakUpliftPct = upliftPct(peak?.value)
         self.avgUpliftPct  = upliftPct(duringMean)
+        self.afterUpliftPct = upliftPct(afterMean)
 
         // Retention + time-to-baseline are only meaningful when the practice
         // actually improved the metric (positive gain in benefit space).

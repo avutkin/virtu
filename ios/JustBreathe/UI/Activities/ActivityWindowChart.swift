@@ -42,8 +42,21 @@ struct ActivityWindowChart: View {
         }
     }
 
-    private func pctText(_ p: Double?) -> String? {
-        p.map { String(format: "%+.0f%%", $0) }
+    /// Label drawn on a phase-average line: the average value (formatted per
+    /// metric) plus, when given, a bold benefit-signed % vs the before average
+    /// (green = better, red = worse — matching the tiles).
+    @ViewBuilder
+    private func avgLabel(value: Double, pct: Double?) -> some View {
+        HStack(spacing: 3) {
+            if let p = pct {
+                Text(String(format: "%+.0f%%", p))
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundStyle(p >= 0 ? Theme.accent : Theme.warn)
+            }
+            Text(def.format(value))
+                .font(.system(size: 8, design: .monospaced))
+                .foregroundStyle(Theme.text.opacity(0.8))
+        }
     }
 
     private var returnDate: Date? {
@@ -103,41 +116,31 @@ struct ActivityWindowChart: View {
                             Text("END").font(.system(size: 8, design: .monospaced)).foregroundStyle(Theme.dim)
                         }
 
-                    // Phase-average reference lines
+                    // Phase-average reference lines — three white lines
+                    // (before / during / after), each labeled with its average
+                    // value; during and after also show % vs the before average.
                     if let b = stats.baseline {
                         RuleMark(y: .value("before avg", b))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                            .foregroundStyle(Theme.dim.opacity(0.5))
-                            .annotation(position: .top, alignment: .trailing, spacing: 2) {
-                                Text(String(format: "%.1f", b)).font(.system(size: 8, design: .monospaced)).foregroundStyle(Theme.dim)
+                            .foregroundStyle(Theme.text.opacity(0.7))
+                            .annotation(position: .top, alignment: .leading, spacing: 2) {
+                                avgLabel(value: b, pct: nil)
                             }
                     }
                     if let d = stats.duringMean {
                         RuleMark(y: .value("during avg", d))
                             .lineStyle(StrokeStyle(lineWidth: 1.5))
-                            .foregroundStyle(color.opacity(0.9))
+                            .foregroundStyle(Theme.text)
                             .annotation(position: .top, alignment: .trailing, spacing: 2) {
-                                HStack(spacing: 3) {
-                                    if let p = pctText(stats.avgUpliftPct) {
-                                        Text(p).font(.system(size: 11, weight: .bold, design: .monospaced)).foregroundStyle(color)
-                                    }
-                                    Text(String(format: "%.1f", d)).font(.system(size: 8, design: .monospaced)).foregroundStyle(Theme.dim)
-                                }
+                                avgLabel(value: d, pct: stats.avgUpliftPct)
                             }
                     }
                     if let a = stats.afterMean {
                         RuleMark(y: .value("after avg", a))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 2]))
-                            .foregroundStyle(Theme.dim.opacity(0.5))
+                            .foregroundStyle(Theme.text.opacity(0.7))
                             .annotation(position: .bottom, alignment: .trailing, spacing: 2) {
-                                HStack(spacing: 3) {
-                                    if let held = stats.retainedPct {
-                                        Text(String(format: "%.0f%% held", max(0, min(held, 999))))
-                                            .font(.system(size: 9, weight: .bold, design: .monospaced))
-                                            .foregroundStyle(Theme.dim)
-                                    }
-                                    Text(String(format: "%.1f", a)).font(.system(size: 8, design: .monospaced)).foregroundStyle(Theme.dim)
-                                }
+                                avgLabel(value: a, pct: stats.afterUpliftPct)
                             }
                     }
 

@@ -48,11 +48,12 @@ final class ActivityMetricStatsTests: XCTestCase {
     }
 
     func testRetentionHalfDecay() {
-        // before 40, peak 60 (gain 20), after mean 50 → retained 50%
+        // before 40, peak 60 (gain 20), after mean 50 → retained 50%, afterUplift +25%
         let s = ActivityMetricStats(
             values: [v(-100, 40), v(500, 60), v(1100, 50), v(1500, 50)],
             direction: .higher, startedAt: start, endedAt: end)
         XCTAssertEqual(s.retainedPct!, 50, accuracy: 0.001)
+        XCTAssertEqual(s.afterUpliftPct!, 25, accuracy: 0.001)  // (50-40)/40*100
     }
 
     func testTimeToBaselineReturn() {
