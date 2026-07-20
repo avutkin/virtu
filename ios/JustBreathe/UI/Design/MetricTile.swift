@@ -7,26 +7,29 @@ struct MetricTile: View {
     let unit:            String
     let delta:           Float?
     let percent:         Float?   // legacy: when set (and no peak mode), shown large/bold
-    let avgUpliftPct:    Float?   // average uplift — the big headline in peak mode
-    let historyValue:    String?  // 2-month avg absolute during-value (formatted)
-    let historyDeltaPct: Float?   // this session's value vs the 2-month baseline
-    let higherBetter:    Bool
+    let avgUpliftPct:     Float?   // average uplift — the big headline in peak mode
+    let historyValue:     String?  // 2-month avg absolute during-value (formatted)
+    let historyDeltaPct:  Float?   // this session's value vs the 2-month baseline
+    let historyUpliftPct: Float?   // 2-month avg uplift % (during vs before)
+    let higherBetter:     Bool
 
     init(label: String, techLabel: String = "", value: String, unit: String,
          delta: Float? = nil, percent: Float? = nil,
          avgUpliftPct: Float? = nil,
          historyValue: String? = nil, historyDeltaPct: Float? = nil,
+         historyUpliftPct: Float? = nil,
          higherBetter: Bool = true) {
-        self.label           = label
-        self.techLabel       = techLabel
-        self.value           = value
-        self.unit            = unit
-        self.delta           = delta
-        self.percent         = percent
-        self.avgUpliftPct    = avgUpliftPct
-        self.historyValue    = historyValue
-        self.historyDeltaPct = historyDeltaPct
-        self.higherBetter    = higherBetter
+        self.label            = label
+        self.techLabel        = techLabel
+        self.value            = value
+        self.unit             = unit
+        self.delta            = delta
+        self.percent          = percent
+        self.avgUpliftPct     = avgUpliftPct
+        self.historyValue     = historyValue
+        self.historyDeltaPct  = historyDeltaPct
+        self.historyUpliftPct = historyUpliftPct
+        self.higherBetter     = higherBetter
     }
 
     private var hasData: Bool { value != "—" }
@@ -85,10 +88,12 @@ struct MetricTile: View {
                 .minimumScaleFactor(0.6)
                 .frame(minHeight: 28)
 
-                // 2-month baseline: average absolute during-value + this
-                // session's % delta vs it.
+                // Absolute during-value vs the 2-month baseline (+ % delta).
                 if let hv = historyValue {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 3) {
+                        Text("val")
+                            .font(.system(size: 7, design: .monospaced))
+                            .foregroundStyle(Theme.dim.opacity(0.6))
                         Text("2mo \(hv)")
                             .font(.system(size: 9, design: .monospaced))
                             .foregroundStyle(Theme.dim)
@@ -97,6 +102,21 @@ struct MetricTile: View {
                                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                                 .foregroundStyle((d >= 0 ? Theme.accent : Theme.warn).opacity(0.9))
                         }
+                    }
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                }
+
+                // Uplift (during vs before) vs the 2-month baseline — compare
+                // to the big headline % above.
+                if let u = historyUpliftPct {
+                    HStack(spacing: 3) {
+                        Text("lift")
+                            .font(.system(size: 7, design: .monospaced))
+                            .foregroundStyle(Theme.dim.opacity(0.6))
+                        Text(String(format: "2mo %+.0f%%", u))
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .foregroundStyle((u >= 0 ? Theme.accent : Theme.warn).opacity(0.85))
                     }
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
@@ -132,7 +152,7 @@ struct MetricTile: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity, minHeight: isPeakMode ? 100 : (percent != nil ? 104 : 90), alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: isPeakMode ? 116 : (percent != nil ? 104 : 90), alignment: .leading)
         .padding(12)
         .background(Theme.surface)
         .clipShape(RoundedRectangle(cornerRadius: 12))

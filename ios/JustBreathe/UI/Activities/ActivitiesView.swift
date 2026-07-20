@@ -555,7 +555,8 @@ struct ActivityDetailView: View {
     @Bindable var entry: ActivityLog
 
     @State private var chartPoints: [MetricsHistoryPoint] = []
-    @State private var twoMonthAvg: [String: Double] = [:]
+    @State private var twoMonthAvg: [String: Double] = [:]      // avg absolute during-value
+    @State private var twoMonthUplift: [String: Double] = [:]   // avg uplift % (during vs before)
 
     private var timeStr: String {
         let fmt = DateFormatter()
@@ -577,14 +578,27 @@ struct ActivityDetailView: View {
         let sessions = ((try? ctx.fetch(FetchDescriptor<ActivityLog>(predicate: predicate))) ?? [])
             .filter { $0.id != entry.id }
 
-        var result: [String: Double] = [:]
+        var absResult:    [String: Double] = [:]
+        var upliftResult: [String: Double] = [:]
         for def in activityMetricDefs {
+            // Average absolute during-value.
             let vals = sessions.compactMap { $0[keyPath: def.duringKey].map(Double.init) }
             if !vals.isEmpty {
-                result[def.id] = vals.reduce(0, +) / Double(vals.count)
+                absResult[def.id] = vals.reduce(0, +) / Double(vals.count)
+            }
+            // Average benefit-signed uplift % (during vs before).
+            let uplifts: [Double] = sessions.compactMap { s in
+                guard let bF = s[keyPath: def.beforeKey], let dF = s[keyPath: def.duringKey] else { return nil }
+                let bb = def.direction.benefit(Double(bF))
+                guard bb != 0 else { return nil }
+                return (def.direction.benefit(Double(dF)) - bb) / abs(bb) * 100
+            }
+            if !uplifts.isEmpty {
+                upliftResult[def.id] = uplifts.reduce(0, +) / Double(uplifts.count)
             }
         }
-        twoMonthAvg = result
+        twoMonthAvg    = absResult
+        twoMonthUplift = upliftResult
     }
 
     private func loadChartPoints() {
@@ -641,7 +655,7 @@ struct ActivityDetailView: View {
                         }
 
                         // 9-metric summary
-                        ActivityMetricsGrid(metrics: metrics, history: twoMonthAvg)
+                        ActivityMetricsGrid(metrics: metrics, history: twoMonthAvg, historyUplift: twoMonthUplift)
 
                         // Section title — names the activity these charts belong
                         // to (custom name for custom activities), re-establishing

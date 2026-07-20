@@ -42,6 +42,8 @@ struct ActivityMetricsGrid: View {
     /// Metric id → average absolute "during" value across other sessions of
     /// the same activity type over the past 2 months (the baseline).
     let history: [String: Double]
+    /// Metric id → average uplift % (during vs before) over the past 2 months.
+    let historyUplift: [String: Double]
 
     private let cols = Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
 
@@ -50,13 +52,14 @@ struct ActivityMetricsGrid: View {
             ForEach(metrics, id: \.def.id) { m in
                 let base = history[m.def.id]
                 MetricTile(
-                    label:           m.def.label,
-                    techLabel:       m.def.techLabel,
-                    value:           m.def.format(m.stats.duringMean),
-                    unit:            m.def.unit,
-                    avgUpliftPct:    m.stats.avgUpliftPct.map { Float($0) },
-                    historyValue:    base.map { m.def.format($0) },
-                    historyDeltaPct: historyDelta(m.def, current: m.stats.duringMean, base: base)
+                    label:            m.def.label,
+                    techLabel:        m.def.techLabel,
+                    value:            m.def.format(m.stats.duringMean),
+                    unit:             m.def.unit,
+                    avgUpliftPct:     m.stats.avgUpliftPct.map { Float($0) },
+                    historyValue:     base.map { m.def.format($0) },
+                    historyDeltaPct:  historyDelta(m.def, current: m.stats.duringMean, base: base),
+                    historyUpliftPct: historyUplift[m.def.id].map { Float($0) }
                 )
             }
         }
