@@ -619,6 +619,15 @@ struct ActivityDetailView: View {
                         // 9-metric summary
                         ActivityMetricsGrid(metrics: metrics)
 
+                        // Section title — names the activity these charts belong
+                        // to (custom name for custom activities), re-establishing
+                        // context after the summary grid.
+                        Text(entry.displayName.uppercased())
+                            .font(Theme.monoLabel)
+                            .foregroundStyle(entry.activityTypeEnum.color)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 4)
+
                         // Before/during/after charts, one per metric — same order.
                         ForEach(metrics, id: \.def.id) { m in
                             ActivityWindowChart(def: m.def,
