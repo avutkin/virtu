@@ -28,7 +28,7 @@ struct PracticeImpactGauge: View {
                 .stroke(
                     LinearGradient(colors: [Color(hex: "#8BE86B"), Theme.accent, Color(hex: "#2FCF9A")],
                                    startPoint: .bottomLeading, endPoint: .topTrailing),
-                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, dash: [3.4, 3.4])
+                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt, dash: [3.4, 3.4])
                 )
                 .rotationEffect(rotation)
 
