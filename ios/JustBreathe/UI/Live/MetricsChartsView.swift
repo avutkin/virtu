@@ -681,10 +681,22 @@ private struct MetricChartCard: View {
 
 // MARK: - MetricsChartsView
 
-struct MetricsChartsView: View {
+/// `Equatable` so callers can wrap it in `.equatable()` and skip re-rendering
+/// all 9 charts when the underlying history hasn't changed. The comparison is
+/// cheap by design — count + newest timestamp + date — never a deep compare of
+/// the (up to 43k-element) arrays. Append-only day history means count and the
+/// last timestamp fully capture "did the data change".
+struct MetricsChartsView: View, Equatable {
     let history:    [MetricsHistoryPoint]   // quality-filtered
     let rawHistory: [MetricsHistoryPoint]   // unfiltered — for anomaly highlighting
     let date:       Date
+
+    static func == (lhs: MetricsChartsView, rhs: MetricsChartsView) -> Bool {
+        lhs.date == rhs.date
+            && lhs.history.count == rhs.history.count
+            && lhs.rawHistory.count == rhs.rawHistory.count
+            && lhs.history.last?.timestamp == rhs.history.last?.timestamp
+    }
 
     init(history: [MetricsHistoryPoint],
          rawHistory: [MetricsHistoryPoint] = [],

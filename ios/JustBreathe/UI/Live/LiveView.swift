@@ -98,8 +98,16 @@ private struct DayScrollView: View {
 
     @Environment(AppEnvironment.self) var env
     @Environment(\.modelContext) var ctx
-    @State private var dayHistory:    [MetricsHistoryPoint] = []
-    @State private var rawDayHistory: [MetricsHistoryPoint] = []
+    // Snapshot arrays feeding the (expensive) charts. Deliberately NOT read from
+    // env.tickHistory in `body`: the today page's body re-evaluates every 2 s
+    // (it reads env.latestTick for the live card/table), and if the charts were
+    // fed live data they would re-render all 9 Swift Charts on every tick — the
+    // periodic scroll hitch. Instead these refresh on a ~15 s cadence (today) or
+    // once on load (past days); MetricsChartsView is `.equatable()` so the 2 s
+    // body re-evals don't touch it while this snapshot is unchanged.
+    @State private var chartRaw:      [MetricsHistoryPoint] = []
+    @State private var chartFiltered: [MetricsHistoryPoint] = []
+    @State private var chartDayAvg:   MetricsTick?          = nil
     @State private var showResonate   = false
 
     private var isToday: Bool { Calendar.current.isDateInToday(date) }
@@ -113,24 +121,7 @@ private struct DayScrollView: View {
         return start..<end
     }
 
-    /// Unfiltered history for this day. For today, filter env.tickHistory by a
-    /// cheap timestamp range (not per-element Calendar calls); other days use
-    /// the once-loaded @State array.
-    private var rawCurrentHistory: [MetricsHistoryPoint] {
-        guard isToday else { return rawDayHistory }
-        guard let range = dayRange else { return env.tickHistory }
-        return env.tickHistory.filter { range.contains($0.timestamp) }
-    }
-
     var body: some View {
-        // Compute the derived arrays ONCE per render — SwiftUI re-runs computed
-        // properties on every access, and body re-evaluates every 2 s on the
-        // today page (latestTick/tickHistory both mutate), so recomputing these
-        // O(n) passes 2–3× per render was the dominant scroll-jank cost.
-        let raw      = rawCurrentHistory
-        let filtered = MetricsQualityFilter.filter(raw)
-        let dayAvg   = dayAverageTick(from: filtered)
-
         ScrollView {
             VStack(spacing: 12) {
 
@@ -150,7 +141,7 @@ private struct DayScrollView: View {
                             .font(Theme.monoLabel)
                             .foregroundStyle(Theme.dim)
                         Spacer()
-                        if isToday && dayAvg != nil {
+                        if isToday && chartDayAvg != nil {
                             Text("Δ vs today avg")
                                 .font(Theme.monoLabel)
                                 .foregroundStyle(Theme.dim.opacity(0.6))
@@ -158,20 +149,21 @@ private struct DayScrollView: View {
                     }
                     .padding(.horizontal)
                     MetricsTableView(
-                        tick:       isToday ? env.latestTick : dayAvg,
-                        comparison: isToday ? dayAvg         : nil
+                        tick:       isToday ? env.latestTick : chartDayAvg,
+                        comparison: isToday ? chartDayAvg    : nil
                     )
                     .padding(.horizontal)
                 }
 
                 // ── Historical metric charts ────────────────────────
-                if !filtered.isEmpty {
+                if !chartFiltered.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("METRICS HISTORY")
                             .font(Theme.monoLabel)
                             .foregroundStyle(Theme.dim)
                             .padding(.horizontal)
-                        MetricsChartsView(history: filtered, rawHistory: raw, date: date)
+                        MetricsChartsView(history: chartFiltered, rawHistory: chartRaw, date: date)
+                            .equatable()
                     }
                 } else if !isToday {
                     Text("No data for this day")
@@ -186,14 +178,26 @@ private struct DayScrollView: View {
             .padding(.top, 8)
         }
         .task(id: date) {
-            guard !isToday else { return }
-            // Debounce: if the user swipes past this day within 150 ms, the task
-            // is cancelled during the sleep and the fetch never fires — keeps fast
-            // swiping smooth and avoids piling up background fetches for days you
-            // only pass through.
-            try? await Task.sleep(for: .milliseconds(150))
-            guard !Task.isCancelled else { return }
-            await loadDayHistory()
+            if isToday {
+                // Refresh the charts immediately, then on a slow cadence. The live
+                // card/table still update every 2 s via env.latestTick; the charts
+                // don't need 2 s granularity and re-rendering 9 Swift Charts that
+                // often is what made scrolling hitch.
+                refreshLiveCharts()
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(15))
+                    guard !Task.isCancelled else { break }
+                    refreshLiveCharts()
+                }
+            } else {
+                // Debounce: if the user swipes past this day within 150 ms, the
+                // task is cancelled during the sleep and the fetch never fires —
+                // keeps fast swiping smooth and avoids piling up background fetches
+                // for days you only pass through.
+                try? await Task.sleep(for: .milliseconds(150))
+                guard !Task.isCancelled else { return }
+                await loadDayHistory()
+            }
         }
         .sheet(isPresented: $showResonate) {
             ResonateView()
@@ -203,13 +207,26 @@ private struct DayScrollView: View {
 
     // MARK: - Data helpers
 
+    /// Snapshots today's live history into the chart @State on a slow cadence.
+    /// Reads env.tickHistory OUTSIDE `body` (from the .task loop) so it does not
+    /// register a body dependency — the 9 charts stay off the 2 s tick path.
+    @MainActor
+    private func refreshLiveCharts() {
+        guard let range = dayRange else { return }
+        let raw      = env.tickHistory.filter { range.contains($0.timestamp) }
+        let filtered = MetricsQualityFilter.filter(raw)
+        chartRaw      = raw
+        chartFiltered = filtered
+        chartDayAvg   = dayAverageTick(from: filtered)
+    }
+
     /// Loads a past day's history off the main thread. The synchronous 43k-row
     /// SwiftData fetch used to run in `onAppear` on the main thread, blocking the
     /// horizontal swipe animation; here it runs on a background ModelContext and
     /// only the (Sendable) plain-struct result is handed back to the main actor.
     @MainActor
     private func loadDayHistory() async {
-        guard rawDayHistory.isEmpty else { return }   // already loaded for this day
+        guard chartRaw.isEmpty else { return }   // already loaded for this day
         let container = ctx.container
         let cal   = Calendar.current
         let start = cal.startOfDay(for: date)
@@ -227,8 +244,9 @@ private struct DayScrollView: View {
         }.value
 
         guard !Task.isCancelled else { return }
-        rawDayHistory = result.0
-        dayHistory    = result.1
+        chartRaw      = result.0
+        chartFiltered = result.1
+        chartDayAvg   = dayAverageTick(from: result.1)
     }
 
     private func dayAverageTick(from history: [MetricsHistoryPoint]) -> MetricsTick? {
