@@ -686,11 +686,6 @@ struct ActivityDetailView: View {
 
                         // Per-metric progressive disclosure — tap a row to open
                         // its before/during/after chart and why-it-matters note.
-                        Text("METRIC PROGRESS · ALL 9")
-                            .font(Theme.monoLabel)
-                            .foregroundStyle(entry.activityTypeEnum.color)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.top, 4)
 
                         ForEach(metrics, id: \.def.id) { m in
                             MetricProgressRow(def: m.def,
