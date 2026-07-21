@@ -59,83 +59,108 @@ struct MetricProgressRow: View {
     // MARK: Summary (always visible)
 
     private var summary: some View {
-        VStack(spacing: 9) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(def.label).font(Theme.mono(14)).foregroundStyle(Theme.text)
+        VStack(spacing: 10) {
+            // Name + technical code, chevron.
+            HStack(spacing: 6) {
+                Text(def.label).font(Theme.mono(15)).foregroundStyle(Theme.text)
                 Text(def.techLabel).font(Theme.monoLabel).foregroundStyle(Theme.dim)
                 Spacer()
-                Text(def.format(stats.duringMean)).font(Theme.mono(14)).foregroundStyle(Theme.text)
-                if let u = uplift {
-                    Text(signed(u)).font(Theme.mono(12)).foregroundStyle(deltaColor(u))
-                }
                 Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(Theme.dim)
             }
 
-            progressBar
-
-            HStack(spacing: 6) {
-                Text("before \(def.format(stats.baseline))")
-                    .font(Theme.monoLabel).foregroundStyle(Theme.dim)
-                Spacer()
-                if let tm = twoMonthValue {
-                    Text("2mo \(def.format(tm))")
-                        .font(Theme.monoLabel).foregroundStyle(Theme.dim)
+            // Centred: uplift (during vs before) · vs-2-month delta.
+            if uplift != nil || vs2mo != nil {
+                HStack(spacing: 6) {
+                    if let u = uplift {
+                        Text(signed(u)).foregroundStyle(deltaColor(u))
+                    }
+                    if uplift != nil, vs2mo != nil {
+                        Text("·").foregroundStyle(Theme.dim)
+                    }
+                    if let d = vs2mo {
+                        Text("vs 2mo").foregroundStyle(Theme.dim)
+                        Text(signed(d)).foregroundStyle(deltaColor(d))
+                    }
                 }
-                if let d = vs2mo {
-                    Text("· \(signed(d)) vs 2mo")
-                        .font(Theme.monoLabel).foregroundStyle(deltaColor(d))
-                }
+                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                .frame(maxWidth: .infinity)
             }
+
+            barWithLabels
         }
     }
 
-    // MARK: before → during bar
+    // MARK: before → during bar, with each value under its marker
 
-    private var progressBar: some View {
+    private var barWithLabels: some View {
         let before = def.benefitPosition(of: stats.baseline,   across: [stats.duringMean, twoMonthValue])
         let during = def.benefitPosition(of: stats.duringMean, across: [stats.baseline,   twoMonthValue])
         let tick   = def.benefitPosition(of: twoMonthValue,    across: [stats.baseline,   stats.duringMean])
 
         return GeometryReader { geo in
             let w = geo.size.width
-            let h: CGFloat = 8
-            ZStack(alignment: .leading) {
-                Capsule().fill(Theme.surface).frame(height: h)
+            let barY:   CGFloat = 9
+            let labelY: CGFloat = 30
+            let clampX: (Double) -> CGFloat = { min(max(CGFloat($0) * w, 18), w - 18) }
+
+            ZStack {
+                Capsule().fill(Theme.surface)
+                    .frame(height: 4).position(x: w / 2, y: barY)
 
                 // Change segment between before and during.
                 if let b = before, let d = during {
                     let lo = min(b, d), hi = max(b, d)
-                    Capsule()
-                        .fill(deltaColor(uplift).opacity(0.55))
-                        .frame(width: max((hi - lo) * w, 2), height: h)
-                        .offset(x: lo * w)
+                    Capsule().fill(deltaColor(uplift))
+                        .frame(width: max(CGFloat(hi - lo) * w, 3), height: 4)
+                        .position(x: CGFloat((lo + hi) / 2) * w, y: barY)
                 }
 
                 // 2-month tick.
                 if let t = tick {
-                    Rectangle()
-                        .fill(Theme.dim)
-                        .frame(width: 2, height: h + 8)
-                        .offset(x: t * w - 1)
+                    Rectangle().fill(Theme.text.opacity(0.85))
+                        .frame(width: 2, height: 13)
+                        .position(x: CGFloat(t) * w, y: barY)
                 }
 
-                // Before (hollow) and during (filled) dots.
+                // Before (hollow) dot.
                 if let b = before {
-                    Circle().strokeBorder(Theme.dim, lineWidth: 2)
-                        .background(Circle().fill(Theme.card))
-                        .frame(width: 11, height: 11)
-                        .offset(x: b * w - 5.5)
+                    Circle().fill(Theme.card)
+                        .overlay(Circle().strokeBorder(Theme.dim, lineWidth: 2))
+                        .frame(width: 12, height: 12)
+                        .position(x: CGFloat(b) * w, y: barY)
+                }
+                // During (filled) dot with a soft glow.
+                if let d = during {
+                    let c = deltaColor(uplift)
+                    Circle().fill(c.opacity(0.25)).frame(width: 22, height: 22)
+                        .position(x: CGFloat(d) * w, y: barY)
+                    Circle().fill(c).frame(width: 14, height: 14)
+                        .position(x: CGFloat(d) * w, y: barY)
+                }
+
+                // Values under each marker.
+                if let b = before {
+                    Text(def.format(stats.baseline))
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(Theme.dim)
+                        .position(x: clampX(b), y: labelY)
+                }
+                if let t = tick {
+                    Text(def.format(twoMonthValue))
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(Theme.dim)
+                        .position(x: clampX(t), y: labelY)
                 }
                 if let d = during {
-                    Circle().fill(deltaColor(uplift))
-                        .frame(width: 12, height: 12)
-                        .offset(x: d * w - 6)
+                    Text(def.format(stats.duringMean))
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Theme.text)
+                        .position(x: clampX(d), y: labelY)
                 }
             }
-            .frame(height: h + 8)
         }
-        .frame(height: 16)
+        .frame(height: 40)
     }
 }
