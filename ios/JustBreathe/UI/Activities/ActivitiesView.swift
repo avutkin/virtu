@@ -671,15 +671,11 @@ struct ActivityDetailView: View {
 
                         // Overall practice impact.
                         if let score = ActivityImpact.score(uplifts: uplifts) {
-                            let bd = ActivityImpact.breakdown(uplifts: uplifts)
                             VStack(spacing: 6) {
                                 Text("OVERALL PRACTICE IMPACT")
                                     .font(Theme.monoLabel)
                                     .foregroundStyle(Theme.dim)
                                 PracticeImpactGauge(score: score, caption: impactCaption(score))
-                                Text("\(bd.improved) improved · \(bd.held) held · \(bd.dipped) dipped")
-                                    .font(Theme.monoLabel)
-                                    .foregroundStyle(Theme.dim)
                             }
                             .cardStyle()
                         }
