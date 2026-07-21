@@ -670,7 +670,7 @@ struct ActivityDetailView: View {
 
                         // Overall practice impact.
                         if let score = ActivityImpact.score(uplifts: uplifts) {
-                            VStack(spacing: 6) {
+                            VStack(spacing: 14) {
                                 Text("OVERALL PRACTICE IMPACT")
                                     .font(Theme.monoLabel)
                                     .foregroundStyle(Theme.dim)
