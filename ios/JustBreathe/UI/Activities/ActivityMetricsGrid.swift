@@ -48,23 +48,23 @@ private func fFloat(_ v: Double?, _ fmt: (Float?) -> String) -> String { fmt(v.m
 /// (MetricsChartsView): DC, RCMSE, PIP, DFA α1, LF/HF, RSA, VTI, HRV, HR.
 let activityMetricDefs: [ActivityMetricDef] = [
     .init(label: "Calm Reserve",        techLabel: "DC",     unit: "ms",  direction: .higher,      extract: { $0.dc.map(Double.init) },      format: f1,                                 beforeKey: \.beforeDC,    duringKey: \.duringDC,
-          why: "Deceleration Capacity is your vagal “brake” — how readily the heart slows. Higher means deeper parasympathetic recovery; expect it to climb as you settle."),
+          why: "Calm Reserve (Deceleration Capacity) is your vagal “brake” — how readily the heart slows. Higher means deeper parasympathetic recovery; expect it to climb as you settle."),
     .init(label: "Adaptive Power",      techLabel: "RCMSE",  unit: "",    direction: .higher,      extract: { $0.rcmse.map(Double.init) },   format: f2,                                 beforeKey: \.beforeRCMSE, duringKey: \.duringRCMSE,
-          why: "Multiscale entropy reflects how flexible your system is across timescales. Higher signals a resilient, responsive heart; expect a modest rise with calm focus."),
+          why: "Adaptive Power (Refined Composite Multiscale Entropy) reflects how flexible your system is across timescales. Higher signals a resilient, responsive heart; expect a modest rise with calm focus."),
     .init(label: "Inner Noise",         techLabel: "PIP",    unit: "%",   direction: .lower,       extract: { $0.pip.map(Double.init) },     format: f1,                                 beforeKey: \.beforePIP,   duringKey: \.duringPIP,
-          why: "PIP captures beat-to-beat jitter — erratic, non-restorative variability. Lower means a cleaner, calmer signal; expect it to fall as you relax."),
+          why: "Inner Noise (Percentage of Inflection Points) captures beat-to-beat jitter — erratic, non-restorative variability. Lower means a cleaner, calmer signal; expect it to fall as you relax."),
     .init(label: "Harmony",             techLabel: "DFA α1", unit: "",    direction: .target(1.0), extract: { $0.dfa1.map(Double.init) },    format: f2,                                 beforeKey: \.beforeDFA1,  duringKey: \.duringDFA1,
-          why: "DFA α1 is the fractal balance of your heartbeat, with ~1.0 the healthy sweet spot. Moving toward 1.0 signals well-organised regulation; expect it to approach 1.0 as you relax."),
+          why: "Harmony (DFA α1) is the fractal balance of your heartbeat, with ~1.0 the healthy sweet spot. Moving toward 1.0 signals well-organised regulation; expect it to approach 1.0 as you relax."),
     .init(label: "Stress Balance",      techLabel: "LF/HF",  unit: "",    direction: .lower,       extract: { $0.lfHF.map(Double.init) },    format: { fFloat($0, MetricFormat.ratio) }, beforeKey: \.beforeLFHF,  duringKey: \.duringLFHF,
-          why: "LF/HF weighs sympathetic drive against parasympathetic calm. Lower means you’re shifting into rest-and-digest; expect it to drop through the session."),
+          why: "Stress Balance (LF/HF ratio) weighs sympathetic drive against parasympathetic calm. Lower means you’re shifting into rest-and-digest; expect it to drop through the session."),
     .init(label: "Conscious Breathing", techLabel: "RSA",    unit: "ms",  direction: .higher,      extract: { $0.rsaMs.map(Double.init) },   format: { fFloat($0, MetricFormat.ms) },    beforeKey: \.beforeRSA,   duringKey: \.duringRSA,
-          why: "Respiratory sinus arrhythmia is the swing of heart rate with each breath — the clearest sign of vagal tone. Higher means slow, deep breathing is landing; expect it to rise with paced diaphragmatic breaths."),
+          why: "Conscious Breathing (Respiratory Sinus Arrhythmia) is the swing of heart rate with each breath — the clearest sign of vagal tone. Higher means slow, deep breathing is landing; expect it to rise with paced diaphragmatic breaths."),
     .init(label: "Calm Power",          techLabel: "VTI",    unit: "",    direction: .higher,      extract: { $0.vti.map(Double.init) },     format: { fFloat($0, MetricFormat.ratio) }, beforeKey: \.beforeVTI,   duringKey: \.duringVTI,
-          why: "The vagal tone index sums your restorative parasympathetic activity. Higher means a stronger recovery drive; expect it to build as you ease down."),
+          why: "Calm Power (Vagal Tone Index) sums your restorative parasympathetic activity. Higher means a stronger recovery drive; expect it to build as you ease down."),
     .init(label: "Energy Reserve",      techLabel: "HRV",    unit: "ms",  direction: .higher,      extract: { $0.rmssd.map(Double.init) },   format: { fFloat($0, MetricFormat.ms) },    beforeKey: \.beforeRMSSD, duringKey: \.duringRMSSD,
-          why: "RMSSD is your core beat-to-beat variability — the headline marker of recovery and vagal tone. Higher signals a rested, adaptable system; expect it to rise during restful practice."),
+          why: "Energy Reserve (HRV · RMSSD) is your core beat-to-beat variability — the headline marker of recovery and vagal tone. Higher signals a rested, adaptable system; expect it to rise during restful practice."),
     .init(label: "Pulse",               techLabel: "HR",     unit: "bpm", direction: .lower,       extract: { $0.meanBPM.map(Double.init) }, format: { fFloat($0, MetricFormat.bpm) },   beforeKey: \.beforeHR,    duringKey: \.duringHR,
-          why: "Heart rate reflects the overall load on your heart. A lower rate during practice means you’re offloading stress and settling; expect it to fall as you relax."),
+          why: "Pulse (Heart Rate) reflects the overall load on your heart. A lower rate during practice means you’re offloading stress and settling; expect it to fall as you relax."),
 ]
 
 /// 3×3 grid of the 9 metrics. Each tile shows the peak-during value with a
