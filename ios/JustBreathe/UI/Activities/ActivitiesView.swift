@@ -216,9 +216,9 @@ struct ActivitiesView: View {
                 beginActivity(type: type, subtype: subtype, customName: name)
             }
         case .logPast:
-            LogPastSheet { type, subtype, name, start, end, notes in
+            LogPastSheet { type, subtype, name, start, end in
                 logPast(type: type, subtype: subtype, customName: name,
-                        start: start, end: end, notes: notes)
+                        start: start, end: end)
             }
         case .detail(let entry):
             ActivityDetailView(entry: entry)
@@ -290,7 +290,7 @@ struct ActivitiesView: View {
     }
 
     private func logPast(type: ActivityType, subtype: String?, customName: String?,
-                         start: Date, end: Date, notes: String?) {
+                         start: Date, end: Date) {
         let entry = ActivityLog(
             activityType:    type.rawValue,
             activitySubtype: subtype,
@@ -299,7 +299,6 @@ struct ActivitiesView: View {
             endedAt:         end,
             isManual:        true
         )
-        entry.notes = notes
         entry.computeHRVWindows(context: ctx)
         ctx.insert(entry)
         try? ctx.save()
@@ -733,21 +732,6 @@ struct ActivityDetailView: View {
                             }
                             .cardStyle()
                         }
-
-                        // Notes
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("NOTES")
-                                .font(Theme.monoLabel)
-                                .foregroundStyle(Theme.dim)
-                            TextField("Add notes…", text: Binding(
-                                get: { entry.notes ?? "" },
-                                set: { entry.notes = $0.isEmpty ? nil : $0 }
-                            ), axis: .vertical)
-                            .font(Theme.monoBody)
-                            .foregroundStyle(Theme.text)
-                            .lineLimit(3...6)
-                        }
-                        .cardStyle()
                     }
                     .padding(.horizontal)
                     .padding(.top, 16)
@@ -885,7 +869,7 @@ private struct StartActivitySheet: View {
 // MARK: - LogPastSheet
 
 private struct LogPastSheet: View {
-    let onSave: (ActivityType, String?, String?, Date, Date, String?) -> Void
+    let onSave: (ActivityType, String?, String?, Date, Date) -> Void
     @Environment(\.dismiss) var dismiss
     @State private var selected:        ActivityType = .meditation
     @State private var selectedSubtype: String?      = nil
@@ -893,7 +877,6 @@ private struct LogPastSheet: View {
     @State private var showCustom:      Bool         = false
     @State private var startDate:       Date         = .now
     @State private var durationMins:    Double       = 30
-    @State private var notes:           String       = ""
 
     private var endDate: Date { startDate.addingTimeInterval(durationMins * 60) }
 
@@ -966,26 +949,9 @@ private struct LogPastSheet: View {
                     .cardStyle()
                     .padding(.horizontal)
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("NOTES (OPTIONAL)")
-                            .font(Theme.monoLabel)
-                            .foregroundStyle(Theme.dim)
-                        TextField("Notes…", text: $notes, axis: .vertical)
-                            .font(Theme.monoBody)
-                            .foregroundStyle(Theme.text)
-                            .lineLimit(2...4)
-                            .padding(10)
-                            .background(Theme.card)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .overlay(RoundedRectangle(cornerRadius: 8)
-                                .strokeBorder(Theme.border, lineWidth: 0.5))
-                    }
-                    .padding(.horizontal)
-
                     Button {
                         let name = selected == .custom && !customName.isEmpty ? customName : nil
-                        let noteVal = notes.isEmpty ? nil : notes
-                        onSave(selected, selectedSubtype, name, startDate, endDate, noteVal)
+                        onSave(selected, selectedSubtype, name, startDate, endDate)
                         dismiss()
                     } label: {
                         Text("SAVE")
@@ -1113,7 +1079,6 @@ private struct EditActivitySheet: View {
     @State private var showCustom:      Bool
     @State private var startDate:       Date
     @State private var durationMins:    Double
-    @State private var notes:           String
 
     private var endDate: Date { startDate.addingTimeInterval(durationMins * 60) }
 
@@ -1130,7 +1095,6 @@ private struct EditActivitySheet: View {
         _startDate       = State(initialValue: entry.startedAt)
         let dur = entry.endedAt.map { $0.timeIntervalSince(entry.startedAt) / 60 } ?? 30
         _durationMins    = State(initialValue: max(1, min(180, dur)))
-        _notes           = State(initialValue: entry.notes ?? "")
     }
 
     var body: some View {
@@ -1200,22 +1164,6 @@ private struct EditActivitySheet: View {
                     .cardStyle()
                     .padding(.horizontal)
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("NOTES (OPTIONAL)")
-                            .font(Theme.monoLabel)
-                            .foregroundStyle(Theme.dim)
-                        TextField("Notes…", text: $notes, axis: .vertical)
-                            .font(Theme.monoBody)
-                            .foregroundStyle(Theme.text)
-                            .lineLimit(2...4)
-                            .padding(10)
-                            .background(Theme.card)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .overlay(RoundedRectangle(cornerRadius: 8)
-                                .strokeBorder(Theme.border, lineWidth: 0.5))
-                    }
-                    .padding(.horizontal)
-
                     Button {
                         entry.activityType    = selected.rawValue
                         entry.activitySubtype = selectedSubtype
@@ -1223,7 +1171,6 @@ private struct EditActivitySheet: View {
                         entry.startedAt       = startDate
                         entry.endedAt         = endDate
                         entry.isManual        = true
-                        entry.notes           = notes.isEmpty ? nil : notes
                         onSave(ctx)
                         dismiss()
                     } label: {
