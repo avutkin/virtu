@@ -707,11 +707,94 @@ struct MetricsChartsView: View {
             vtiCard
             sdnnCard
             hrCard
+
+            // Signal-integrity diagnostics — share the same timeline as the
+            // metric charts so artifacts can be correlated with any anomaly.
+            signalArtifactsCard
+            rrCorrectedCard
+            ecgSignalCard
         }
         .onChange(of: date) { _, _ in
             sharedPanOffset = 0
             sharedSelectedX = nil
         }
+    }
+
+    // MARK: Signal quality / artifacts
+
+    /// Total RR artifact rate = % of beats invalid (dropped) or corrected
+    /// (interpolated), from the persisted signalQuality (= 1 − artifactRate).
+    private var signalArtifactsCard: some View {
+        MetricChartCard(
+            title:    "Signal Artifacts",
+            technicalName: "RR",
+            subtitle: "% of beats invalid or corrected",
+            yLabel:   "%",
+            color:    Theme.warn,
+            windows:  TimeWindow.allCases,
+            refs: [
+                RefLine(value:  5, label:  "5%  acceptable", color: Theme.coh),
+                RefLine(value: 20, label: "20%  poor",       color: Theme.warn),
+            ],
+            yDomain: 0...25,
+            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
+            dynamicY: true,
+            info: MetricInfo(
+                "Share of RR (beat-to-beat) intervals in each window that the algorithm rejected as implausible or replaced by interpolation. Artifact Rate = (invalid + corrected) / total × 100.",
+                physical:    "The Polar H10 timestamps each heartbeat. A garbled/duplicated BLE frame, a missed beat, or an extra (false) detection produces an RR interval that is physiologically impossible or a clear outlier.",
+                physiology:  "Genuine beat-to-beat variability (RSA) during breathing rarely exceeds ±30%. Intervals outside 300–2000 ms are dropped; a near-doubled (missed) or near-halved (extra) beat is interpolated from its neighbours.",
+                training:    "Use this to validate a recording. Sustained spikes usually mean poor electrode contact (dry strap, bad positioning) or movement. Wet the strap, reseat it below the pectorals, and stay still to drive this toward 0%.",
+                sensitivity: "High. Rises immediately with motion, loose contact, or a lifting electrode.",
+                levels:      "Excellent: <2%\nAcceptable: 2–5%\nMarginal: 5–20%\nPoor: >20% (metrics unreliable)"
+            ),
+            history: history, rawHistory: rawHistory, date: date
+        ) { $0.signalQuality.map { (1 - Double($0)) * 100 } }
+    }
+
+    /// Fraction of beats that were interpolated (missed/extra), as opposed to
+    /// dropped. Invalid % = Signal Artifacts − RR Corrected.
+    private var rrCorrectedCard: some View {
+        MetricChartCard(
+            title:    "RR Corrected",
+            technicalName: "interpolated",
+            subtitle: "% of beats replaced (missed / extra beat)",
+            yLabel:   "%",
+            color:    Theme.rsa,
+            windows:  TimeWindow.allCases,
+            refs: [],
+            yDomain: 0...10,
+            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
+            dynamicY: true,
+            history: history, rawHistory: rawHistory, date: date
+        ) { $0.rrCorrectedRate.map { Double($0) * 100 } }
+    }
+
+    /// ECG waveform fault from the raw 130 Hz trace: 0% clean, 50% clipping/noise
+    /// (movement), 100% lead-off (flatline → bad electrode contact/positioning).
+    private var ecgSignalCard: some View {
+        MetricChartCard(
+            title:    "ECG Signal",
+            technicalName: "waveform",
+            subtitle: "contact & motion  ·  higher = worse",
+            yLabel:   "%",
+            color:    Theme.breathe,
+            windows:  TimeWindow.allCases,
+            refs: [
+                RefLine(value:  50, label: "clipping / noise", color: Theme.rsa),
+                RefLine(value: 100, label: "lead-off",         color: Theme.warn),
+            ],
+            yDomain: 0...100,
+            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
+            info: MetricInfo(
+                "Quality of the raw ECG waveform (independent of the RR intervals): 0% = clean, 50% = clipping/noise, 100% = lead-off (flatline). Complements Signal Artifacts, which is beat-timing based.",
+                physical:    "Read from the 130 Hz ECG. A near-flat trace means an electrode has lost skin contact (lead-off); pinned/clipped samples mean the amplifier railed from a large motion transient.",
+                physiology:  "Lead-off points directly at electrode positioning and strap contact; clipping points at movement. Neither is visible from RR timing alone, so a quiet flatline can read as few RR artifacts yet be unusable.",
+                training:    "If this sits high, fix the hardware: wet the electrodes, tighten and reposition the strap just below the chest muscles, and reduce motion. It should drop to 0% once contact is solid.",
+                sensitivity: "High for contact/motion; unrelated to autonomic state.",
+                levels:      "Clean: 0%\nNoise/clipping: ~50%\nLead-off: 100% (reseat the strap)"
+            ),
+            history: history, rawHistory: rawHistory, date: date
+        ) { $0.ecgQualityTier.map { Double(2 - $0) / 2 * 100 } }
     }
 
     // MARK: Heart Rate
