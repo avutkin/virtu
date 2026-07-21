@@ -17,6 +17,8 @@
 - Analytics/data layer: **Postgres only**.
 - Token comparison must be constant-time (`hmac.compare_digest`).
 - The server package is imported as `server.main:app`; keep that import path.
+- **Local tests run on Python 3.9** (`~/.venv/bin/python`, from repo root `/Users/alexutkin`). The Docker image is python:3.12, but code must also run on 3.9 for local TDD. Therefore any parameter FastAPI introspects at runtime (`Header`, `Query`, `Depends` params) MUST use `typing.Optional[...]`, NOT PEP-604 `X | None` — the latter raises `TypeError` on 3.9. Plain (non-FastAPI) function annotations may keep `X | None` because `from __future__ import annotations` makes them lazy strings.
+- **Test command (always):** from `/Users/alexutkin`, run `~/.venv/bin/python -m pytest server/tests/<file> -v`. (`server` must be importable as a top-level package, so run from the repo root, never from inside `server/`.)
 
 **Repo note:** `~/server/` is a subtree of the git repo rooted at `/Users/alexutkin`. Run all `git` commands from `/Users/alexutkin`. Paths below are given relative to `~/server` for the server code; commit paths use the `server/…` prefix.
 
@@ -29,17 +31,19 @@
 **Files:**
 - Create: `~/server/auth.py`
 - Create: `~/server/tests/conftest.py`
+- Create: `~/server/tests/helpers.py`
 - Test: `~/server/tests/test_auth.py`
 
 **Interfaces:**
 - Produces:
-  - `require_app_token(authorization: str | None = Header(default=None)) -> None` — FastAPI dependency; raises `HTTPException(401)` on missing/invalid bearer, `HTTPException(503)` if `APP_TOKEN` env unset.
-  - `require_admin_token(authorization: str | None = Header(default=None)) -> None` — same, against `ADMIN_TOKEN`.
-  - `verify_token(presented: str | None, expected: str | None) -> bool` — pure helper, constant-time.
+  - `require_app_token(authorization: Optional[str] = Header(default=None)) -> None` — FastAPI dependency; raises `HTTPException(401)` on missing/invalid bearer, `HTTPException(503)` if `APP_TOKEN` env unset.
+  - `require_admin_token(authorization: Optional[str] = Header(default=None)) -> None` — same, against `ADMIN_TOKEN`.
+  - `verify_token(presented: Optional[str], expected: Optional[str]) -> bool` — pure helper, constant-time.
+  - `server.tests.helpers.APP_HEADERS`, `server.tests.helpers.ADMIN_HEADERS` — dicts other test modules import.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `~/server/tests/conftest.py`:
+Create `~/server/tests/conftest.py` (only the autouse env fixture — no importable constants live here):
 
 ```python
 """Shared fixtures. Sets auth tokens for the whole test session so every
@@ -55,8 +59,12 @@ def _auth_env():
     os.environ["APP_TOKEN"] = "test-app-token"
     os.environ["ADMIN_TOKEN"] = "test-admin-token"
     yield
+```
 
+Create `~/server/tests/helpers.py` (importable header constants — must match the tokens the conftest fixture sets):
 
+```python
+"""Auth headers for request tests. Values match tests/conftest.py::_auth_env."""
 APP_HEADERS = {"Authorization": "Bearer test-app-token"}
 ADMIN_HEADERS = {"Authorization": "Bearer test-admin-token"}
 ```
@@ -88,12 +96,12 @@ def test_verify_token_rejects_none_expected():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd ~/server && DATABASE_URL=postgresql://x python -m pytest tests/test_auth.py -v`
+Run: `cd /Users/alexutkin && ~/.venv/bin/python -m pytest server/tests/test_auth.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'server.auth'`
 
 - [ ] **Step 3: Write minimal implementation**
 
-Create `~/server/auth.py`:
+Create `~/server/auth.py` (note: `Optional[str]` on the FastAPI-introspected params — required for Python 3.9):
 
 ```python
 """Minimal shared-token auth for the beta backend.
@@ -107,18 +115,19 @@ from __future__ import annotations
 
 import hmac
 import os
+from typing import Optional
 
 from fastapi import Header, HTTPException, status
 
 
-def verify_token(presented: str | None, expected: str | None) -> bool:
+def verify_token(presented: Optional[str], expected: Optional[str]) -> bool:
     """Constant-time comparison; False if either side is missing."""
     if not presented or not expected:
         return False
     return hmac.compare_digest(presented, expected)
 
 
-def _require(authorization: str | None, env_name: str) -> None:
+def _require(authorization: Optional[str], env_name: str) -> None:
     expected = os.getenv(env_name)
     if not expected:
         raise HTTPException(
@@ -135,24 +144,24 @@ def _require(authorization: str | None, env_name: str) -> None:
         )
 
 
-async def require_app_token(authorization: str | None = Header(default=None)) -> None:
+async def require_app_token(authorization: Optional[str] = Header(default=None)) -> None:
     _require(authorization, "APP_TOKEN")
 
 
-async def require_admin_token(authorization: str | None = Header(default=None)) -> None:
+async def require_admin_token(authorization: Optional[str] = Header(default=None)) -> None:
     _require(authorization, "ADMIN_TOKEN")
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd ~/server && DATABASE_URL=postgresql://x python -m pytest tests/test_auth.py -v`
+Run: `cd /Users/alexutkin && ~/.venv/bin/python -m pytest server/tests/test_auth.py -v`
 Expected: PASS (4 passed)
 
 - [ ] **Step 5: Commit**
 
 ```bash
 cd /Users/alexutkin
-git add server/auth.py server/tests/conftest.py server/tests/test_auth.py
+git add server/auth.py server/tests/conftest.py server/tests/helpers.py server/tests/test_auth.py
 git commit -m "feat(server): add shared-token auth module + test fixtures"
 ```
 
@@ -190,7 +199,7 @@ async def test_insights_without_token_returns_401():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd ~/server && DATABASE_URL=postgresql://x python -m pytest tests/test_auth_endpoints.py -v`
+Run: `cd /Users/alexutkin && ~/.venv/bin/python -m pytest server/tests/test_auth_endpoints.py -v`
 Expected: FAIL — returns 422/502/200, not 401 (no auth wired yet).
 
 - [ ] **Step 3: Write minimal implementation**
@@ -216,13 +225,13 @@ router = APIRouter(tags=["insights"], dependencies=[Depends(require_app_token)])
 
 - [ ] **Step 4: Run the new test — passes; existing tests now fail (expected)**
 
-Run: `cd ~/server && DATABASE_URL=postgresql://x python -m pytest tests/test_auth_endpoints.py -v`
+Run: `cd /Users/alexutkin && ~/.venv/bin/python -m pytest server/tests/test_auth_endpoints.py -v`
 Expected: PASS.
 
 Now update existing tests to send the header. In `~/server/tests/test_insights.py`, add the import and header to every `client.post("/insights", …)` call:
 
 ```python
-from tests.conftest import APP_HEADERS
+from server.tests.helpers import APP_HEADERS
 ```
 and change each insight POST to include `headers=APP_HEADERS`, e.g.:
 ```python
@@ -230,7 +239,7 @@ r = await client.post("/insights", json=_PAYLOAD, headers=APP_HEADERS)
 ```
 (Apply to all six `/insights` POSTs in the file. The 422 validation tests still expect 422 — auth passes, body validation fails, which is correct.)
 
-In `~/server/tests/test_sessions.py`, add `from tests.conftest import APP_HEADERS` and merge the header into the existing `X-User-ID` calls:
+In `~/server/tests/test_sessions.py`, add `from server.tests.helpers import APP_HEADERS` and merge the header into the existing `X-User-ID` calls:
 ```python
 r = await client.post("/sessions", json=payload,
                       headers={"X-User-ID": "test-device-001", **APP_HEADERS})
@@ -239,7 +248,7 @@ r = await client.post("/sessions", json=payload,
 
 - [ ] **Step 5: Run the full non-DB suite**
 
-Run: `cd ~/server && DATABASE_URL=postgresql://x python -m pytest tests/test_insights.py tests/test_auth.py tests/test_auth_endpoints.py -v`
+Run: `cd /Users/alexutkin && ~/.venv/bin/python -m pytest server/tests/test_insights.py server/tests/test_auth.py server/tests/test_auth_endpoints.py -v`
 Expected: PASS (test_sessions requires a live DB — covered in Task 10 verification).
 
 - [ ] **Step 6: Commit**
@@ -277,7 +286,7 @@ async def test_admin_without_token_returns_401():
 
 @pytest.mark.asyncio
 async def test_admin_with_app_token_returns_401():
-    from tests.conftest import APP_HEADERS
+    from server.tests.helpers import APP_HEADERS
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         r = await client.get("/admin/users", headers=APP_HEADERS)
     assert r.status_code == 401
@@ -285,7 +294,7 @@ async def test_admin_with_app_token_returns_401():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd ~/server && DATABASE_URL=postgresql://x python -m pytest tests/test_auth_endpoints.py -v`
+Run: `cd /Users/alexutkin && ~/.venv/bin/python -m pytest server/tests/test_auth_endpoints.py -v`
 Expected: FAIL — `/admin/users` reaches the DB layer (500/errors) instead of 401.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -302,7 +311,7 @@ router = APIRouter(prefix="/admin", tags=["admin"],
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd ~/server && DATABASE_URL=postgresql://x python -m pytest tests/test_auth_endpoints.py -v`
+Run: `cd /Users/alexutkin && ~/.venv/bin/python -m pytest server/tests/test_auth_endpoints.py -v`
 Expected: PASS (both new tests short-circuit at auth before any DB access).
 
 - [ ] **Step 5: Commit**
@@ -358,22 +367,23 @@ def test_stream_rejects_wrong_token():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd ~/server && DATABASE_URL=postgresql://x python -m pytest tests/test_stream_auth.py -v`
+Run: `cd /Users/alexutkin && ~/.venv/bin/python -m pytest server/tests/test_stream_auth.py -v`
 Expected: FAIL — connection is accepted (no auth), so no `WebSocketDisconnect(1008)`.
 
 - [ ] **Step 3: Write minimal implementation**
 
-In `~/server/routers/stream.py`, update imports and the endpoint signature/guard:
+In `~/server/routers/stream.py`, update imports and the endpoint signature/guard (note: `Optional[str]` on the `Query` param — required for Python 3.9):
 
 ```python
 import os
+from typing import Optional
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from ..auth import verify_token
 
 # ... existing _admin_subs registry ...
 
 @router.websocket("/stream/{user_id}")
-async def device_stream(ws: WebSocket, user_id: str, token: str | None = Query(default=None)):
+async def device_stream(ws: WebSocket, user_id: str, token: Optional[str] = Query(default=None)):
     if not verify_token(token, os.getenv("APP_TOKEN")):
         await ws.close(code=1008)  # policy violation
         return
@@ -400,7 +410,7 @@ app.add_middleware(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd ~/server && DATABASE_URL=postgresql://x python -m pytest tests/test_stream_auth.py -v`
+Run: `cd /Users/alexutkin && ~/.venv/bin/python -m pytest server/tests/test_stream_auth.py -v`
 Expected: PASS (2 passed).
 
 - [ ] **Step 5: Commit**
