@@ -600,13 +600,15 @@ private struct MetricChartCard: View {
         GeometryReader { geo in
             let pf = proxy.plotFrame.map { geo[$0] } ?? CGRect(origin: .zero, size: geo.size)
             ZStack(alignment: .topLeading) {
-                // Transparent layer that captures drag-to-pan / tap-to-inspect.
+                // Transparent layer that captures press-to-inspect / drag-to-pan.
+                // A plain swipe is NOT captured here, so the vertical ScrollView
+                // scrolls freely; only a press-and-hold arms the scrubber.
                 Rectangle()
                     .fill(Color.clear)
                     .contentShape(Rectangle())
-                    .gesture(panGesture(proxy: proxy,
-                                        plotWidth: pf.width,
-                                        plotOriginX: pf.origin.x))
+                    .gesture(scrubGesture(proxy: proxy,
+                                          plotWidth: pf.width,
+                                          plotOriginX: pf.origin.x))
 
                 // Inspection cursor for the selected point.
                 if let selX = selectedX,
@@ -634,29 +636,29 @@ private struct MetricChartCard: View {
         }
     }
 
-    /// Drag left/right to pan the shared time window 1:1 with the finger; a
-    /// tap (no real movement) drops an inspection cursor instead of moving the
-    /// window.
-    private func panGesture(proxy: ChartProxy, plotWidth: CGFloat, plotOriginX: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { value in
-                let dx = value.translation.width
-                let moved = abs(dx) > 8 || abs(value.translation.height) > 8
-                if moved {
-                    if !isPanning {
-                        isPanning = true
-                        panStart  = panOffset
-                        selectedX = nil
-                    }
-                    // 1:1 — one point of finger travel = one point of time.
-                    let scale = win.seconds / Double(max(plotWidth, 1))
-                    let raw   = panStart - Double(dx) * scale
-                    panOffset = min(max(raw, panBounds.lowerBound), panBounds.upperBound)
-                } else if !isPanning {
-                    // Still a tap: live-inspect the touched time.
-                    if let d: Date = proxy.value(atX: value.location.x - plotOriginX) {
-                        selectedX = d
-                    }
+    /// Press-and-hold to arm the scrubber, then drag left/right to move through
+    /// time. Requiring the long press first means a plain vertical swipe is left
+    /// entirely to the enclosing ScrollView — vertical scrolling stays the
+    /// priority and never fights the chart. Once armed, the vertical inspection
+    /// line + time bubble track the finger, and horizontal drag pans the shared
+    /// window 1:1 (all charts move together).
+    private func scrubGesture(proxy: ChartProxy, plotWidth: CGFloat, plotOriginX: CGFloat) -> some Gesture {
+        LongPressGesture(minimumDuration: 0.2)
+            .sequenced(before: DragGesture(minimumDistance: 0))
+            .onChanged { seq in
+                guard case .second(true, let drag) = seq else { return }
+                if !isPanning {
+                    isPanning = true
+                    panStart  = panOffset
+                }
+                guard let drag else { return }
+                // Pan the window 1:1 with horizontal finger travel.
+                let scale = win.seconds / Double(max(plotWidth, 1))
+                let raw   = panStart - Double(drag.translation.width) * scale
+                panOffset = min(max(raw, panBounds.lowerBound), panBounds.upperBound)
+                // Inspection line at the finger's current time in the (panned) window.
+                if let d: Date = proxy.value(atX: drag.location.x - plotOriginX) {
+                    selectedX = d
                 }
             }
             .onEnded { _ in isPanning = false }
