@@ -39,6 +39,12 @@ struct MetricsTick {
     // Signal quality
     let signalQuality: Float?
 
+    /// RR artifact breakdown (fractions 0–1) — dropped-as-implausible vs
+    /// interpolated missed/extra beats. Defaulted so preview/aggregate
+    /// constructors need not supply them.
+    var rrInvalidRate:   Float? = nil
+    var rrCorrectedRate: Float? = nil
+
     /// ECG waveform quality (flatline/clipping check) — live-only, not persisted.
     let ecgQuality: ECGQualityResult?
 
@@ -131,6 +137,8 @@ enum MetricsEngine {
             cbi:            cbi,
             dfa1:           dfa?.alpha1,
             signalQuality:  hrv.map { 1 - $0.artifactRate },
+            rrInvalidRate:   hrv?.invalidRate,
+            rrCorrectedRate: hrv?.correctedRate,
             ecgQuality:     ecgQuality,
             rcmse:          rcmseResult?.meanEntropy,
             pip:            hrfResult?.pip,

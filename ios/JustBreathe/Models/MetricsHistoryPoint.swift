@@ -44,6 +44,9 @@ struct MetricsHistoryPoint {
     let meanBPM:    Float?   // bpm
     let dfa1:          Float?
     let signalQuality: Float?
+    let rrInvalidRate:   Float?   // fraction of RR dropped as implausible
+    let rrCorrectedRate: Float?   // fraction of RR interpolated (missed/extra beat)
+    let ecgQualityTier:  Int?     // SignalQualityTier.rawValue (0 poor…2 good)
     let rcmse:         Float?   // RCMSE mean entropy (scales 1–5)
     let pip:           Float?   // HR Fragmentation: % inflection points
     let ials:          Float?   // HR Fragmentation: inverse avg segment length
@@ -68,6 +71,9 @@ struct MetricsHistoryPoint {
         meanBPM    = tick.meanBPM
         dfa1          = tick.dfa1
         signalQuality = tick.signalQuality
+        rrInvalidRate   = tick.rrInvalidRate
+        rrCorrectedRate = tick.rrCorrectedRate
+        ecgQualityTier  = tick.ecgQuality?.tier.rawValue
         rcmse         = tick.rcmse
         pip           = tick.pip
         ials          = tick.ials
@@ -93,6 +99,9 @@ struct MetricsHistoryPoint {
         meanBPM    = sample.meanBPM
         dfa1          = sample.dfa1
         signalQuality = sample.signalQuality
+        rrInvalidRate   = sample.rrInvalidRate
+        rrCorrectedRate = sample.rrCorrectedRate
+        ecgQualityTier  = sample.ecgQualityTier
         rcmse         = sample.rcmse
         pip           = sample.pip
         ials          = sample.ials
@@ -131,6 +140,9 @@ struct MetricsHistoryPoint {
         self.meanBPM = meanBPM
         self.dfa1 = nil
         self.signalQuality = nil
+        self.rrInvalidRate = nil
+        self.rrCorrectedRate = nil
+        self.ecgQualityTier = nil
         self.rcmse = nil
         self.pip = nil
         self.ials = nil

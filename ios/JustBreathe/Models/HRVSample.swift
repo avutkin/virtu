@@ -18,6 +18,9 @@ final class HRVSample {
     var ieRatio:        Float?   // BreathPhases.meanIE
     var dfa1:           Float?
     var signalQuality:  Float?
+    var rrInvalidRate:   Float?   // fraction of RR dropped as implausible
+    var rrCorrectedRate: Float?   // fraction of RR interpolated (missed/extra beat)
+    var ecgQualityTier:  Int?     // SignalQualityTier.rawValue (0 poor…2 good)
     var rcmse:          Float?
     var pip:            Float?
     var ials:           Float?
@@ -43,6 +46,9 @@ final class HRVSample {
         self.ieRatio    = tick.breathPhases?.meanIE
         self.dfa1          = tick.dfa1
         self.signalQuality = tick.signalQuality
+        self.rrInvalidRate   = tick.rrInvalidRate
+        self.rrCorrectedRate = tick.rrCorrectedRate
+        self.ecgQualityTier  = tick.ecgQuality?.tier.rawValue
         self.rcmse         = tick.rcmse
         self.pip           = tick.pip
         self.ials          = tick.ials
