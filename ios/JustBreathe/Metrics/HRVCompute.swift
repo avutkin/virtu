@@ -166,6 +166,13 @@ enum HRVCompute {
 
         var series = plausible
         var corrected = 0
+        // Single conservative pass. Only ISOLATED clear outliers are corrected;
+        // a wider window or iteration would let a burst of consecutive artifacts
+        // dominate the local median and false-correct the good beats at the
+        // burst's edge — trading robustness for accuracy. Bursts are instead
+        // surfaced as a high artifact rate (see the Signal Artifacts chart) so
+        // the window can be treated as low-confidence rather than silently
+        // "fixed" into wrong values.
         for i in plausible.indices {
             guard let med = localMedian(plausible, index: i, half: 2), med > 0 else { continue }
             let ratio = plausible[i] / med

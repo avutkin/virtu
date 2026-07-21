@@ -94,6 +94,16 @@ final class MetricsTests: XCTestCase {
         XCTAssertEqual(c.series[4], 800, accuracy: 1)
     }
 
+    func testCorrectionDoesNotFalsePositiveAtBurstEdge() {
+        // A burst of consecutive bad beats must NOT cause the good beat beside
+        // it to be "corrected" (which would corrupt a valid value). The
+        // conservative single pass leaves the good edge beat (index 2) alone.
+        let rr = [800, 800, 800, 1600, 1600, 1600, 800, 800, 800, 800, 800, 800]
+        let c = HRVCompute.classifyAndCorrect(rr)
+        XCTAssertEqual(c.series[2], 800, accuracy: 1, "Good beat beside a burst is never altered")
+        XCTAssertEqual(c.series[6], 800, accuracy: 1)
+    }
+
     func testInvalidAndCorrectedCountedSeparately() {
         // 100 ms invalid (dropped); 1700 ms ~doubled → corrected.
         let rr = [800, 800, 100, 800, 800, 1700, 800, 800, 800, 800, 800, 800]
