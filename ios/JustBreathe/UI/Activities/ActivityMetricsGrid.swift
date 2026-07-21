@@ -28,16 +28,6 @@ extension ActivityMetricDef {
         guard bb != 0 else { return nil }
         return (direction.benefit(c) - bb) / abs(bb) * 100
     }
-
-    /// Position of `value` on a 0…1 benefit axis spanning `others` (higher =
-    /// better = right). Returns nil when the span collapses or data is missing.
-    func benefitPosition(of value: Double?, across others: [Double?]) -> Double? {
-        guard let v = value else { return nil }
-        let benefits = ([value] + others).compactMap { $0.map(direction.benefit) }
-        guard let lo = benefits.min(), let hi = benefits.max(), hi > lo else { return nil }
-        let frac = (direction.benefit(v) - lo) / (hi - lo)
-        return 0.08 + frac * 0.84   // inset so end dots stay off the edges
-    }
 }
 
 private func f2(_ v: Double?) -> String { v.map { String(format: "%.2f", $0) } ?? "—" }

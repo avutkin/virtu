@@ -59,14 +59,13 @@ struct MetricProgressRow: View {
     // MARK: Summary (always visible)
 
     private var summary: some View {
-        VStack(spacing: 9) {
+        VStack(spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(def.label).font(Theme.mono(14)).foregroundStyle(Theme.text)
                 Text(def.techLabel).font(Theme.monoLabel).foregroundStyle(Theme.dim)
                 Spacer()
-                Text(def.format(stats.duringMean)).font(Theme.mono(14)).foregroundStyle(Theme.text)
                 if let u = uplift {
-                    Text(signed(u)).font(Theme.mono(12)).foregroundStyle(deltaColor(u))
+                    Text(signed(u)).font(Theme.mono(13)).foregroundStyle(deltaColor(u))
                 }
                 Image(systemName: expanded ? "chevron.up" : "chevron.down")
                     .font(.system(size: 10, weight: .semibold))
@@ -74,68 +73,78 @@ struct MetricProgressRow: View {
             }
 
             progressBar
-
-            HStack(spacing: 6) {
-                Text("before \(def.format(stats.baseline))")
-                    .font(Theme.monoLabel).foregroundStyle(Theme.dim)
-                Spacer()
-                if let tm = twoMonthValue {
-                    Text("2mo \(def.format(tm))")
-                        .font(Theme.monoLabel).foregroundStyle(Theme.dim)
-                }
-                if let d = vs2mo {
-                    Text("· \(signed(d)) vs 2mo")
-                        .font(Theme.monoLabel).foregroundStyle(deltaColor(d))
-                }
-            }
         }
     }
 
     // MARK: before → during bar
 
+    /// Position of the 2-month average along the before(0)→during(1) axis,
+    /// by benefit so "toward during" reads correctly. nil when there's no
+    /// 2-month value; 0.5 when before and during coincide.
+    private func twoMonthFraction() -> Double? {
+        guard let base = stats.baseline, let during = stats.duringMean,
+              let m = twoMonthValue.map(def.direction.benefit) else { return nil }
+        let a = def.direction.benefit(base)
+        let b = def.direction.benefit(during)
+        guard a != b else { return 0.5 }
+        return min(max((m - a) / (b - a), 0.12), 0.88)
+    }
+
     private var progressBar: some View {
-        let before = def.benefitPosition(of: stats.baseline,   across: [stats.duringMean, twoMonthValue])
-        let during = def.benefitPosition(of: stats.duringMean, across: [stats.baseline,   twoMonthValue])
-        let tick   = def.benefitPosition(of: twoMonthValue,    across: [stats.baseline,   stats.duringMean])
+        let tmFrac = twoMonthFraction()
 
         return GeometryReader { geo in
             let w = geo.size.width
-            let h: CGFloat = 8
-            ZStack(alignment: .leading) {
-                Capsule().fill(Theme.surface).frame(height: h)
+            let leftX:  CGFloat = 9
+            let rightX  = w - 9
+            let barY:   CGFloat = 22
 
-                // Change segment between before and during.
-                if let b = before, let d = during {
-                    let lo = min(b, d), hi = max(b, d)
-                    Capsule()
-                        .fill(deltaColor(uplift).opacity(0.55))
-                        .frame(width: max((hi - lo) * w, 2), height: h)
-                        .offset(x: lo * w)
+            ZStack {
+                // before → during line, gray at the start deepening to the
+                // improved/dipped colour at the end.
+                Capsule()
+                    .fill(LinearGradient(colors: [Theme.dim.opacity(0.55), deltaColor(uplift)],
+                                         startPoint: .leading, endPoint: .trailing))
+                    .frame(width: rightX - leftX, height: 6)
+                    .position(x: (leftX + rightX) / 2, y: barY)
+
+                // 2-month average: labelled gray tick between the two.
+                if let f = tmFrac {
+                    let x = leftX + CGFloat(f) * (rightX - leftX)
+                    Rectangle().fill(Theme.dim)
+                        .frame(width: 2, height: 15)
+                        .position(x: x, y: barY)
+                    VStack(spacing: 1) {
+                        Text(def.format(twoMonthValue))
+                            .foregroundStyle(Theme.text.opacity(0.9))
+                        if let d = vs2mo {
+                            Text(signed(d)).foregroundStyle(deltaColor(d))
+                        }
+                    }
+                    .font(.system(size: 9, design: .monospaced))
+                    .position(x: min(max(x, 22), w - 22), y: 6)
                 }
 
-                // 2-month tick.
-                if let t = tick {
-                    Rectangle()
-                        .fill(Theme.dim)
-                        .frame(width: 2, height: h + 8)
-                        .offset(x: t * w - 1)
-                }
-
-                // Before (hollow) and during (filled) dots.
-                if let b = before {
-                    Circle().strokeBorder(Theme.dim, lineWidth: 2)
-                        .background(Circle().fill(Theme.card))
-                        .frame(width: 11, height: 11)
-                        .offset(x: b * w - 5.5)
-                }
-                if let d = during {
-                    Circle().fill(deltaColor(uplift))
-                        .frame(width: 12, height: 12)
-                        .offset(x: d * w - 6)
-                }
+                // Start point (before) at the beginning of the line.
+                Circle().fill(Theme.dim)
+                    .frame(width: 12, height: 12)
+                    .position(x: leftX, y: barY)
+                // End point (during) at the end of the line.
+                Circle().fill(deltaColor(uplift))
+                    .frame(width: 15, height: 15)
+                    .position(x: rightX, y: barY)
             }
-            .frame(height: h + 8)
+            .overlay(alignment: .bottomLeading) {
+                Text(def.format(stats.baseline))
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(Theme.text.opacity(0.9))
+            }
+            .overlay(alignment: .bottomTrailing) {
+                Text(def.format(stats.duringMean))
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Theme.text)
+            }
         }
-        .frame(height: 16)
+        .frame(height: 44)
     }
 }
