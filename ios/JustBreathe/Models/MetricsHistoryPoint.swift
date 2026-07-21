@@ -11,7 +11,7 @@ enum MetricsQualityFilter {
         guard let sdnn  = pt.sdnn,    sdnn  > 5.0  else { return false }
         guard let rmssd = pt.rmssd,   rmssd > 3.0  else { return false }
         guard let bpm   = pt.meanBPM, bpm  >= 35.0,
-              bpm <= 160.0                          else { return false }
+              bpm <= 210.0                          else { return false }
         return true
     }
 

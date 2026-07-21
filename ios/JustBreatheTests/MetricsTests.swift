@@ -35,6 +35,35 @@ final class MetricsTests: XCTestCase {
         XCTAssertNil(HRVCompute.compute(rrMs: rr))
     }
 
+    // MARK: - Robust heart rate
+
+    func testHRPrefersSensorBPMAndIsOutlierRobust() {
+        // Running: sensor says ~150; one glitch sample of 60 must not matter.
+        let bpm: [Float] = [150, 149, 60, 151, 150, 150, 152, 150]
+        let hr = HeartRateCompute.current(rrMs: [900, 900, 900], sensorBPM: bpm)
+        XCTAssertEqual(hr!, 150, accuracy: 1, "Median sensor BPM, robust to the 60 glitch")
+    }
+
+    func testHRFallsBackToRecentRRMedian() {
+        // No sensor BPM → median of recent RR. 400 ms ⇒ 150 bpm; a couple of
+        // doubled (missed-beat) 800 ms values must not drag it down.
+        let rr = Array(repeating: 400, count: 16) + [800, 800, 400, 800]
+        let hr = HeartRateCompute.current(rrMs: rr, sensorBPM: [])
+        XCTAssertEqual(hr!, 150, accuracy: 2, "60000 / median(recent RR)")
+    }
+
+    func testHRIgnoresOldBufferedBeats() {
+        // The old bug: minutes of resting 850 ms beats then a short run of
+        // 400 ms. Only the recent window should count → ~150, not ~90.
+        let rr = Array(repeating: 850, count: 400) + Array(repeating: 400, count: 20)
+        let hr = HeartRateCompute.current(rrMs: rr, sensorBPM: [])
+        XCTAssertGreaterThan(hr!, 140, "Recent window ⇒ running HR, not the buffer mean")
+    }
+
+    func testHRNilWhenNoData() {
+        XCTAssertNil(HeartRateCompute.current(rrMs: [], sensorBPM: []))
+    }
+
     // MARK: - RR correction (missed/extra beat)
 
     func testCorrectionLeavesRSARangeUntouched() {

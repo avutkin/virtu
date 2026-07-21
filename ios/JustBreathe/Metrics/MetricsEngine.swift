@@ -80,6 +80,11 @@ enum MetricsEngine {
         // --- Time-domain HRV ---
         let hrv = HRVCompute.compute(rrMs: rrMs)
 
+        // --- Robust heart rate ---
+        // Prefer the sensor's own recent BPM (motion-robust), median-filtered,
+        // instead of the whole-buffer RR mean (which reads low during a run).
+        let robustBPM = HeartRateCompute.current(rrMs: rrMs, sensorBPM: snapshot.bpm) ?? hrv?.meanBPM
+
         // --- DFA α1 ---
         let dfa = DFACompute.compute(rrMs: rrMs)
 
@@ -118,7 +123,7 @@ enum MetricsEngine {
 
         return MetricsTick(
             timestamp:      Date(),
-            meanBPM:        hrv?.meanBPM,
+            meanBPM:        robustBPM,
             sdnn:           hrv?.sdnn,
             rmssd:          hrv?.rmssd,
             pnn50:          hrv?.pnn50,
