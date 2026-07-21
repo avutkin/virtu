@@ -10,9 +10,18 @@ struct HRVMetrics {
     let pnn50:   Float      // %
     let vti:     Float      // ln(RMSSD)
 
-    /// Fraction of raw RR intervals removed as physiological artifacts (0–1).
+    /// Fraction of raw RR intervals that were artifacts — dropped as
+    /// implausible OR corrected by interpolation (0–1). = invalidRate + correctedRate.
     /// 0 = perfect signal, 1 = all beats rejected.
     let artifactRate: Float
+
+    /// Fraction of raw RR intervals removed as physiologically impossible
+    /// (outside 300–2000 ms) — cannot be trusted, dropped entirely.
+    let invalidRate: Float
+
+    /// Fraction of raw RR intervals flagged as a clear missed/extra beat and
+    /// replaced by the local median (interpolated) rather than dropped.
+    let correctedRate: Float
 
     // Frequency domain (nil when < 30 RR intervals)
     let ulfPower: Float?    // ms²  (< 0.003 Hz; meaningful only for long recordings)
@@ -50,10 +59,13 @@ enum HRVCompute {
     /// Full HRV analysis from RR intervals in milliseconds.
     /// Returns nil if there are fewer than 10 clean RR intervals.
     static func compute(rrMs: [Int]) -> HRVMetrics? {
-        let rr = cleanRR(rrMs)
+        let cleaned = classifyAndCorrect(rrMs)
+        let rr = cleaned.series
         guard rr.count >= minRRTime else { return nil }
-        let artifactRate: Float = rrMs.isEmpty ? 0 :
-            Float(rrMs.count - rr.count) / Float(rrMs.count)
+        let total = rrMs.count
+        let invalidRate:   Float = total > 0 ? Float(cleaned.invalid)   / Float(total) : 0
+        let correctedRate: Float = total > 0 ? Float(cleaned.corrected) / Float(total) : 0
+        let artifactRate = invalidRate + correctedRate
 
         // --- Time domain ---
         let mean    = vDSP.mean(rr)
@@ -70,7 +82,7 @@ enum HRVCompute {
               let interp = interpTachogram(rr, fs: rrFS) else {
             return HRVMetrics(
                 meanBPM: meanBPM, sdnn: sdnn, rmssd: rmssd, pnn50: pnn50, vti: vti,
-                artifactRate: artifactRate,
+                artifactRate: artifactRate, invalidRate: invalidRate, correctedRate: correctedRate,
                 ulfPower: nil, vlfPower: nil, lfPower: nil, hfPower: nil,
                 lfHF: nil, lfNU: nil, hfNU: nil,
                 psdFreqs: nil, psdValues: nil
@@ -95,7 +107,7 @@ enum HRVCompute {
 
         return HRVMetrics(
             meanBPM: meanBPM, sdnn: sdnn, rmssd: rmssd, pnn50: pnn50, vti: vti,
-            artifactRate: artifactRate,
+            artifactRate: artifactRate, invalidRate: invalidRate, correctedRate: correctedRate,
             ulfPower: ulfP, vlfPower: vlfP,
             lfPower: lfP, hfPower: hfP,
             lfHF:  hfP > 0 ? lfP / hfP : 0,
@@ -123,10 +135,59 @@ enum HRVCompute {
     /// high-RSA beats to be flagged as artifacts, inflating `artifactRate` and
     /// visibly flattening/corrupting LF/HF and other metrics during deep breathing.
     static func cleanRR(_ rrMs: [Int]) -> [Float] {
-        rrMs.compactMap { v in
+        classifyAndCorrect(rrMs).series
+    }
+
+    /// Shared clean + conservative-correct pass. Returns the corrected RR series
+    /// (implausible beats removed, clear missed/extra beats interpolated) plus
+    /// the counts feeding the artifact-rate chart.
+    ///
+    /// Two categories:
+    /// - **invalid** — outside 300–2000 ms → removed (can't be trusted).
+    /// - **corrected** — a beat whose value is ≥1.8× (a missed beat, RR ~doubled)
+    ///   or ≤0.6× (an extra/false beat, RR ~halved) its local median → replaced
+    ///   by that median.
+    ///
+    /// The correction thresholds are deliberately loose. Genuine beat-to-beat
+    /// RSA during paced breathing routinely swings ±20–30%; those beats sit far
+    /// inside 0.6–1.8× and are never touched — only near-doubling/halving, which
+    /// are unambiguous detection errors that would otherwise wildly inflate
+    /// RMSSD/SDNN. This is NOT a Malik/successive-difference rule (see the note
+    /// on the old shared filter in the git history / cleanRR callers).
+    static func classifyAndCorrect(_ rrMs: [Int]) -> (series: [Float], invalid: Int, corrected: Int) {
+        var plausible: [Float] = []
+        plausible.reserveCapacity(rrMs.count)
+        for v in rrMs {
             let f = Float(v)
-            return (f >= 300 && f <= 2000) ? f : nil
+            if f >= 300 && f <= 2000 { plausible.append(f) }
         }
+        let invalid = rrMs.count - plausible.count
+        guard plausible.count >= 3 else { return (plausible, invalid, 0) }
+
+        var series = plausible
+        var corrected = 0
+        for i in plausible.indices {
+            guard let med = localMedian(plausible, index: i, half: 2), med > 0 else { continue }
+            let ratio = plausible[i] / med
+            if ratio >= 1.8 || ratio <= 0.6 {
+                series[i] = med
+                corrected += 1
+            }
+        }
+        return (series, invalid, corrected)
+    }
+
+    /// Median of the `half` neighbours on each side of `index` (excluding it).
+    /// nil when fewer than two neighbours are available.
+    private static func localMedian(_ arr: [Float], index i: Int, half: Int) -> Float? {
+        let lo = max(0, i - half), hi = min(arr.count - 1, i + half)
+        var neighbours: [Float] = []
+        for j in lo...hi where j != i { neighbours.append(arr[j]) }
+        guard neighbours.count >= 2 else { return nil }
+        neighbours.sort()
+        let m = neighbours.count
+        return m % 2 == 1 ? neighbours[m / 2]
+                          : (neighbours[m / 2 - 1] + neighbours[m / 2]) / 2
     }
 
     /// Interpolate irregular RR series onto a uniform grid at `fs` Hz.

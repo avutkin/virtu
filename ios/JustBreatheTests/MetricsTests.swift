@@ -35,6 +35,51 @@ final class MetricsTests: XCTestCase {
         XCTAssertNil(HRVCompute.compute(rrMs: rr))
     }
 
+    // MARK: - RR correction (missed/extra beat)
+
+    func testCorrectionLeavesRSARangeUntouched() {
+        // ±25% respiratory-style swings must NOT be corrected.
+        let rr = [1000, 750, 1000, 760, 990, 780, 1010, 740, 1000, 800,
+                  990, 770, 1000, 760, 1010]
+        let c = HRVCompute.classifyAndCorrect(rr)
+        XCTAssertEqual(c.corrected, 0, "Normal RSA swings must never be corrected")
+        XCTAssertEqual(c.invalid, 0)
+        XCTAssertEqual(c.series, rr.map { Float($0) }, "Series unchanged when nothing is an artifact")
+    }
+
+    func testMissedBeatCorrected() {
+        // One beat ~doubled (a missed detection) amid steady 800 ms beats.
+        let rr = [800, 800, 800, 800, 1600, 800, 800, 800, 800, 800]
+        let c = HRVCompute.classifyAndCorrect(rr)
+        XCTAssertEqual(c.invalid, 0, "1600 ms is plausible, so not invalid")
+        XCTAssertEqual(c.corrected, 1, "The doubled beat should be corrected")
+        XCTAssertEqual(c.series[4], 800, accuracy: 1, "Corrected to the local median")
+    }
+
+    func testExtraBeatCorrected() {
+        // One beat ~halved (a false/extra detection).
+        let rr = [800, 800, 800, 800, 400, 800, 800, 800, 800, 800]
+        let c = HRVCompute.classifyAndCorrect(rr)
+        XCTAssertEqual(c.invalid, 0)
+        XCTAssertEqual(c.corrected, 1)
+        XCTAssertEqual(c.series[4], 800, accuracy: 1)
+    }
+
+    func testInvalidAndCorrectedCountedSeparately() {
+        // 100 ms invalid (dropped); 1700 ms ~doubled → corrected.
+        let rr = [800, 800, 100, 800, 800, 1700, 800, 800, 800, 800, 800, 800]
+        let c = HRVCompute.classifyAndCorrect(rr)
+        XCTAssertEqual(c.invalid, 1, "100 ms dropped as implausible")
+        XCTAssertEqual(c.corrected, 1, "1700 ms corrected as a missed beat")
+        XCTAssertEqual(c.series.count, 11, "Only the invalid beat is removed")
+
+        let m = HRVCompute.compute(rrMs: rr)
+        XCTAssertNotNil(m)
+        XCTAssertEqual(m!.invalidRate, 1.0 / 12.0, accuracy: 1e-4)
+        XCTAssertEqual(m!.correctedRate, 1.0 / 12.0, accuracy: 1e-4)
+        XCTAssertEqual(m!.artifactRate, 2.0 / 12.0, accuracy: 1e-4)
+    }
+
     // MARK: - Breathing
 
     func testBreathingRateInBand() {
