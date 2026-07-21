@@ -58,6 +58,7 @@
 		A149 /* ActivityMetricsGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = F149 /* ActivityMetricsGrid.swift */; };
 		A150 /* ActivityWindowChart.swift in Sources */ = {isa = PBXBuildFile; fileRef = F150 /* ActivityWindowChart.swift */; };
 		A153 /* PracticeImpactGauge.swift in Sources */ = {isa = PBXBuildFile; fileRef = F153 /* PracticeImpactGauge.swift */; };
+		A154 /* MetricProgressRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F154 /* MetricProgressRow.swift */; };
 		A151 /* ActivityMetricStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = F151 /* ActivityMetricStats.swift */; };
 		A152 /* ActivityImpact.swift in Sources */ = {isa = PBXBuildFile; fileRef = F152 /* ActivityImpact.swift */; };
 		ARES1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FRES1 /* Assets.xcassets */; };
@@ -133,6 +134,7 @@
 		F149 /* ActivityMetricsGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityMetricsGrid.swift; sourceTree = "<group>"; };
 		F150 /* ActivityWindowChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityWindowChart.swift; sourceTree = "<group>"; };
 		F153 /* PracticeImpactGauge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PracticeImpactGauge.swift; sourceTree = "<group>"; };
+		F154 /* MetricProgressRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricProgressRow.swift; sourceTree = "<group>"; };
 		F151 /* ActivityMetricStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityMetricStats.swift; sourceTree = "<group>"; };
 		F152 /* ActivityImpact.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityImpact.swift; sourceTree = "<group>"; };
 		FRES1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -287,6 +289,7 @@
 				F149 /* ActivityMetricsGrid.swift */,
 				F150 /* ActivityWindowChart.swift */,
 				F153 /* PracticeImpactGauge.swift */,
+				F154 /* MetricProgressRow.swift */,
 			);
 			path = Activities;
 			sourceTree = "<group>";
@@ -504,6 +507,7 @@
 				A149 /* ActivityMetricsGrid.swift in Sources */,
 				A150 /* ActivityWindowChart.swift in Sources */,
 				A153 /* PracticeImpactGauge.swift in Sources */,
+				A154 /* MetricProgressRow.swift in Sources */,
 				A151 /* ActivityMetricStats.swift in Sources */,
 				A152 /* ActivityImpact.swift in Sources */,
 				A123 /* ResonateView.swift in Sources */,

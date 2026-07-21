@@ -556,7 +556,6 @@ struct ActivityDetailView: View {
 
     @State private var chartPoints: [MetricsHistoryPoint] = []
     @State private var twoMonthAvg: [String: Double] = [:]      // avg absolute during-value
-    @State private var twoMonthUplift: [String: Double] = [:]   // avg uplift % (during vs before)
 
     private var timeStr: String {
         let fmt = DateFormatter()
@@ -578,27 +577,15 @@ struct ActivityDetailView: View {
         let sessions = ((try? ctx.fetch(FetchDescriptor<ActivityLog>(predicate: predicate))) ?? [])
             .filter { $0.id != entry.id }
 
-        var absResult:    [String: Double] = [:]
-        var upliftResult: [String: Double] = [:]
+        var absResult: [String: Double] = [:]
         for def in activityMetricDefs {
             // Average absolute during-value.
             let vals = sessions.compactMap { $0[keyPath: def.duringKey].map(Double.init) }
             if !vals.isEmpty {
                 absResult[def.id] = vals.reduce(0, +) / Double(vals.count)
             }
-            // Average benefit-signed uplift % (during vs before).
-            let uplifts: [Double] = sessions.compactMap { s in
-                guard let bF = s[keyPath: def.beforeKey], let dF = s[keyPath: def.duringKey] else { return nil }
-                let bb = def.direction.benefit(Double(bF))
-                guard bb != 0 else { return nil }
-                return (def.direction.benefit(Double(dF)) - bb) / abs(bb) * 100
-            }
-            if !uplifts.isEmpty {
-                upliftResult[def.id] = uplifts.reduce(0, +) / Double(uplifts.count)
-            }
         }
-        twoMonthAvg    = absResult
-        twoMonthUplift = upliftResult
+        twoMonthAvg = absResult
     }
 
     private func loadChartPoints() {
@@ -614,6 +601,32 @@ struct ActivityDetailView: View {
         desc.fetchLimit = 10_000
         let samples = (try? ctx.fetch(desc)) ?? []
         chartPoints = MetricsQualityFilter.filter(samples.map { MetricsHistoryPoint(from: $0) })
+    }
+
+    private func impactCaption(_ score: Int) -> String {
+        switch score {
+        case 80...:   return "excellent session"
+        case 65..<80: return "solid session"
+        case 50..<65: return "steady session"
+        case 35..<50: return "gentle session"
+        default:      return "light session"
+        }
+    }
+
+    private func recIcon(_ kind: ActivityRecommendation.Kind) -> String {
+        switch kind {
+        case .keep:  return "checkmark.circle"
+        case .watch: return "eye"
+        case .trend: return "chart.line.uptrend.xyaxis"
+        }
+    }
+
+    private func recColor(_ kind: ActivityRecommendation.Kind) -> Color {
+        switch kind {
+        case .keep:  return Theme.accent
+        case .watch: return Theme.warn
+        case .trend: return Theme.dim
+        }
     }
 
     var body: some View {
@@ -643,7 +656,8 @@ struct ActivityDetailView: View {
                         }
 
                         // Compute peak/uplift/recovery once per metric, shared
-                        // by the summary grid and the charts so they can't drift.
+                        // by the gauge, the rows and the recommendations so
+                        // they can't drift.
                         let windowEnd = entry.endedAt ?? entry.startedAt
                         let metrics = activityMetricDefs.map { def in
                             (def: def,
@@ -653,27 +667,67 @@ struct ActivityDetailView: View {
                                                         startedAt: entry.startedAt,
                                                         endedAt: windowEnd))
                         }
+                        let uplifts = metrics.compactMap { $0.stats.avgUpliftPct }
 
-                        // 9-metric summary
-                        ActivityMetricsGrid(metrics: metrics, history: twoMonthAvg, historyUplift: twoMonthUplift)
+                        // Overall practice impact.
+                        if let score = ActivityImpact.score(uplifts: uplifts) {
+                            let bd = ActivityImpact.breakdown(uplifts: uplifts)
+                            VStack(spacing: 6) {
+                                Text("OVERALL PRACTICE IMPACT")
+                                    .font(Theme.monoLabel)
+                                    .foregroundStyle(Theme.dim)
+                                PracticeImpactGauge(score: score, caption: impactCaption(score))
+                                Text("\(bd.improved) improved · \(bd.held) held · \(bd.dipped) dipped")
+                                    .font(Theme.monoLabel)
+                                    .foregroundStyle(Theme.dim)
+                            }
+                            .cardStyle()
+                        }
 
-                        // Section title — names the activity these charts belong
-                        // to (custom name for custom activities), re-establishing
-                        // context after the summary grid.
-                        Text(entry.displayName.uppercased())
+                        // Per-metric progressive disclosure — tap a row to open
+                        // its before/during/after chart and why-it-matters note.
+                        Text("METRIC PROGRESS · ALL 9")
                             .font(Theme.monoLabel)
                             .foregroundStyle(entry.activityTypeEnum.color)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.top, 4)
 
-                        // Before/during/after charts, one per metric — same order.
                         ForEach(metrics, id: \.def.id) { m in
-                            ActivityWindowChart(def: m.def,
-                                                color: entry.activityTypeEnum.color,
-                                                points: chartPoints,
-                                                startedAt: entry.startedAt,
-                                                endedAt: windowEnd,
-                                                stats: m.stats)
+                            MetricProgressRow(def: m.def,
+                                              stats: m.stats,
+                                              twoMonthValue: twoMonthAvg[m.def.id],
+                                              color: entry.activityTypeEnum.color,
+                                              points: chartPoints,
+                                              startedAt: entry.startedAt,
+                                              endedAt: windowEnd)
+                        }
+
+                        // Recommendations (rule-based, from this session's moves).
+                        let recs = ActivityImpact.recommendations(metrics.map { m in
+                            MetricMovement(name: m.def.label,
+                                           uplift: m.stats.avgUpliftPct,
+                                           vs2mo: m.def.benefitDelta(current: m.stats.duringMean,
+                                                                     base: twoMonthAvg[m.def.id]))
+                        })
+                        if !recs.isEmpty {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("RECOMMENDATIONS")
+                                    .font(Theme.monoLabel)
+                                    .foregroundStyle(Theme.dim)
+                                ForEach(recs) { rec in
+                                    HStack(alignment: .top, spacing: 8) {
+                                        Image(systemName: recIcon(rec.kind))
+                                            .font(.system(size: 12))
+                                            .foregroundStyle(recColor(rec.kind))
+                                            .frame(width: 16)
+                                        Text(rec.text)
+                                            .font(Theme.monoBody)
+                                            .foregroundStyle(Theme.text)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+                                }
+                            }
+                            .cardStyle()
                         }
 
                         // Insight
