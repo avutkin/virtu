@@ -767,7 +767,10 @@ struct MetricsChartsView: View, Equatable {
                 levels:      "Excellent: <2%\nAcceptable: 2–5%\nMarginal: 5–20%\nPoor: >20% (metrics unreliable)"
             ),
             history: history, rawHistory: rawHistory, date: date
-        ) { $0.signalQuality.map { (1 - Double($0)) * 100 } }
+        ) { pt in
+            guard let inv = pt.rrInvalidRate else { return nil }
+            return Double(inv + (pt.rrCorrectedRate ?? 0)) * 100
+        }
     }
 
     /// Fraction of beats that were interpolated (missed/extra), as opposed to

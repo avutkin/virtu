@@ -141,7 +141,11 @@ enum MetricsEngine {
             coherenceScore: coherence?.score,
             cbi:            cbi,
             dfa1:           dfa?.alpha1,
-            signalQuality:  hrv.map { 1 - $0.artifactRate },
+            // Quality reflects only truly-lost (dropped) beats — corrected
+            // beats are repaired, so they must NOT flag a window as poor
+            // quality (they are surfaced on the Signal Artifacts / RR Corrected
+            // charts instead). Including them made the amber bands over-trigger.
+            signalQuality:  hrv.map { 1 - $0.invalidRate },
             rrInvalidRate:   hrv?.invalidRate,
             rrCorrectedRate: hrv?.correctedRate,
             ecgQuality:     ecgQuality,
