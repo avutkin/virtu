@@ -170,8 +170,6 @@ private struct MetricChartCard: View {
     @Binding var selectedX: Date?
     @Binding var panOffset: TimeInterval   // seconds the window is panned from its newest edge (≤ 0)
     @State private var showInfo = false
-    @State private var isPanning = false
-    @State private var panStart: TimeInterval = 0
 
     init(title: String, technicalName: String = "", subtitle: String, yLabel: String,
          color: Color, windows: [TimeWindow], refs: [RefLine],
@@ -585,6 +583,10 @@ private struct MetricChartCard: View {
             }
             .chartXScale(domain: start...end)
             .chartYScale(domain: domain)
+            // Native selection: scroll-safe (a plain swipe scrolls the list; a
+            // press-drag scrubs), and it drives the crosshair via `selectedX`.
+            .chartXSelection(value: $selectedX)
+            .onChange(of: selectedX) { _, sel in edgePanIfNeeded(sel) }
             .chartOverlay { proxy in chartOverlay(pts: pts, proxy: proxy) }
             .chartXAxis {
                 AxisMarks(values: .automatic(desiredCount: 4)) {
@@ -611,21 +613,15 @@ private struct MetricChartCard: View {
 
     // MARK: Selection overlay
 
+    /// Purely visual crosshair for the current selection. It never participates
+    /// in hit-testing (`allowsHitTesting(false)`), so it can't block the vertical
+    /// ScrollView or the chart's own native selection gesture. The selection
+    /// itself is driven by `.chartXSelection` (see `chart(_:domain:)`), which is
+    /// scroll-safe: a plain swipe scrolls the list, a press-drag scrubs the line.
     private func chartOverlay(pts: [ChartPoint], proxy: ChartProxy) -> some View {
         GeometryReader { geo in
             let pf = proxy.plotFrame.map { geo[$0] } ?? CGRect(origin: .zero, size: geo.size)
             ZStack(alignment: .topLeading) {
-                // Transparent layer that captures press-to-inspect / drag-to-pan.
-                // A plain swipe is NOT captured here, so the vertical ScrollView
-                // scrolls freely; only a press-and-hold arms the scrubber.
-                Rectangle()
-                    .fill(Color.clear)
-                    .contentShape(Rectangle())
-                    .gesture(scrubGesture(proxy: proxy,
-                                          plotWidth: pf.width,
-                                          plotOriginX: pf.origin.x))
-
-                // Inspection cursor for the selected point.
                 if let selX = selectedX,
                    let nearest = pts.min(by: {
                        abs($0.date.timeIntervalSince(selX)) < abs($1.date.timeIntervalSince(selX))
@@ -648,35 +644,28 @@ private struct MetricChartCard: View {
                         )
                 }
             }
+            .allowsHitTesting(false)
         }
     }
 
-    /// Press-and-hold to arm the scrubber, then drag left/right to move through
-    /// time. Requiring the long press first means a plain vertical swipe is left
-    /// entirely to the enclosing ScrollView — vertical scrolling stays the
-    /// priority and never fights the chart. Once armed, the vertical inspection
-    /// line + time bubble track the finger, and horizontal drag pans the shared
-    /// window 1:1 (all charts move together).
-    private func scrubGesture(proxy: ChartProxy, plotWidth: CGFloat, plotOriginX: CGFloat) -> some Gesture {
-        LongPressGesture(minimumDuration: 0.2)
-            .sequenced(before: DragGesture(minimumDistance: 0))
-            .onChanged { seq in
-                guard case .second(true, let drag) = seq else { return }
-                if !isPanning {
-                    isPanning = true
-                    panStart  = panOffset
-                }
-                guard let drag else { return }
-                // Pan the window 1:1 with horizontal finger travel.
-                let scale = win.seconds / Double(max(plotWidth, 1))
-                let raw   = panStart - Double(drag.translation.width) * scale
-                panOffset = min(max(raw, panBounds.lowerBound), panBounds.upperBound)
-                // Inspection line at the finger's current time in the (panned) window.
-                if let d: Date = proxy.value(atX: drag.location.x - plotOriginX) {
-                    selectedX = d
-                }
-            }
-            .onEnded { _ in isPanning = false }
+    /// When the selection is dragged to the far edge of the visible window,
+    /// nudge the shared window through time so the chart scrolls left/right —
+    /// this is the "move the chart with the line" behaviour, and it only happens
+    /// while actively scrubbing (selection non-nil), never during a plain scroll.
+    private func edgePanIfNeeded(_ selection: Date?) {
+        guard let sel = selection else { return }
+        let (wStart, wEnd) = windowDates
+        let span   = wEnd.timeIntervalSince(wStart)
+        guard span > 0 else { return }
+        let margin = span * 0.06
+        let step   = span * 0.04
+        if sel > wEnd.addingTimeInterval(-margin) {
+            let next = min(panOffset + step, panBounds.upperBound)
+            if next != panOffset { panOffset = next }
+        } else if sel < wStart.addingTimeInterval(margin) {
+            let next = max(panOffset - step, panBounds.lowerBound)
+            if next != panOffset { panOffset = next }
+        }
     }
 
     private func selectionBubble(_ pt: ChartPoint) -> some View {
