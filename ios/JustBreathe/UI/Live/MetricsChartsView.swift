@@ -155,6 +155,10 @@ private struct MetricChartCard: View {
     let date:       Date
     let smooth:     Bool
     let dynamicY:   Bool
+    /// Dim the line where the underlying window is low-confidence (high artifact
+    /// rate). Purely visual — no value is changed. Off for the signal-quality
+    /// charts themselves (they must stay fully visible when artifacts are high).
+    let flagUnreliable: Bool
     let info:       MetricInfo?
     let extract:          (MetricsHistoryPoint) -> Double?
     /// Optional transform applied to each bucket mean after averaging.
@@ -177,6 +181,7 @@ private struct MetricChartCard: View {
          panOffset: Binding<TimeInterval>,
          smooth: Bool = false,
          dynamicY: Bool = false,
+         flagUnreliable: Bool = true,
          info: MetricInfo? = nil,
          history: [MetricsHistoryPoint],
          rawHistory: [MetricsHistoryPoint] = [],
@@ -193,6 +198,7 @@ private struct MetricChartCard: View {
         self.yDomain         = yDomain
         self.smooth          = smooth
         self.dynamicY        = dynamicY
+        self.flagUnreliable  = flagUnreliable
         self.info            = info
         self.history         = history
         self.rawHistory      = rawHistory
@@ -490,6 +496,15 @@ private struct MetricChartCard: View {
         .frame(height: 110)
     }
 
+    /// Line/point colour for a bucket: faded when the window is low-confidence
+    /// (artifact rate > 30%), so unreliable stretches read as uncertain without
+    /// altering the plotted value. Full colour when flagging is off or quality
+    /// is unknown.
+    private func markColor(_ pt: ChartPoint) -> Color {
+        guard flagUnreliable, let q = pt.quality, q < 0.70 else { return color }
+        return color.opacity(0.22)
+    }
+
     private func chart(_ pts: [ChartPoint], domain: ClosedRange<Double>) -> some View {
         let (start, end) = windowDates
         let bands        = anomalyBands
@@ -554,7 +569,7 @@ private struct MetricChartCard: View {
                         x: .value("time", pt.date),
                         y: .value(yLabel, pt.val)
                     )
-                    .foregroundStyle(color)
+                    .foregroundStyle(markColor(pt))
                     .interpolationMethod(.catmullRom)
                     .lineStyle(StrokeStyle(lineWidth: 1.5))
                 }
@@ -564,7 +579,7 @@ private struct MetricChartCard: View {
                         x: .value("time", pt.date),
                         y: .value(yLabel, pt.val)
                     )
-                    .foregroundStyle(color)
+                    .foregroundStyle(markColor(pt))
                     .symbolSize(18)
                 }
             }
@@ -753,6 +768,7 @@ struct MetricsChartsView: View, Equatable {
             yDomain: 0...25,
             win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             dynamicY: true,
+            flagUnreliable: false,
             info: MetricInfo(
                 "Share of RR (beat-to-beat) intervals in each window that the algorithm rejected as implausible or replaced by interpolation. Artifact Rate = (invalid + corrected) / total × 100.",
                 physical:    "The Polar H10 timestamps each heartbeat. A garbled/duplicated BLE frame, a missed beat, or an extra (false) detection produces an RR interval that is physiologically impossible or a clear outlier.",
@@ -779,6 +795,7 @@ struct MetricsChartsView: View, Equatable {
             yDomain: 0...10,
             win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             dynamicY: true,
+            flagUnreliable: false,
             history: history, rawHistory: rawHistory, date: date
         ) { $0.rrCorrectedRate.map { Double($0) * 100 } }
     }
@@ -799,6 +816,7 @@ struct MetricsChartsView: View, Equatable {
             ],
             yDomain: 0...100,
             win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
+            flagUnreliable: false,
             info: MetricInfo(
                 "Quality of the raw ECG waveform (independent of the RR intervals): 0% = clean, 50% = clipping/noise, 100% = lead-off (flatline). Complements Signal Artifacts, which is beat-timing based.",
                 physical:    "Read from the 130 Hz ECG. A near-flat trace means an electrode has lost skin contact (lead-off); pinned/clipped samples mean the amplifier railed from a large motion transient.",
