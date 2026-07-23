@@ -32,8 +32,16 @@ struct OnboardingScaffold<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            Image("VirtuLogo")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 20, height: 20)
+                .foregroundStyle(Theme.dim)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 6)
+
             OnboardingProgressBar(progress: progress)
-                .padding(.top, 8)
+                .padding(.top, 10)
                 .padding(.horizontal, 24)
 
             VStack(alignment: .leading, spacing: 8) {
@@ -165,17 +173,23 @@ struct OnboardingWelcomeScreen: View {
             Image("VirtuLogo")
                 .resizable()
                 .scaledToFit()
-                .frame(width: 64, height: 64)
-                .foregroundStyle(Theme.accent)
-            Text("VIRTÙ")
-                .font(.system(size: 30, weight: .bold))
+                .frame(width: 76, height: 76)
                 .foregroundStyle(Theme.text)
-                .padding(.top, 20)
+            Text("VIRTÙ")
+                .font(.system(size: 34, weight: .bold))
+                .foregroundStyle(Theme.text)
+                .tracking(4)
+                .padding(.top, 22)
+            Text("breathe · measure · grow")
+                .font(Theme.monoLabel)
+                .foregroundStyle(Theme.dim)
+                .tracking(3.5)
+                .padding(.top, 8)
             Text("Understand your nervous system,\none breath at a time.")
                 .font(Theme.monoBody)
                 .foregroundStyle(Theme.dim)
                 .multilineTextAlignment(.center)
-                .padding(.top, 10)
+                .padding(.top, 20)
             Spacer()
             Button(action: onStart) {
                 Text("Get Started")
