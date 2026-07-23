@@ -1,15 +1,15 @@
 import SwiftUI
 
-// MARK: - Sporty accent gradient
+// MARK: - Premium graphite accent gradient
 //
-// A vivid diagonal gradient — the app's green driving into cyan and electric
-// blue — used for every accented surface in onboarding (primary buttons,
-// selected options/chips, progress bar, strap highlight) so the flow reads
-// energetic and dynamic rather than flat.
+// A refined diagonal graphite/gunmetal gradient — light grey easing into deep
+// charcoal — used for every accented surface in onboarding (primary buttons,
+// selected options/chips, progress bar, strap highlight) for an understated,
+// premium feel. White text stays legible across the range.
 
 extension LinearGradient {
     static let onboardingPrimary = LinearGradient(
-        colors: [Color(hex: "#00E5A0"), Color(hex: "#00C2FF"), Color(hex: "#4D5DFB")],
+        colors: [Color(hex: "#6E6E76"), Color(hex: "#3A3A40"), Color(hex: "#1E1E22")],
         startPoint: .topLeading, endPoint: .bottomTrailing
     )
 }
@@ -480,7 +480,7 @@ struct ChestStrapDiagram: View {
                 Capsule()
                     .fill(LinearGradient.onboardingPrimary)
                     .frame(width: 112, height: 16)
-                    .shadow(color: Color(hex: "#00C2FF").opacity(0.55), radius: 8)
+                    .shadow(color: Color.black.opacity(0.5), radius: 8)
                     .overlay(
                         // Sensor pod centered on the strap
                         RoundedRectangle(cornerRadius: 3)
