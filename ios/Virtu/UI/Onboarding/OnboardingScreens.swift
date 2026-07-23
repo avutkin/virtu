@@ -1,14 +1,16 @@
 import SwiftUI
 
-// MARK: - Primary button fill
+// MARK: - Sporty accent gradient
 //
-// Warm brown fading into near-black — replaces the green accent on the flow's
-// primary CTA buttons.
+// A vivid diagonal gradient — the app's green driving into cyan and electric
+// blue — used for every accented surface in onboarding (primary buttons,
+// selected options/chips, progress bar, strap highlight) so the flow reads
+// energetic and dynamic rather than flat.
 
 extension LinearGradient {
     static let onboardingPrimary = LinearGradient(
-        colors: [Color(hex: "#7A4E2E"), Color(hex: "#1C120B")],
-        startPoint: .top, endPoint: .bottom
+        colors: [Color(hex: "#00E5A0"), Color(hex: "#00C2FF"), Color(hex: "#4D5DFB")],
+        startPoint: .topLeading, endPoint: .bottomTrailing
     )
 }
 
@@ -95,7 +97,7 @@ struct OnboardingProgressBar: View {
             ZStack(alignment: .leading) {
                 Capsule().fill(Theme.surface)
                 Capsule()
-                    .fill(Theme.accent)
+                    .fill(LinearGradient.onboardingPrimary)
                     .frame(width: max(6, geo.size.width * min(max(progress, 0), 1)))
                     .animation(.easeInOut(duration: 0.3), value: progress)
             }
@@ -123,22 +125,24 @@ struct OptionCard: View {
             HStack(spacing: 12) {
                 Image(systemName: option.icon)
                     .font(.system(size: 18))
-                    .foregroundStyle(selected ? Theme.bg : Theme.text)
+                    .foregroundStyle(Theme.text)
                     .frame(width: 26)
                 Text(option.label)
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(selected ? Theme.bg : Theme.text)
+                    .foregroundStyle(Theme.text)
                 Spacer()
                 if selected {
                     Image(systemName: "checkmark")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(Theme.bg)
+                        .foregroundStyle(Theme.text)
                 }
             }
             .padding(.horizontal, 16)
             .frame(height: 56)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(selected ? Theme.accent : Theme.surface)
+            .background(selected
+                        ? AnyShapeStyle(LinearGradient.onboardingPrimary)
+                        : AnyShapeStyle(Theme.surface))
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .overlay(
                 RoundedRectangle(cornerRadius: 14)
@@ -376,10 +380,12 @@ struct FlowChips: View {
             } label: {
                 Text(opt)
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(sel ? Theme.bg : Theme.text)
+                    .foregroundStyle(Theme.text)
                     .padding(.horizontal, 14)
                     .frame(height: 40)
-                    .background(sel ? Theme.accent : Theme.surface)
+                    .background(sel
+                                ? AnyShapeStyle(LinearGradient.onboardingPrimary)
+                                : AnyShapeStyle(Theme.surface))
                     .clipShape(Capsule())
                     .overlay(Capsule().strokeBorder(sel ? Color.clear : Theme.border, lineWidth: 0.5))
             }
@@ -472,9 +478,9 @@ struct ChestStrapDiagram: View {
 
                 // Strap band
                 Capsule()
-                    .fill(Theme.accent)
+                    .fill(LinearGradient.onboardingPrimary)
                     .frame(width: 112, height: 16)
-                    .shadow(color: Theme.accent.opacity(0.55), radius: 8)
+                    .shadow(color: Color(hex: "#00C2FF").opacity(0.55), radius: 8)
                     .overlay(
                         // Sensor pod centered on the strap
                         RoundedRectangle(cornerRadius: 3)
