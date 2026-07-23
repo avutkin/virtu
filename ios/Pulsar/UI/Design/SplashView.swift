@@ -32,10 +32,19 @@ struct SplashView: View {
                         .frame(width: 60, height: 60)
                         .foregroundStyle(Color(hex: "#EDE8DF"))
 
-                    Text("Pulsar")
-                        .font(.custom("JetBrainsMono-Regular", size: 18))
-                        .foregroundStyle(Color.white)
-                        .tracking(2)
+                    VStack(spacing: 10) {
+                        Text("Pulsar")
+                            .font(.custom("JetBrainsMono-Regular", size: 18))
+                            .foregroundStyle(Color.white)
+                            .tracking(2)
+
+                        Text("Discover the Universe Inside You")
+                            .font(.custom("JetBrainsMono-Regular", size: 11))
+                            .foregroundStyle(Color(hex: "#8FA8BF"))
+                            .tracking(1)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
+                    }
                 }
                 .padding(.top, 64)
 
