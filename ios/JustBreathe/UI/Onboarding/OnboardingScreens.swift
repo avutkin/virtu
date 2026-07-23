@@ -1,5 +1,17 @@
 import SwiftUI
 
+// MARK: - Primary button fill
+//
+// Warm brown fading into near-black — replaces the green accent on the flow's
+// primary CTA buttons.
+
+extension LinearGradient {
+    static let onboardingPrimary = LinearGradient(
+        colors: [Color(hex: "#7A4E2E"), Color(hex: "#1C120B")],
+        startPoint: .top, endPoint: .bottom
+    )
+}
+
 // MARK: - Shared chrome
 //
 // Every non-welcome step renders inside `OnboardingScaffold`: progress bar on
@@ -60,10 +72,12 @@ struct OnboardingScaffold<Content: View>: View {
             Button(action: onContinue) {
                 Text(continueTitle)
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(canContinue ? Theme.bg : Theme.dim)
+                    .foregroundStyle(canContinue ? Theme.text : Theme.dim)
                     .frame(maxWidth: .infinity)
                     .frame(height: 52)
-                    .background(canContinue ? Theme.accent : Theme.surface)
+                    .background(canContinue
+                                ? AnyShapeStyle(LinearGradient.onboardingPrimary)
+                                : AnyShapeStyle(Theme.surface))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             }
             .disabled(!canContinue)
@@ -160,10 +174,10 @@ struct OnboardingWelcomeScreen: View {
             Button(action: onStart) {
                 Text("Get Started")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Theme.bg)
+                    .foregroundStyle(Theme.text)
                     .frame(maxWidth: .infinity)
                     .frame(height: 52)
-                    .background(Theme.accent)
+                    .background(LinearGradient.onboardingPrimary)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             }
             .padding(.horizontal, 24)
@@ -508,10 +522,10 @@ struct OnboardingConnectScreen: View {
                         Text("Connect device")
                     }
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Theme.bg)
+                    .foregroundStyle(Theme.text)
                     .frame(maxWidth: .infinity)
                     .frame(height: 52)
-                    .background(Theme.accent)
+                    .background(LinearGradient.onboardingPrimary)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
 
