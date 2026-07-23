@@ -45,6 +45,9 @@
 		A136 /* ActivityLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F136 /* ActivityLog.swift */; };
 		A137 /* ActivitiesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F137 /* ActivitiesView.swift */; };
 		A138 /* PolyvagalState.swift in Sources */ = {isa = PBXBuildFile; fileRef = F138 /* PolyvagalState.swift */; };
+		A160 /* ClientProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = F160 /* ClientProfile.swift */; };
+		A161 /* OnboardingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F161 /* OnboardingFlow.swift */; };
+		A162 /* OnboardingScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = F162 /* OnboardingScreens.swift */; };
 		A139 /* CurrentStateCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F139 /* CurrentStateCard.swift */; };
 		A140 /* RecommendedActionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F140 /* RecommendedActionCard.swift */; };
 		A147 /* LiveStateWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F147 /* LiveStateWidget.swift */; };
@@ -69,6 +72,7 @@
 		AT04 /* InsightGeneratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT04 /* InsightGeneratorTests.swift */; };
 		AT05 /* LiveStateTrendComputeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT05 /* LiveStateTrendComputeTests.swift */; };
 		AT06 /* PayloadBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT06 /* PayloadBuilderTests.swift */; };
+		AT10 /* ClientProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT10 /* ClientProfileTests.swift */; };
 		AT07 /* ActivityMetricStatsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT07 /* ActivityMetricStatsTests.swift */; };
 		AT08 /* ActivityImpactTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT08 /* ActivityImpactTests.swift */; };
 /* End PBXBuildFile section */
@@ -122,6 +126,10 @@
 		F136 /* ActivityLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityLog.swift; sourceTree = "<group>"; };
 		F137 /* ActivitiesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivitiesView.swift; sourceTree = "<group>"; };
 		F138 /* PolyvagalState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolyvagalState.swift; sourceTree = "<group>"; };
+		F160 /* ClientProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClientProfile.swift; sourceTree = "<group>"; };
+		F161 /* OnboardingFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlow.swift; sourceTree = "<group>"; };
+		F162 /* OnboardingScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingScreens.swift; sourceTree = "<group>"; };
+		FT10 /* ClientProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClientProfileTests.swift; sourceTree = "<group>"; };
 		F139 /* CurrentStateCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrentStateCard.swift; sourceTree = "<group>"; };
 		F140 /* RecommendedActionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecommendedActionCard.swift; sourceTree = "<group>"; };
 		F147 /* LiveStateWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveStateWidget.swift; sourceTree = "<group>"; };
@@ -252,6 +260,15 @@
 			path = Live;
 			sourceTree = "<group>";
 		};
+		GAPP_ONB /* Onboarding */ = {
+			isa = PBXGroup;
+			children = (
+				F161 /* OnboardingFlow.swift */,
+				F162 /* OnboardingScreens.swift */,
+			);
+			path = Onboarding;
+			sourceTree = "<group>";
+		};
 		GAPP_MET /* Metrics */ = {
 			isa = PBXGroup;
 			children = (
@@ -281,6 +298,7 @@
 				F135 /* TrainSession.swift */,
 				F136 /* ActivityLog.swift */,
 				F138 /* PolyvagalState.swift */,
+				F160 /* ClientProfile.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -330,6 +348,7 @@
 			children = (
 				GAPP_DES /* Design */,
 				GAPP_LIV /* Live */,
+				GAPP_ONB /* Onboarding */,
 				GAPP_TRN /* Train */,
 				GAPP_ACT /* Activities */,
 				GAPP_RES /* Resonate */,
@@ -368,6 +387,7 @@
 				FT06 /* PayloadBuilderTests.swift */,
 				FT07 /* ActivityMetricStatsTests.swift */,
 				FT08 /* ActivityImpactTests.swift */,
+				FT10 /* ClientProfileTests.swift */,
 			);
 			path = JustBreatheTests;
 			sourceTree = "<group>";
@@ -498,6 +518,9 @@
 				A136 /* ActivityLog.swift in Sources */,
 				A137 /* ActivitiesView.swift in Sources */,
 				A138 /* PolyvagalState.swift in Sources */,
+				A160 /* ClientProfile.swift in Sources */,
+				A161 /* OnboardingFlow.swift in Sources */,
+				A162 /* OnboardingScreens.swift in Sources */,
 				A139 /* CurrentStateCard.swift in Sources */,
 				A140 /* RecommendedActionCard.swift in Sources */,
 				A147 /* LiveStateWidget.swift in Sources */,
@@ -531,6 +554,7 @@
 				AT04 /* InsightGeneratorTests.swift in Sources */,
 				AT05 /* LiveStateTrendComputeTests.swift in Sources */,
 				AT06 /* PayloadBuilderTests.swift in Sources */,
+				AT10 /* ClientProfileTests.swift in Sources */,
 				AT07 /* ActivityMetricStatsTests.swift in Sources */,
 				AT08 /* ActivityImpactTests.swift in Sources */,
 			);

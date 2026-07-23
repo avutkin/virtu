@@ -63,8 +63,22 @@ enum AppTab: Hashable { case train, activities, live, track, settings }
 struct ContentView: View {
     @Environment(AppEnvironment.self) var env
     @State private var selectedTab: AppTab = .live
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
     var body: some View {
+        Group {
+            if hasCompletedOnboarding {
+                mainApp
+            } else {
+                OnboardingFlow {
+                    withAnimation(.easeInOut(duration: 0.35)) { hasCompletedOnboarding = true }
+                }
+                .transition(.opacity)
+            }
+        }
+    }
+
+    private var mainApp: some View {
         TabView(selection: $selectedTab) {
             TrainView()
                 .tag(AppTab.train)
