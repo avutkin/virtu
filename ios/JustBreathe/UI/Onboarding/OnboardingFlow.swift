@@ -117,8 +117,8 @@ struct OnboardingFlow: View {
         case .practices:
             OnboardingMultiSelectScreen(
                 progress: step.progress,
-                question: "Which practices would you like to do more?",
-                subtitle: "We'll help you build the habit.",
+                question: "What practices do you do regularly?",
+                subtitle: "Pick all that apply.",
                 options: practiceOptions,
                 selection: $profile.practices,
                 onBack: { go(.goals) },
