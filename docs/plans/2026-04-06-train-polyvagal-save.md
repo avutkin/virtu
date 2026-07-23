@@ -16,9 +16,9 @@
 
 ### Existing patterns to follow
 
-- **SwiftData models** live in `ios/JustBreathe/Models/`. Each uses `@Model final class` with `@Attribute(.unique) var id: UUID`. See `HRVSession.swift` for the exact pattern.
-- **Schema registration** is in `JustBreatheApp.swift` line `Schema([HRVSession.self, HRVSample.self, ResonanceResult.self])` — new models must be added here **and** to both `container` and `_env` initializers (both have the same schema).
-- **Xcode project file** is at `ios/JustBreathe.xcodeproj/project.pbxproj`. Every new `.swift` file must be registered there manually (the project doesn't auto-discover). Next available IDs are **F135 / A135**. Pattern:
+- **SwiftData models** live in `ios/Virtu/Models/`. Each uses `@Model final class` with `@Attribute(.unique) var id: UUID`. See `HRVSession.swift` for the exact pattern.
+- **Schema registration** is in `VirtuApp.swift` line `Schema([HRVSession.self, HRVSample.self, ResonanceResult.self])` — new models must be added here **and** to both `container` and `_env` initializers (both have the same schema).
+- **Xcode project file** is at `ios/Virtu.xcodeproj/project.pbxproj`. Every new `.swift` file must be registered there manually (the project doesn't auto-discover). Next available IDs are **F135 / A135**. Pattern:
   - Add `F135 /* TrainSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainSession.swift; sourceTree = "<group>"; };` to the PBXFileReference section
   - Add `A135 /* TrainSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = F135 /* TrainSession.swift */; };` to the PBXBuildFile section
   - Add `F135 /* TrainSession.swift */,` inside `GAPP_MOD /* Models */` group children
@@ -33,13 +33,13 @@
 ## Task 1: `TrainSession` SwiftData Model
 
 **Files:**
-- Create: `ios/JustBreathe/Models/TrainSession.swift`
-- Modify: `ios/JustBreathe.xcodeproj/project.pbxproj`
-- Modify: `ios/JustBreathe/App/JustBreatheApp.swift`
+- Create: `ios/Virtu/Models/TrainSession.swift`
+- Modify: `ios/Virtu.xcodeproj/project.pbxproj`
+- Modify: `ios/Virtu/App/VirtuApp.swift`
 
 ### Step 1: Create the model file
 
-Create `ios/JustBreathe/Models/TrainSession.swift`:
+Create `ios/Virtu/Models/TrainSession.swift`:
 
 ```swift
 import Foundation
@@ -93,7 +93,7 @@ final class TrainSession {
 
 ### Step 2: Register in pbxproj
 
-In `ios/JustBreathe.xcodeproj/project.pbxproj`, make **four** edits:
+In `ios/Virtu.xcodeproj/project.pbxproj`, make **four** edits:
 
 **a)** In the PBXBuildFile section (near `A132`/`A133`/`A134` lines), add:
 ```
@@ -114,7 +114,7 @@ In `ios/JustBreathe.xcodeproj/project.pbxproj`, make **four** edits:
 
 ### Step 3: Add to SwiftData schema
 
-In `JustBreatheApp.swift`, find **both** `Schema([HRVSession.self, HRVSample.self, ResonanceResult.self])` occurrences (one at line ~8, one in `init()`) and change both to:
+In `VirtuApp.swift`, find **both** `Schema([HRVSession.self, HRVSample.self, ResonanceResult.self])` occurrences (one at line ~8, one in `init()`) and change both to:
 ```swift
 Schema([HRVSession.self, HRVSample.self, ResonanceResult.self, TrainSession.self])
 ```
@@ -126,9 +126,9 @@ Build the app (⌘B). Expected: zero errors. The new model is inert — nothing 
 ### Step 5: Commit
 
 ```bash
-git add ios/JustBreathe/Models/TrainSession.swift \
-        ios/JustBreathe.xcodeproj/project.pbxproj \
-        ios/JustBreathe/App/JustBreatheApp.swift
+git add ios/Virtu/Models/TrainSession.swift \
+        ios/Virtu.xcodeproj/project.pbxproj \
+        ios/Virtu/App/VirtuApp.swift
 git commit -m "feat(train): add TrainSession SwiftData model"
 ```
 
@@ -137,7 +137,7 @@ git commit -m "feat(train): add TrainSession SwiftData model"
 ## Task 2: Polyvagal Autonomic Computation + AutonomicCard
 
 **Files:**
-- Modify: `ios/JustBreathe/UI/Train/TrainView.swift`
+- Modify: `ios/Virtu/UI/Train/TrainView.swift`
 
 All new code goes inside `TrainView.swift` as private types/structs.
 
@@ -333,7 +333,7 @@ Build (⌘B) — zero errors expected. Open Train tab in simulator — card show
 ### Step 5: Commit
 
 ```bash
-git add ios/JustBreathe/UI/Train/TrainView.swift
+git add ios/Virtu/UI/Train/TrainView.swift
 git commit -m "feat(train): add polyvagal AutonomicCard with SNS/PNS balance"
 ```
 
@@ -342,7 +342,7 @@ git commit -m "feat(train): add polyvagal AutonomicCard with SNS/PNS balance"
 ## Task 3: Session Recording — START / END TRAINING
 
 **Files:**
-- Modify: `ios/JustBreathe/UI/Train/TrainView.swift`
+- Modify: `ios/Virtu/UI/Train/TrainView.swift`
 
 ### Step 1: Add session state to `TrainView`
 
@@ -497,7 +497,7 @@ Build (⌘B). Run in simulator: tap START TRAINING → do jumping jacks → tap 
 ### Step 6: Commit
 
 ```bash
-git add ios/JustBreathe/UI/Train/TrainView.swift
+git add ios/Virtu/UI/Train/TrainView.swift
 git commit -m "feat(train): START/END TRAINING session recording with set+recovery tracking"
 ```
 
@@ -506,7 +506,7 @@ git commit -m "feat(train): START/END TRAINING session recording with set+recove
 ## Task 4: TRAIN Section in History Tab
 
 **Files:**
-- Modify: `ios/JustBreathe/UI/History/HistoryView.swift`
+- Modify: `ios/Virtu/UI/History/HistoryView.swift`
 
 ### Step 1: Add the `HistoryTab` enum and `@Query` for `TrainSession`
 
@@ -635,7 +635,7 @@ private struct TrainSessionRow: View {
 ### Step 6: Commit
 
 ```bash
-git add ios/JustBreathe/UI/History/HistoryView.swift
+git add ios/Virtu/UI/History/HistoryView.swift
 git commit -m "feat(history): add TRAIN session list with set/recovery/autonomic summary"
 ```
 
@@ -644,7 +644,7 @@ git commit -m "feat(history): add TRAIN session list with set/recovery/autonomic
 ## Final Checklist
 
 - [ ] `TrainSession.swift` created and registered in pbxproj
-- [ ] `TrainSession` added to both `Schema(...)` calls in `JustBreatheApp.swift`
+- [ ] `TrainSession` added to both `Schema(...)` calls in `VirtuApp.swift`
 - [ ] `AutonomicCompute` correctly uses LFnu/HFnu with RMSSD fallback
 - [ ] `AutonomicCard` visible in Train tab, updates live, animates
 - [ ] START TRAINING button appears after baseline calibration

@@ -80,7 +80,7 @@ Fallback when freq-domain unavailable (< 30 RR intervals):
 }
 ```
 
-Added to the existing `Schema` in `JustBreatheApp.swift`.
+Added to the existing `Schema` in `VirtuApp.swift`.
 
 ### Session Lifecycle in TrainView
 
@@ -124,7 +124,7 @@ TRAIN segment shows a list of `TrainSession` records:
 | `Models/TrainSession.swift` | NEW — SwiftData model |
 | `UI/Train/TrainView.swift` | Add `AutonomicCard`, START/END buttons, session recording logic |
 | `UI/History/HistoryView.swift` | Add TRAIN segment with `TrainSession` list |
-| `App/JustBreatheApp.swift` | Add `TrainSession` to SwiftData schema |
+| `App/VirtuApp.swift` | Add `TrainSession` to SwiftData schema |
 
 ---
 
