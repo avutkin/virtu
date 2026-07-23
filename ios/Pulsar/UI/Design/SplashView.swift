@@ -33,13 +33,9 @@ struct SplashView: View {
                         .foregroundStyle(Color(hex: "#EDE8DF"))
 
                     Text("Pulsar")
-                        .font(.custom("JetBrainsMono-Regular", size: 30))
+                        .font(.custom("JetBrainsMono-Regular", size: 18))
                         .foregroundStyle(Color.white)
-
-                    Text("breathe · measure · grow")
-                        .font(.custom("JetBrainsMono-Regular", size: 9))
-                        .foregroundStyle(Color(hex: "#3A4758"))
-                        .tracking(3.5)
+                        .tracking(2)
                 }
                 .padding(.top, 64)
 
