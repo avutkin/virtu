@@ -25,16 +25,16 @@ struct SplashView: View {
             VStack(spacing: 0) {
 
                 // ── Logo ───────────────────────────────────────────────
-                VStack(spacing: 10) {
-                    HStack(spacing: 10) {
-                        Text("Just")
-                            .font(.custom("JetBrainsMono-Regular", size: 28))
-                            .foregroundStyle(Color(hex: "#EDE8DF"))
-                        Text("Breathe")
-                            .font(.custom("JetBrainsMono-Regular", size: 28))
-                            .italic()
-                            .foregroundStyle(Color.white)
-                    }
+                VStack(spacing: 16) {
+                    Image("VirtuLogo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 60, height: 60)
+                        .foregroundStyle(Color(hex: "#EDE8DF"))
+
+                    Text("Virtù")
+                        .font(.custom("JetBrainsMono-Regular", size: 30))
+                        .foregroundStyle(Color.white)
 
                     Text("breathe · measure · grow")
                         .font(.custom("JetBrainsMono-Regular", size: 9))

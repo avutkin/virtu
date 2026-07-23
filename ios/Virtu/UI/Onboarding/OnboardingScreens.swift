@@ -162,10 +162,12 @@ struct OnboardingWelcomeScreen: View {
     var body: some View {
         VStack(spacing: 0) {
             Spacer()
-            Image(systemName: "wind")
-                .font(.system(size: 56, weight: .light))
+            Image("VirtuLogo")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 64, height: 64)
                 .foregroundStyle(Theme.accent)
-            Text("JUST BREATHE")
+            Text("VIRTÙ")
                 .font(.system(size: 30, weight: .bold))
                 .foregroundStyle(Theme.text)
                 .padding(.top, 20)
