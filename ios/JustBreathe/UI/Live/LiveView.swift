@@ -10,6 +10,8 @@ struct LiveView: View {
     @State private var showBLESheet  = false
     @State private var keepAwake     = false
     @State private var pageIndex:    Int = LiveView.todayIndex
+    // Shared chart window for every chart on every day-page; persisted.
+    @AppStorage("liveChartWindow") private var chartWindow: TimeWindow = .h24
 
     // 90-day window: index 0 = oldest, todayIndex = today.
     // Static so it's computed once; acceptable to require app restart at midnight.
@@ -44,6 +46,7 @@ struct LiveView: View {
                     DateNavigator(
                         date:      selectedDate,
                         isToday:   isToday,
+                        window:    $chartWindow,
                         onBack:    goBack,
                         onForward: goForward
                     )
@@ -52,7 +55,7 @@ struct LiveView: View {
                     //    natively; SwiftUI disambiguates H vs V gestures for us.
                     TabView(selection: $pageIndex) {
                         ForEach(0..<LiveView.days.count, id: \.self) { i in
-                            DayScrollView(date: LiveView.days[i])
+                            DayScrollView(date: LiveView.days[i], window: chartWindow)
                                 .tag(i)
                         }
                     }
@@ -95,6 +98,7 @@ struct LiveView: View {
 /// Manages its own history fetch so the parent stays lightweight.
 private struct DayScrollView: View {
     let date: Date
+    let window: TimeWindow
 
     @Environment(AppEnvironment.self) var env
     @Environment(\.modelContext) var ctx
@@ -162,7 +166,7 @@ private struct DayScrollView: View {
                             .font(Theme.monoLabel)
                             .foregroundStyle(Theme.dim)
                             .padding(.horizontal)
-                        MetricsChartsView(history: chartFiltered, rawHistory: chartRaw, date: date)
+                        MetricsChartsView(history: chartFiltered, rawHistory: chartRaw, date: date, window: window)
                             .equatable()
                     }
                 } else if !isToday {
@@ -306,27 +310,43 @@ private struct TodayLiveSection: View {
 private struct DateNavigator: View {
     let date:      Date
     let isToday:   Bool
+    @Binding var window: TimeWindow
     let onBack:    () -> Void
     let onForward: () -> Void
 
     var body: some View {
-        HStack {
+        HStack(spacing: 10) {
             Button(action: onBack) {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(Theme.text)
             }
-            Spacer()
             Text(dateLabel)
                 .font(Theme.monoBody)
                 .foregroundStyle(Theme.text)
-            Spacer()
             Button(action: onForward) {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(isToday ? Theme.dim.opacity(0.3) : Theme.text)
             }
             .disabled(isToday)
+
+            Spacer()
+
+            // Shared window selector — applies to every chart on the page.
+            HStack(spacing: 3) {
+                ForEach(TimeWindow.allCases) { w in
+                    Button(w.rawValue) {
+                        withAnimation(.easeInOut(duration: 0.15)) { window = w }
+                    }
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundStyle(w == window ? Color.black : Theme.dim)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(w == window ? Theme.accent : Color.clear)
+                    .clipShape(Capsule())
+                }
+            }
         }
         .padding(.horizontal)
         .padding(.vertical, 8)

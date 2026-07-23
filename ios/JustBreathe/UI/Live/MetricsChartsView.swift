@@ -166,7 +166,7 @@ private struct MetricChartCard: View {
     /// the underlying linear values (RMSSD), not before.
     let bucketTransform:  ((Double) -> Double)?
 
-    @Binding var win: TimeWindow
+    let win: TimeWindow                    // shared window, chosen at the Today header
     @Binding var selectedX: Date?
     @Binding var panOffset: TimeInterval   // seconds the window is panned from its newest edge (≤ 0)
     @State private var showInfo = false
@@ -174,7 +174,7 @@ private struct MetricChartCard: View {
     init(title: String, technicalName: String = "", subtitle: String, yLabel: String,
          color: Color, windows: [TimeWindow], refs: [RefLine],
          yDomain: ClosedRange<Double>,
-         win: Binding<TimeWindow>,
+         win: TimeWindow,
          selectedX: Binding<Date?>,
          panOffset: Binding<TimeInterval>,
          smooth: Bool = false,
@@ -203,7 +203,7 @@ private struct MetricChartCard: View {
         self.date            = date
         self.bucketTransform = bucketTransform
         self.extract         = extract
-        _win       = win
+        self.win   = win
         _selectedX = selectedX
         _panOffset = panOffset
     }
@@ -422,23 +422,6 @@ private struct MetricChartCard: View {
                     .foregroundStyle(Theme.dim)
             }
             Spacer()
-            windowPicker
-        }
-    }
-
-    private var windowPicker: some View {
-        HStack(spacing: 3) {
-            ForEach(windows) { w in
-                Button(w.rawValue) {
-                    withAnimation(.easeInOut(duration: 0.15)) { win = w }
-                }
-                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                .foregroundStyle(w == win ? Color.black : Theme.dim)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(w == win ? color : Color.clear)
-                .clipShape(Capsule())
-            }
         }
     }
 
@@ -694,9 +677,11 @@ struct MetricsChartsView: View, Equatable {
     let history:    [MetricsHistoryPoint]   // quality-filtered
     let rawHistory: [MetricsHistoryPoint]   // unfiltered — for anomaly highlighting
     let date:       Date
+    let window:     TimeWindow              // shared across all charts, set at the Today header
 
     static func == (lhs: MetricsChartsView, rhs: MetricsChartsView) -> Bool {
         lhs.date == rhs.date
+            && lhs.window == rhs.window
             && lhs.history.count == rhs.history.count
             && lhs.rawHistory.count == rhs.rawHistory.count
             && lhs.history.last?.timestamp == rhs.history.last?.timestamp
@@ -704,15 +689,17 @@ struct MetricsChartsView: View, Equatable {
 
     init(history: [MetricsHistoryPoint],
          rawHistory: [MetricsHistoryPoint] = [],
-         date: Date) {
+         date: Date,
+         window: TimeWindow) {
         self.history    = history
         self.rawHistory = rawHistory
         self.date       = date
+        self.window     = window
     }
 
-    @State private var sharedWin: TimeWindow = .h24
     @State private var sharedSelectedX: Date? = nil
     @State private var sharedPanOffset: TimeInterval = 0
+    @State private var showSignalQuality = false
 
     var body: some View {
         VStack(spacing: 10) {
@@ -726,15 +713,48 @@ struct MetricsChartsView: View, Equatable {
             sdnnCard
             hrCard
 
-            // Signal-integrity diagnostics — share the same timeline as the
-            // metric charts so artifacts can be correlated with any anomaly.
-            signalArtifactsCard
-            rrCorrectedCard
-            ecgSignalCard
+            signalQualitySection
         }
-        .onChange(of: date) { _, _ in
-            sharedPanOffset = 0
-            sharedSelectedX = nil
+        .onChange(of: date)   { _, _ in resetPan() }
+        .onChange(of: window) { _, _ in resetPan() }
+    }
+
+    private func resetPan() {
+        sharedPanOffset = 0
+        sharedSelectedX = nil
+    }
+
+    // MARK: Signal-quality section (collapsible)
+
+    /// Signal-integrity diagnostics — share the same timeline as the metric
+    /// charts so artifacts correlate with any anomaly. Grouped in a dropdown so
+    /// they stay out of the way until you want to inspect signal quality.
+    private var signalQualitySection: some View {
+        VStack(spacing: 10) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { showSignalQuality.toggle() }
+            } label: {
+                HStack {
+                    Text("SIGNAL QUALITY")
+                        .font(Theme.monoLabel)
+                        .foregroundStyle(Theme.dim)
+                    Text("· artifacts · corrected · ECG")
+                        .font(Theme.monoLabel)
+                        .foregroundStyle(Theme.dim.opacity(0.6))
+                    Spacer()
+                    Image(systemName: showSignalQuality ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.dim)
+                }
+                .padding(.vertical, 4)
+            }
+            .buttonStyle(.plain)
+
+            if showSignalQuality {
+                signalArtifactsCard
+                rrCorrectedCard
+                ecgSignalCard
+            }
         }
     }
 
@@ -755,7 +775,7 @@ struct MetricsChartsView: View, Equatable {
                 RefLine(value: 20, label: "20%  poor",       color: Theme.warn),
             ],
             yDomain: 0...25,
-            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
+            win: window, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             dynamicY: true,
             flagUnreliable: false,
             info: MetricInfo(
@@ -785,7 +805,7 @@ struct MetricsChartsView: View, Equatable {
             windows:  TimeWindow.allCases,
             refs: [],
             yDomain: 0...10,
-            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
+            win: window, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             dynamicY: true,
             flagUnreliable: false,
             history: history, rawHistory: rawHistory, date: date
@@ -807,7 +827,7 @@ struct MetricsChartsView: View, Equatable {
                 RefLine(value: 100, label: "lead-off",         color: Theme.warn),
             ],
             yDomain: 0...100,
-            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
+            win: window, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             flagUnreliable: false,
             info: MetricInfo(
                 "Quality of the raw ECG waveform (independent of the RR intervals): 0% = clean, 50% = clipping/noise, 100% = lead-off (flatline). Complements Signal Artifacts, which is beat-timing based.",
@@ -837,7 +857,7 @@ struct MetricsChartsView: View, Equatable {
                 RefLine(value: 100, label: "100 bpm  elevated", color: Theme.warn),
             ],
             yDomain: 40...160,
-            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
+            win: window, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             dynamicY: true,
             info: MetricInfo(
                 "Average heart rate over the selected time window, expressed in beats per minute.",
@@ -866,7 +886,7 @@ struct MetricsChartsView: View, Equatable {
                 RefLine(value: 1000, label:  "60 bpm", color: Theme.coh),
             ],
             yDomain: 350...1500,
-            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
+            win: window, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             info: MetricInfo(
                 "Time between consecutive heartbeats in milliseconds. Calculated as 60,000 ÷ BPM.",
                 physical:    "The R-R interval is the gap between successive QRS complexes on an ECG. It varies continuously due to autonomic nervous system modulation — this variability is the basis of HRV analysis.",
@@ -897,7 +917,7 @@ struct MetricsChartsView: View, Equatable {
                 RefLine(value: 2.0, label: "strong vagal  ≥ 2.0", color: Theme.coh),
             ],
             yDomain: 0...2.8,
-            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
+            win: window, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             info: MetricInfo(
                 "Ratio of exhale duration to inhale duration, averaged across breaths in the window.",
                 physical:    "Inhalation expands the thorax, lowering intrathoracic pressure and briefly inhibiting vagal outflow. Exhalation reverses this, activating the vagal brake and slowing HR. A longer exhale therefore produces stronger parasympathetic activation.",
@@ -926,7 +946,7 @@ struct MetricsChartsView: View, Equatable {
                 RefLine(value: 4.6, label: "good (≈100ms)", color: Theme.coh),
             ],
             yDomain: 2.0...5.5,
-            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
+            win: window, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             info: MetricInfo(
                 "Natural logarithm of RMSSD — a normalised, scale-independent index of parasympathetic tone.",
                 physical:    "RMSSD is the root mean square of successive RR differences — the most validated time-domain HRV measure for vagal activity. Taking ln() compresses its skewed distribution into a roughly normal one, making it more suitable for tracking and comparison.",
@@ -957,7 +977,7 @@ struct MetricsChartsView: View, Equatable {
                 RefLine(value: 90, label: "strong", color: Theme.coh),
             ],
             yDomain: 0...120,
-            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
+            win: window, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             smooth:  true,
             info: MetricInfo(
                 "Amplitude of the heart rate oscillation driven specifically by breathing — the peak-to-trough RR swing at your current breathing frequency.",
@@ -988,7 +1008,7 @@ struct MetricsChartsView: View, Equatable {
                 RefLine(value: 100, label: "healthy",   color: Theme.coh),
             ],
             yDomain: 0...160,
-            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
+            win: window, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             info: MetricInfo(
                 "Standard deviation of all RR intervals in the window — the broadest measure of total heart rate variability.",
                 physical:    "SDNN captures variability across all time scales simultaneously: ultra-slow hormonal rhythms, baroreceptor loops (LF), and respiratory modulation (HF). It reflects the total power of the ANS's influence on heart rhythm.",
@@ -1016,7 +1036,7 @@ struct MetricsChartsView: View, Equatable {
                 RefLine(value: 20, label: "good",   color: Theme.coh),
             ],
             yDomain: 0...80,
-            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
+            win: window, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             info: MetricInfo(
                 "Percentage of consecutive RR interval pairs that differ by more than 50 ms.",
                 physical:    "Each pair of adjacent beats is checked: if |RR[n+1] − RR[n]| > 50 ms, it counts. pNN50 is the proportion of such pairs. It is highly correlated with HF power and captures rapid, breath-linked parasympathetic fluctuations.",
@@ -1045,7 +1065,7 @@ struct MetricsChartsView: View, Equatable {
                 RefLine(value: 10.0, label: "healthy",          color: Theme.coh),
             ],
             yDomain: 0...20,
-            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
+            win: window, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             smooth: true,
             dynamicY: true,
             info: MetricInfo(
@@ -1076,7 +1096,7 @@ struct MetricsChartsView: View, Equatable {
                 RefLine(value: 2.0, label: "Thriving",   color: Theme.coh),
             ],
             yDomain: 0.5...3.0,
-            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
+            win: window, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             smooth: true,
             dynamicY: false,
             info: MetricInfo(
@@ -1107,7 +1127,7 @@ struct MetricsChartsView: View, Equatable {
                 RefLine(value: 70.0, label: "high fragmentation",color: Theme.warn),
             ],
             yDomain: 20...90,
-            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
+            win: window, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             smooth: true,
             dynamicY: false,
             info: MetricInfo(
@@ -1139,7 +1159,7 @@ struct MetricsChartsView: View, Equatable {
                 RefLine(value: 1.5,  label: "Strained",    color: Theme.warn),
             ],
             yDomain: 0.5...1.8,
-            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
+            win: window, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             smooth: true,
             dynamicY: false,
             info: MetricInfo(
@@ -1171,7 +1191,7 @@ struct MetricsChartsView: View, Equatable {
                 RefLine(value: 2.0, label: "sympathetic",     color: Theme.warn),
             ],
             yDomain: 0...5,
-            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
+            win: window, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             dynamicY: true,
             info: MetricInfo(
                 "Ratio of low-frequency (LF, 0.04–0.15 Hz) to high-frequency (HF, 0.15–0.40 Hz) spectral power.",
@@ -1197,7 +1217,7 @@ struct MetricsChartsView: View, Equatable {
             windows: TimeWindow.allCases,
             refs: [],
             yDomain: 0...50,
-            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
+            win: window, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             dynamicY: true,
             info: MetricInfo(
                 "Spectral power in the very low frequency band (0.003–0.04 Hz) — oscillations with cycles of 25 seconds to 5 minutes.",
@@ -1223,7 +1243,7 @@ struct MetricsChartsView: View, Equatable {
             windows: TimeWindow.allCases,
             refs: [],
             yDomain: 0...50,
-            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
+            win: window, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             dynamicY: true,
             info: MetricInfo(
                 "Spectral power in the ultra low frequency band (< 0.003 Hz) — oscillations slower than one cycle per 5 minutes.",
@@ -1253,7 +1273,7 @@ struct MetricsChartsView: View, Equatable {
                 RefLine(value: 0.80, label: "excellent", color: Theme.coh),
             ],
             yDomain: 0...1,
-            win: $sharedWin, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
+            win: window, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
             info: MetricInfo(
                 "Degree of synchronisation between RR interval oscillations and the breathing cycle, scored 0–1.",
                 physical:    "Computed as the normalised cross-spectral coherence between the RR tachogram and the ACC-derived breathing signal at the dominant breathing frequency. A score of 1.0 means the heart rate oscillation is perfectly phase-locked to breathing; 0 means no coupling.",
@@ -1271,7 +1291,7 @@ struct MetricsChartsView: View, Equatable {
 
 #Preview("Metrics Charts") {
     ScrollView {
-        MetricsChartsView(history: mockHistory(), date: Date())
+        MetricsChartsView(history: mockHistory(), date: Date(), window: .h24)
             .padding(.horizontal)
     }
     .background(Theme.bg)
