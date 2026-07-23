@@ -128,7 +128,7 @@ struct OnboardingFlow: View {
         case .devices:
             OnboardingMultiSelectScreen(
                 progress: step.progress,
-                question: "What do you track with?",
+                question: "What tools do you use now?",
                 subtitle: "Pick all that apply.",
                 options: deviceOptions,
                 selection: $profile.devices,

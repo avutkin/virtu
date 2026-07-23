@@ -226,6 +226,14 @@ struct OnboardingMultiSelectScreen: View {
     let onBack:     () -> Void
     let onContinue: () -> Void
 
+    // "Other" free-text: any selection value that isn't a preset option id is
+    // treated as the custom entry, so it survives back-navigation.
+    @State private var otherActive = false
+    @State private var otherText   = ""
+    @FocusState private var otherFocused: Bool
+
+    private var presetIDs: Set<String> { Set(options.map(\.id)) }
+
     var body: some View {
         OnboardingScaffold(
             progress: progress,
@@ -242,9 +250,36 @@ struct OnboardingMultiSelectScreen: View {
                         toggle(opt.id)
                     }
                 }
+
+                OptionCard(option: OnboardingOption("Other", icon: "plus.circle"),
+                           selected: otherActive) {
+                    otherActive.toggle()
+                    if otherActive {
+                        otherFocused = true
+                    } else {
+                        otherText = ""
+                        commitOther("")
+                    }
+                }
+
+                if otherActive {
+                    TextField("", text: $otherText,
+                              prompt: Text("Type your own…").foregroundColor(Theme.dim))
+                        .focused($otherFocused)
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(Theme.text)
+                        .padding(.horizontal, 16)
+                        .frame(height: 52)
+                        .background(Theme.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Theme.border, lineWidth: 0.5))
+                        .onChange(of: otherText) { _, new in commitOther(new) }
+                }
             }
             .padding(.top, 4)
+            .animation(.easeInOut(duration: 0.2), value: otherActive)
         }
+        .onAppear(perform: hydrate)
     }
 
     private func toggle(_ id: String) {
@@ -252,6 +287,24 @@ struct OnboardingMultiSelectScreen: View {
             selection.remove(at: idx)
         } else {
             selection.append(id)
+        }
+    }
+
+    /// Restore "Other" state from any custom (non-preset) value already selected.
+    private func hydrate() {
+        if let custom = selection.first(where: { !presetIDs.contains($0) }) {
+            otherActive = true
+            otherText   = custom
+        }
+    }
+
+    /// Keep at most one custom (non-preset) entry in `selection`, mirroring the
+    /// text field. Removing then re-adding avoids stale duplicates.
+    private func commitOther(_ text: String) {
+        selection.removeAll { !presetIDs.contains($0) }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if otherActive, !trimmed.isEmpty {
+            selection.append(trimmed)
         }
     }
 }
@@ -381,6 +434,46 @@ struct WrapLayout: Layout {
     }
 }
 
+// MARK: - Chest-strap placement diagram
+//
+// A simple vector illustration (no image asset needed) of a torso with the
+// Polar H10 strap band highlighted across the chest, so the user sees where it
+// goes.
+
+struct ChestStrapDiagram: View {
+    var body: some View {
+        VStack(spacing: 0) {
+            // Head
+            Circle()
+                .fill(Theme.surface)
+                .frame(width: 40, height: 40)
+                .overlay(Circle().strokeBorder(Theme.border, lineWidth: 1))
+
+            // Torso with the strap band across the chest
+            ZStack {
+                RoundedRectangle(cornerRadius: 26)
+                    .fill(Theme.surface)
+                    .overlay(RoundedRectangle(cornerRadius: 26).strokeBorder(Theme.border, lineWidth: 1))
+                    .frame(width: 100, height: 128)
+
+                // Strap band
+                Capsule()
+                    .fill(Theme.accent)
+                    .frame(width: 112, height: 16)
+                    .shadow(color: Theme.accent.opacity(0.55), radius: 8)
+                    .overlay(
+                        // Sensor pod centered on the strap
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(Theme.bg)
+                            .frame(width: 18, height: 10)
+                    )
+                    .offset(y: -20)
+            }
+            .padding(.top, 6)
+        }
+    }
+}
+
 // MARK: - Connect device step
 
 struct OnboardingConnectScreen: View {
@@ -400,11 +493,14 @@ struct OnboardingConnectScreen: View {
             onContinue: onFinish
         ) {
             VStack(spacing: 14) {
-                Image(systemName: "antenna.radiowaves.left.and.right")
-                    .font(.system(size: 44, weight: .light))
-                    .foregroundStyle(Theme.accent)
+                ChestStrapDiagram()
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 24)
+                    .padding(.vertical, 16)
+
+                Text("Wear the strap around your chest, just below the chest muscles, snug against the skin.")
+                    .font(Theme.monoBody)
+                    .foregroundStyle(Theme.dim)
+                    .multilineTextAlignment(.center)
 
                 Button(action: onOpenBLE) {
                     HStack(spacing: 8) {
