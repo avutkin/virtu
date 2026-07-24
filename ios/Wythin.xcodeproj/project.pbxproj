@@ -46,6 +46,7 @@
 		A200 /* Practice.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200 /* Practice.swift */; };
 		A201 /* PracticeCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F201 /* PracticeCatalog.swift */; };
 		A137 /* ActivitiesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F137 /* ActivitiesView.swift */; };
+		A203 /* ActivityLogging.swift in Sources */ = {isa = PBXBuildFile; fileRef = F203 /* ActivityLogging.swift */; };
 		A138 /* PolyvagalState.swift in Sources */ = {isa = PBXBuildFile; fileRef = F138 /* PolyvagalState.swift */; };
 		A139 /* CurrentStateCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F139 /* CurrentStateCard.swift */; };
 		A140 /* RecommendedActionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F140 /* RecommendedActionCard.swift */; };
@@ -131,6 +132,7 @@
 		F200 /* Practice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Practice.swift; sourceTree = "<group>"; };
 		F201 /* PracticeCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PracticeCatalog.swift; sourceTree = "<group>"; };
 		F137 /* ActivitiesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivitiesView.swift; sourceTree = "<group>"; };
+		F203 /* ActivityLogging.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityLogging.swift; sourceTree = "<group>"; };
 		F138 /* PolyvagalState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolyvagalState.swift; sourceTree = "<group>"; };
 		F139 /* CurrentStateCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrentStateCard.swift; sourceTree = "<group>"; };
 		F140 /* RecommendedActionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecommendedActionCard.swift; sourceTree = "<group>"; };
@@ -206,6 +208,7 @@
 			isa = PBXGroup;
 			children = (
 				F137 /* ActivitiesView.swift */,
+				F203 /* ActivityLogging.swift */,
 				F149 /* ActivityMetricsGrid.swift */,
 				F150 /* ActivityWindowChart.swift */,
 				F153 /* PracticeImpactGauge.swift */,
@@ -531,6 +534,7 @@
 				A200 /* Practice.swift in Sources */,
 				A201 /* PracticeCatalog.swift in Sources */,
 				A137 /* ActivitiesView.swift in Sources */,
+				A203 /* ActivityLogging.swift in Sources */,
 				A138 /* PolyvagalState.swift in Sources */,
 				A160 /* ClientProfile.swift in Sources */,
 				A161 /* OnboardingFlow.swift in Sources */,
