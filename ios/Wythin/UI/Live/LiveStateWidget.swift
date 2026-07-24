@@ -11,11 +11,11 @@ final class LiveStateStore {
     private var inFlight = false
 
     /// Never update the current state more often than this.
-    private let minInterval: TimeInterval = 120   // 2 minutes
+    private let minInterval: TimeInterval = 300   // 5 minutes
 
-    /// Fetch a new insight, but never more often than once every 2 minutes.
+    /// Fetch a new insight, but never more often than once every 5 minutes.
     /// The very first reading still populates an empty widget immediately, and a
-    /// pull-to-refresh takes effect once the 2-minute window has elapsed.
+    /// pull-to-refresh takes effect once the 5-minute window has elapsed.
     func refresh(env: AppEnvironment) async {
         guard !inFlight else { return }
 
@@ -37,7 +37,7 @@ final class LiveStateStore {
 
 /// Small, always-visible widget showing an OpenAI-generated, purely
 /// descriptive account of the nervous-system trend over the last 10 minutes.
-/// Updates at most once every 2 minutes while visible and BLE-connected (the
+/// Updates at most once every 5 minutes while visible and BLE-connected (the
 /// first reading appears as soon as there's enough data). Never shows a loading
 /// state on refresh — the previous description stays until a new one replaces it.
 struct LiveStateWidget: View {
