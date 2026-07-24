@@ -10,6 +10,7 @@ from collections import defaultdict
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from ..models import TickPayload
 from ..db import get_or_create_user, get_pool
+from ..auth import key_ok
 from ..sqlite_bridge import write_tick as _sqlite_write_tick
 
 router = APIRouter(tags=["stream"])
@@ -27,6 +28,9 @@ async def device_stream(ws: WebSocket, user_id: str):
       1. Persists the tick as an hrv_sample row (if a session is open)
       2. Broadcasts to any admin WebSockets watching this user
     """
+    if not key_ok(ws.headers.get("x-api-key")):
+        await ws.close(code=1008)   # policy violation
+        return
     await ws.accept()
     pool = get_pool()
     try:
@@ -92,6 +96,9 @@ async def device_stream(ws: WebSocket, user_id: str):
 @router.websocket("/stream/admin/{user_id}")
 async def admin_stream(ws: WebSocket, user_id: str):
     """Admin dashboard subscribes to a device user's live stream."""
+    if not key_ok(ws.headers.get("x-api-key")):
+        await ws.close(code=1008)
+        return
     await ws.accept()
     _admin_subs[user_id].add(ws)
     try:

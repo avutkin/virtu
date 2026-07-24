@@ -65,7 +65,9 @@ final class SyncService {
         components.scheme = components.scheme == "https" ? "wss" : "ws"
         guard let url = components.url else { return }
 
-        wsTask = urlSession.webSocketTask(with: url)
+        var req = URLRequest(url: url)
+        req.addValue(APIConfig.apiKey, forHTTPHeaderField: "X-API-Key")
+        wsTask = urlSession.webSocketTask(with: req)
         wsTask?.resume()
         isConnected = true
         reconnectDelay = 2

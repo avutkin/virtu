@@ -140,9 +140,20 @@ struct APIClient {
         var r = URLRequest(url: baseURL.appendingPathComponent(path))
         r.httpMethod = method
         r.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        r.addValue(APIConfig.apiKey, forHTTPHeaderField: "X-API-Key")
         r.timeoutInterval = 15
         return r
     }
+}
+
+// MARK: - API configuration
+
+/// Shared secret the server requires as `X-API-Key`. A first-layer gate so the
+/// API isn't open to anyone who learns the URL. Compiled into the app (a
+/// determined attacker could extract it) — acceptable for this layer; per-user
+/// auth would replace it for a larger user base.
+enum APIConfig {
+    static let apiKey = "fdc505a043b42cfa5d1353563fcf5412c0dee0bf2cc11301d82f6423da09bdbd"
 }
 
 // MARK: - InsightAPIClient
