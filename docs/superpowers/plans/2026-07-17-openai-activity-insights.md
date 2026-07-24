@@ -15,7 +15,7 @@
 - Backend is fully stateless for insights — no new DB tables, no persistence of requests/responses (spec §1).
 - Insight request payload carries no user/device identifier (spec §1, §5).
 - `ActivityLog.insightText: String?` — `nil` means "not yet generated, eligible for retry"; no separate failure flag (spec §2).
-- Generation is fire-and-forget from the 3 `computeHRVWindows` call sites in `ios/Pulsar/UI/Actions/ActionsView.swift` (lines 309, 368, 383) — never blocks activity logging (spec §3).
+- Generation is fire-and-forget from the 3 `computeHRVWindows` call sites in `ios/Wythin/UI/Actions/ActionsView.swift` (lines 309, 368, 383) — never blocks activity logging (spec §3).
 - Retry sweep caps at the 10 most recent pending activities, triggered only by `AppEnvironment.isInForeground` transitioning to `true` (spec §3).
 - No loading spinner, no error UI in `ActivityDetailView` — the Insight section renders only when `insightText != nil` (spec §4).
 - `PolyvagalState.swift`'s rule-based causes/facts/actions are untouched — unrelated system (spec §9).
@@ -311,17 +311,17 @@ git commit -m "feat(server): add POST /insights OpenAI-backed activity insight e
 ### Task 2: iOS — `APIClient` wire types and `generateInsight`
 
 **Files:**
-- Modify: `ios/Pulsar/Sync/APIClient.swift`
+- Modify: `ios/Wythin/Sync/APIClient.swift`
 
 **Interfaces:**
-- Consumes: `ActivityLog` fields (`activityType`, `activitySubtype`, `duration`, `beforeHR`/`duringHR`/`afterHR`, `beforeRSA`/`duringRSA`/`afterRSA`, `beforeSDNN`/`duringSDNN`/`afterSDNN`, `beforeLFHF`/`duringLFHF`/`afterLFHF`) — all already defined in `ios/Pulsar/Models/ActivityLog.swift`.
+- Consumes: `ActivityLog` fields (`activityType`, `activitySubtype`, `duration`, `beforeHR`/`duringHR`/`afterHR`, `beforeRSA`/`duringRSA`/`afterRSA`, `beforeSDNN`/`duringSDNN`/`afterSDNN`, `beforeLFHF`/`duringLFHF`/`afterLFHF`) — all already defined in `ios/Wythin/Models/ActivityLog.swift`.
 - Produces: `InsightPayload`, `InsightResponse` (Codable), `InsightAPIClient` protocol with `func generateInsight(_ payload: InsightPayload) async throws -> InsightResponse`, and `APIClient: InsightAPIClient` conformance. `InsightPayload.init(from: ActivityLog)` builder.
 
 No automated test in this task — network-layer calls aren't unit-tested anywhere else in this codebase either (`uploadSession`/`fetchSessions` are untested directly); the meaningful, spec-required coverage is on `InsightGenerator` in Task 3, which exercises this protocol through a fake. This task is verified by a successful build.
 
 - [ ] **Step 1: Add the wire types**
 
-In `ios/Pulsar/Sync/APIClient.swift`, insert after the `TickPayload` struct (after line 38, before `struct ServerSession`):
+In `ios/Wythin/Sync/APIClient.swift`, insert after the `TickPayload` struct (after line 38, before `struct ServerSession`):
 
 ```swift
 struct InsightPayload: Codable {
@@ -398,13 +398,13 @@ extension InsightPayload {
 
 - [ ] **Step 4: Build to verify it compiles**
 
-Run: `xcodebuild build -project ios/Pulsar.xcodeproj -scheme Pulsar -destination 'platform=iOS Simulator,name=iPhone 17' | tail -20`
+Run: `xcodebuild build -project ios/Wythin.xcodeproj -scheme Wythin -destination 'platform=iOS Simulator,name=iPhone 17' | tail -20`
 Expected: `** BUILD SUCCEEDED **`
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add ios/Pulsar/Sync/APIClient.swift
+git add ios/Wythin/Sync/APIClient.swift
 git commit -m "feat(sync): add InsightPayload/InsightResponse wire types and generateInsight"
 ```
 
@@ -413,19 +413,19 @@ git commit -m "feat(sync): add InsightPayload/InsightResponse wire types and gen
 ### Task 3: iOS — `ActivityLog.insightText` field and `InsightGenerator`
 
 **Files:**
-- Modify: `ios/Pulsar/Models/ActivityLog.swift`
-- Create: `ios/Pulsar/Sync/InsightGenerator.swift`
-- Test: `ios/PulsarTests/InsightGeneratorTests.swift`
+- Modify: `ios/Wythin/Models/ActivityLog.swift`
+- Create: `ios/Wythin/Sync/InsightGenerator.swift`
+- Test: `ios/WythinTests/InsightGeneratorTests.swift`
 
 **Interfaces:**
 - Consumes: `InsightAPIClient` protocol and `InsightPayload`/`InsightResponse` from Task 2.
 - Produces: `ActivityLog.insightText: String?`. `actor InsightGenerator` with `init(client: InsightAPIClient)`, `func generate(for: ActivityLog, context: ModelContext) async`, `func flushPending(context: ModelContext, limit: Int = 10) async`, and `static func pendingActivities(context: ModelContext, limit: Int = 10) -> [ActivityLog]` — these four are what Task 4 and Task 5 call.
 
-This mirrors the existing `SessionUploader` actor (`ios/Pulsar/Sync/SessionUploader.swift`) — same shape, same pattern, for unsynced insights instead of unsynced sessions.
+This mirrors the existing `SessionUploader` actor (`ios/Wythin/Sync/SessionUploader.swift`) — same shape, same pattern, for unsynced insights instead of unsynced sessions.
 
 - [ ] **Step 1: Add the field to `ActivityLog`**
 
-In `ios/Pulsar/Models/ActivityLog.swift`, change:
+In `ios/Wythin/Models/ActivityLog.swift`, change:
 
 ```swift
     var notes:           String?
@@ -444,12 +444,12 @@ to:
 
 - [ ] **Step 2: Write the failing tests**
 
-Create `ios/PulsarTests/InsightGeneratorTests.swift`:
+Create `ios/WythinTests/InsightGeneratorTests.swift`:
 
 ```swift
 import XCTest
 import SwiftData
-@testable import Pulsar
+@testable import Wythin
 
 final class InsightGeneratorTests: XCTestCase {
 
@@ -548,12 +548,12 @@ final class InsightGeneratorTests: XCTestCase {
 
 - [ ] **Step 3: Run the tests to verify they fail**
 
-Run: `xcodebuild test -project ios/Pulsar.xcodeproj -scheme Pulsar -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:PulsarTests/InsightGeneratorTests 2>&1 | tail -30`
+Run: `xcodebuild test -project ios/Wythin.xcodeproj -scheme Wythin -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:WythinTests/InsightGeneratorTests 2>&1 | tail -30`
 Expected: build failure — `cannot find 'InsightGenerator' in scope` (the type doesn't exist yet).
 
 - [ ] **Step 4: Create `InsightGenerator`**
 
-Create `ios/Pulsar/Sync/InsightGenerator.swift`:
+Create `ios/Wythin/Sync/InsightGenerator.swift`:
 
 ```swift
 import Foundation
@@ -601,13 +601,13 @@ actor InsightGenerator {
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
-Run: `xcodebuild test -project ios/Pulsar.xcodeproj -scheme Pulsar -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:PulsarTests/InsightGeneratorTests 2>&1 | tail -30`
+Run: `xcodebuild test -project ios/Wythin.xcodeproj -scheme Wythin -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:WythinTests/InsightGeneratorTests 2>&1 | tail -30`
 Expected: `** TEST SUCCEEDED **`, 5 tests passed.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add ios/Pulsar/Models/ActivityLog.swift ios/Pulsar/Sync/InsightGenerator.swift ios/PulsarTests/InsightGeneratorTests.swift
+git add ios/Wythin/Models/ActivityLog.swift ios/Wythin/Sync/InsightGenerator.swift ios/WythinTests/InsightGeneratorTests.swift
 git commit -m "feat(activities): add InsightGenerator actor and ActivityLog.insightText"
 ```
 
@@ -616,7 +616,7 @@ git commit -m "feat(activities): add InsightGenerator actor and ActivityLog.insi
 ### Task 4: iOS — Trigger generation when an activity ends
 
 **Files:**
-- Modify: `ios/Pulsar/UI/Actions/ActionsView.swift`
+- Modify: `ios/Wythin/UI/Actions/ActionsView.swift`
 
 **Interfaces:**
 - Consumes: `InsightGenerator(client:)`, `.generate(for:context:)` from Task 3; `env.sync.client` (`APIClient`, already `InsightAPIClient`-conforming from Task 2).
@@ -625,7 +625,7 @@ No new automated test — this is thin fire-and-forget UI wiring around the alre
 
 - [ ] **Step 1: Wire the three call sites**
 
-In `ios/Pulsar/UI/Actions/ActionsView.swift`, change the `.edit` case (around line 307):
+In `ios/Wythin/UI/Actions/ActionsView.swift`, change the `.edit` case (around line 307):
 
 ```swift
         case .edit(let entry):
@@ -684,13 +684,13 @@ to:
 
 - [ ] **Step 2: Build to verify it compiles**
 
-Run: `xcodebuild build -project ios/Pulsar.xcodeproj -scheme Pulsar -destination 'platform=iOS Simulator,name=iPhone 17' | tail -20`
+Run: `xcodebuild build -project ios/Wythin.xcodeproj -scheme Wythin -destination 'platform=iOS Simulator,name=iPhone 17' | tail -20`
 Expected: `** BUILD SUCCEEDED **`
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add ios/Pulsar/UI/Actions/ActionsView.swift
+git add ios/Wythin/UI/Actions/ActionsView.swift
 git commit -m "feat(activities): trigger insight generation when an activity ends"
 ```
 
@@ -699,7 +699,7 @@ git commit -m "feat(activities): trigger insight generation when an activity end
 ### Task 5: iOS — Retry sweep on foreground
 
 **Files:**
-- Modify: `ios/Pulsar/App/AppEnvironment.swift`
+- Modify: `ios/Wythin/App/AppEnvironment.swift`
 
 **Interfaces:**
 - Consumes: `InsightGenerator(client:)`, `.flushPending(context:)` from Task 3.
@@ -708,7 +708,7 @@ No new automated test — the query logic it delegates to (`InsightGenerator.pen
 
 - [ ] **Step 1: Hook into `isInForeground`**
 
-In `ios/Pulsar/App/AppEnvironment.swift`, change:
+In `ios/Wythin/App/AppEnvironment.swift`, change:
 
 ```swift
     var isInForeground: Bool = true {
@@ -764,13 +764,13 @@ In the same file, add this method right after `reloadRecentHistory()` (in the "H
 
 - [ ] **Step 3: Build to verify it compiles**
 
-Run: `xcodebuild build -project ios/Pulsar.xcodeproj -scheme Pulsar -destination 'platform=iOS Simulator,name=iPhone 17' | tail -20`
+Run: `xcodebuild build -project ios/Wythin.xcodeproj -scheme Wythin -destination 'platform=iOS Simulator,name=iPhone 17' | tail -20`
 Expected: `** BUILD SUCCEEDED **`
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add ios/Pulsar/App/AppEnvironment.swift
+git add ios/Wythin/App/AppEnvironment.swift
 git commit -m "feat(activities): retry pending insight generation on app foreground"
 ```
 
@@ -779,14 +779,14 @@ git commit -m "feat(activities): retry pending insight generation on app foregro
 ### Task 6: iOS — Insight section in `ActivityDetailView`
 
 **Files:**
-- Modify: `ios/Pulsar/UI/Actions/ActionsView.swift`
+- Modify: `ios/Wythin/UI/Actions/ActionsView.swift`
 
 **Interfaces:**
-- Consumes: `entry.insightText` (from Task 3), `Theme.monoLabel`/`Theme.monoBody`/`Theme.dim`/`Theme.text` and `.cardStyle()` (existing, `ios/Pulsar/UI/Design/Theme.swift`).
+- Consumes: `entry.insightText` (from Task 3), `Theme.monoLabel`/`Theme.monoBody`/`Theme.dim`/`Theme.text` and `.cardStyle()` (existing, `ios/Wythin/UI/Design/Theme.swift`).
 
 - [ ] **Step 1: Add the Insight section**
 
-In `ios/Pulsar/UI/Actions/ActionsView.swift`, inside `ActivityDetailView.body`, change:
+In `ios/Wythin/UI/Actions/ActionsView.swift`, inside `ActivityDetailView.body`, change:
 
 ```swift
                         .cardStyle()
@@ -819,13 +819,13 @@ to:
 
 - [ ] **Step 2: Build to verify it compiles**
 
-Run: `xcodebuild build -project ios/Pulsar.xcodeproj -scheme Pulsar -destination 'platform=iOS Simulator,name=iPhone 17' | tail -20`
+Run: `xcodebuild build -project ios/Wythin.xcodeproj -scheme Wythin -destination 'platform=iOS Simulator,name=iPhone 17' | tail -20`
 Expected: `** BUILD SUCCEEDED **`
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add ios/Pulsar/UI/Actions/ActionsView.swift
+git add ios/Wythin/UI/Actions/ActionsView.swift
 git commit -m "feat(activities): show generated insight in ActivityDetailView"
 ```
 
@@ -844,7 +844,7 @@ Expected: server starts without error, `GET http://localhost:8000/health` return
 
 - [ ] **Step 2: Run the app in the simulator and log a past activity**
 
-Build and run the `Pulsar` scheme in a simulator (no BLE hardware needed — the simulator can't pair a Polar H10, so use the "Log Past" flow, which is `isManual` and goes through the same `computeHRVWindows` + insight-generation path as a live-tracked activity). In the Activities/Actions tab, tap **LOG PAST**, fill in an activity type and a start/end time, save.
+Build and run the `Wythin` scheme in a simulator (no BLE hardware needed — the simulator can't pair a Polar H10, so use the "Log Past" flow, which is `isManual` and goes through the same `computeHRVWindows` + insight-generation path as a live-tracked activity). In the Activities/Actions tab, tap **LOG PAST**, fill in an activity type and a start/end time, save.
 
 - [ ] **Step 3: Confirm the insight appears**
 

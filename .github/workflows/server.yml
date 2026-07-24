@@ -20,7 +20,7 @@ jobs:
         env:
           POSTGRES_USER:     postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB:       pulsar_test
+          POSTGRES_DB:       wythin_test
         ports: ["5432:5432"]
         options: >-
           --health-cmd pg_isready
@@ -44,7 +44,7 @@ jobs:
 
       - name: Run server tests
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pulsar_test
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/wythin_test
         run: pytest server/tests/ -v
 
   # ── Deploy to Hetzner (main branch only) ─────────────────────────────────────
@@ -68,7 +68,7 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy_key "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" << 'ENDSSH'
             set -e
-            cd /opt/pulsar
+            cd /opt/wythin
 
             # Pull latest code
             git pull origin main
@@ -81,7 +81,7 @@ jobs:
             .venv/bin/python server/deploy/migrate.py
 
             # Restart the API service (needs a NOPASSWD sudoers entry, see README)
-            sudo systemctl restart pulsar-api
+            sudo systemctl restart wythin-api
             echo "Deploy complete"
           ENDSSH
 

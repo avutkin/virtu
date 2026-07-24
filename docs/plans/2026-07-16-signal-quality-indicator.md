@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Target: `arm64-apple-ios17.0-simulator` (iOS 17+), Swift 5.
-- `ios/Pulsar.xcodeproj/project.pbxproj` uses manual `PBXFileReference`/`PBXBuildFile` entries — **no** synchronized file groups. Every new `.swift` file must be registered by hand (see Critical Context below) or the build won't see it.
+- `ios/Wythin.xcodeproj/project.pbxproj` uses manual `PBXFileReference`/`PBXBuildFile` entries — **no** synchronized file groups. Every new `.swift` file must be registered by hand (see Critical Context below) or the build won't see it.
 - No hardcoded ADC/hardware clipping-rail constant — all ECG thresholds are relative to the window's own statistics (per design doc; a previous attempt to add a global 20%-successive-difference RR filter caused a real regression by using an inappropriate universal threshold — don't repeat that mistake here).
 - UI colors: reuse `Theme.accent` (good/green), `Theme.rsa` (okay/amber), `Theme.warn` (poor/red) — no new palette entries.
 - No SwiftData schema changes and no persistence of the ECG check — it's a live-only "right now" signal (per design's Not-in-Scope).
@@ -28,10 +28,10 @@
 - **`*Compute.swift` pattern:** `Metrics/HRVCompute.swift`, `Metrics/DFACompute.swift`, `Metrics/AdvancedHRVCompute.swift` are all `enum`s with `static func compute(...) -> SomeResult?` returning `nil` when there isn't enough data. `ECGQualityCompute` follows the same shape.
 - **`MetricsEngine.compute(from snapshot: DataSnapshot) -> MetricsTick`** (`Metrics/MetricsEngine.swift`) already receives `snapshot.ecg: [Float]` (raw ECG samples, ~10s at 130 Hz, from `DataBuffer.ecgBuf`) but currently doesn't use it for any metric — only for waveform display via `dataBuffer.ecgDisplay(samples:)`. This task is the first consumer of `snapshot.ecg` inside `MetricsEngine.compute`.
 - **`HRVCompute.compute(rrMs:)`** already returns `HRVMetrics.artifactRate: Float` and `MetricsTick.signalQuality: Float? = 1 - artifactRate` (`Metrics/MetricsEngine.swift:127`). This already exists — do not recompute it, just consume `tick.signalQuality`.
-- **Xcode project file** is at `ios/Pulsar.xcodeproj/project.pbxproj`. New files need four edits each: a `PBXBuildFile` entry, a `PBXFileReference` entry, an entry in the relevant `PBXGroup`'s `children`, and an entry in the relevant target's `PBXSourcesBuildPhase` `files` list. Next available tokens: **F143/A143** (main target), **FT03/AT03** (test target).
-- **Tests** live in `ios/PulsarTests/`, use `import XCTest` + `@testable import Pulsar`, `XCTestCase` subclasses. See `ios/PulsarTests/MetricsTests.swift` for the exact style used in this project.
-- **Test runner:** `cd /Users/alexutkin/ios && xcodebuild test -project Pulsar.xcodeproj -scheme Pulsar -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:PulsarTests/ECGQualityComputeTests`
-- **Full build check:** `cd /Users/alexutkin/ios && xcodebuild -project Pulsar.xcodeproj -scheme Pulsar -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -configuration Debug build`
+- **Xcode project file** is at `ios/Wythin.xcodeproj/project.pbxproj`. New files need four edits each: a `PBXBuildFile` entry, a `PBXFileReference` entry, an entry in the relevant `PBXGroup`'s `children`, and an entry in the relevant target's `PBXSourcesBuildPhase` `files` list. Next available tokens: **F143/A143** (main target), **FT03/AT03** (test target).
+- **Tests** live in `ios/WythinTests/`, use `import XCTest` + `@testable import Wythin`, `XCTestCase` subclasses. See `ios/WythinTests/MetricsTests.swift` for the exact style used in this project.
+- **Test runner:** `cd /Users/alexutkin/ios && xcodebuild test -project Wythin.xcodeproj -scheme Wythin -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:WythinTests/ECGQualityComputeTests`
+- **Full build check:** `cd /Users/alexutkin/ios && xcodebuild -project Wythin.xcodeproj -scheme Wythin -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -configuration Debug build`
 - **Theme colors available:** `Theme.accent` (green), `Theme.warn` (red), `Theme.rsa` (amber), `Theme.dim`, `Theme.text`, `Theme.card`, `Theme.border`, `Theme.bg`. `.cardStyle()` is an existing view modifier used by `BLEConnectionSheet`'s other cards.
 - **`BLENavButton`** (`UI/Design/BLENavButton.swift`) is shared across three call sites: `UI/Live/LiveView.swift:71`, `UI/Train/TrainView.swift:205`, `UI/Actions/ActionsView.swift:108`. Only the Live screen is in scope for this feature (per design doc's Overview) — the new parameter must default to `nil` so the other two call sites keep compiling unchanged.
 - **`BLEConnectionSheet`** is defined inline in `UI/Live/LiveView.swift` (not its own file), instantiated once at `UI/Live/LiveView.swift:78`.
@@ -41,16 +41,16 @@
 ## Task 1: `ECGQualityCompute` — flatline detection + test harness
 
 **Files:**
-- Create: `ios/Pulsar/Metrics/ECGQualityCompute.swift`
-- Create: `ios/PulsarTests/ECGQualityComputeTests.swift`
-- Modify: `ios/Pulsar.xcodeproj/project.pbxproj`
+- Create: `ios/Wythin/Metrics/ECGQualityCompute.swift`
+- Create: `ios/WythinTests/ECGQualityComputeTests.swift`
+- Modify: `ios/Wythin.xcodeproj/project.pbxproj`
 
 **Interfaces:**
 - Produces: `enum SignalQualityTier: Int, Comparable { case poor = 0, okay = 1, good = 2 }`; `struct ECGQualityResult { let tier: SignalQualityTier; let reason: String }`; `enum ECGQualityCompute { static func compute(ecg: [Float]) -> ECGQualityResult? }`
 
 - [ ] **Step 1: Register both new files in the Xcode project**
 
-In `ios/Pulsar.xcodeproj/project.pbxproj`, make these edits:
+In `ios/Wythin.xcodeproj/project.pbxproj`, make these edits:
 
 **a)** In the `PBXBuildFile` section, find:
 ```
@@ -73,7 +73,7 @@ Replace with:
 ```
 		F142 /* AdvancedHRVCompute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedHRVCompute.swift; sourceTree = "<group>"; };
 		FRES1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		FAPP /* Pulsar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Pulsar.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		FAPP /* Wythin.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Wythin.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FINFO /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		FT01 /* MetricsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricsTests.swift; sourceTree = "<group>"; };
 		FT02 /* BLETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BLETests.swift; sourceTree = "<group>"; };
@@ -83,7 +83,7 @@ Replace with:
 		F142 /* AdvancedHRVCompute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedHRVCompute.swift; sourceTree = "<group>"; };
 		F143 /* ECGQualityCompute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ECGQualityCompute.swift; sourceTree = "<group>"; };
 		FRES1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		FAPP /* Pulsar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Pulsar.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		FAPP /* Wythin.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Wythin.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FINFO /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		FT01 /* MetricsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricsTests.swift; sourceTree = "<group>"; };
 		FT02 /* BLETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BLETests.swift; sourceTree = "<group>"; };
@@ -108,12 +108,12 @@ Replace with:
 			path = Metrics;
 ```
 
-**d)** In the `GTESTS /* PulsarTests */` group's `children`, find:
+**d)** In the `GTESTS /* WythinTests */` group's `children`, find:
 ```
 				FT01 /* MetricsTests.swift */,
 				FT02 /* BLETests.swift */,
 			);
-			path = PulsarTests;
+			path = WythinTests;
 ```
 Replace with:
 ```
@@ -121,7 +121,7 @@ Replace with:
 				FT02 /* BLETests.swift */,
 				FT03 /* ECGQualityComputeTests.swift */,
 			);
-			path = PulsarTests;
+			path = WythinTests;
 ```
 
 **e)** In the main target's `PBXSourcesBuildPhase`, find:
@@ -162,11 +162,11 @@ Replace with:
 
 - [ ] **Step 2: Write the failing tests**
 
-Create `ios/PulsarTests/ECGQualityComputeTests.swift`:
+Create `ios/WythinTests/ECGQualityComputeTests.swift`:
 
 ```swift
 import XCTest
-@testable import Pulsar
+@testable import Wythin
 
 final class ECGQualityComputeTests: XCTestCase {
 
@@ -189,13 +189,13 @@ final class ECGQualityComputeTests: XCTestCase {
 
 Run:
 ```bash
-cd /Users/alexutkin/ios && xcodebuild test -project Pulsar.xcodeproj -scheme Pulsar -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:PulsarTests/ECGQualityComputeTests
+cd /Users/alexutkin/ios && xcodebuild test -project Wythin.xcodeproj -scheme Wythin -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:WythinTests/ECGQualityComputeTests
 ```
 Expected: **BUILD FAILED** — `Cannot find 'ECGQualityCompute' in scope` (the type doesn't exist yet).
 
 - [ ] **Step 4: Implement `ECGQualityCompute` (flatline check only)**
 
-Create `ios/Pulsar/Metrics/ECGQualityCompute.swift`:
+Create `ios/Wythin/Metrics/ECGQualityCompute.swift`:
 
 ```swift
 import Foundation
@@ -270,9 +270,9 @@ Expected: **TEST SUCCEEDED** — both tests pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add ios/Pulsar/Metrics/ECGQualityCompute.swift \
-        ios/PulsarTests/ECGQualityComputeTests.swift \
-        ios/Pulsar.xcodeproj/project.pbxproj
+git add ios/Wythin/Metrics/ECGQualityCompute.swift \
+        ios/WythinTests/ECGQualityComputeTests.swift \
+        ios/Wythin.xcodeproj/project.pbxproj
 git commit -m "feat(metrics): add ECGQualityCompute with flatline/lead-off detection"
 ```
 
@@ -281,8 +281,8 @@ git commit -m "feat(metrics): add ECGQualityCompute with flatline/lead-off detec
 ## Task 2: Clipping detection
 
 **Files:**
-- Modify: `ios/Pulsar/Metrics/ECGQualityCompute.swift`
-- Modify: `ios/PulsarTests/ECGQualityComputeTests.swift`
+- Modify: `ios/Wythin/Metrics/ECGQualityCompute.swift`
+- Modify: `ios/WythinTests/ECGQualityComputeTests.swift`
 
 **Interfaces:**
 - Consumes: `ECGQualityResult`, `SignalQualityTier` from Task 1.
@@ -290,7 +290,7 @@ git commit -m "feat(metrics): add ECGQualityCompute with flatline/lead-off detec
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `ios/PulsarTests/ECGQualityComputeTests.swift` (inside the `ECGQualityComputeTests` class):
+Add to `ios/WythinTests/ECGQualityComputeTests.swift` (inside the `ECGQualityComputeTests` class):
 
 ```swift
     func testCleanSignalIsGood() {
@@ -334,13 +334,13 @@ Add to `ios/PulsarTests/ECGQualityComputeTests.swift` (inside the `ECGQualityCom
 
 Run:
 ```bash
-cd /Users/alexutkin/ios && xcodebuild test -project Pulsar.xcodeproj -scheme Pulsar -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:PulsarTests/ECGQualityComputeTests
+cd /Users/alexutkin/ios && xcodebuild test -project Wythin.xcodeproj -scheme Wythin -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:WythinTests/ECGQualityComputeTests
 ```
 Expected: `testCleanSignalIsGood`, `testSustainedClippingDetectedAsPoor`, `testBriefClippingDetectedAsOkay` FAIL (current implementation always returns `"clean"` for non-flatline input, so the two clipping tests fail; `testShortPinnedRunIsIgnored` happens to pass already but re-run to confirm the suite state). The two pre-existing tests from Task 1 still pass.
 
 - [ ] **Step 3: Implement clipping detection**
 
-In `ios/Pulsar/Metrics/ECGQualityCompute.swift`, replace:
+In `ios/Wythin/Metrics/ECGQualityCompute.swift`, replace:
 ```swift
         guard stddev >= flatlineStddevThreshold else {
             return ECGQualityResult(tier: .poor, reason: "lead-off")
@@ -405,7 +405,7 @@ Expected: **TEST SUCCEEDED** — all 6 tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add ios/Pulsar/Metrics/ECGQualityCompute.swift ios/PulsarTests/ECGQualityComputeTests.swift
+git add ios/Wythin/Metrics/ECGQualityCompute.swift ios/WythinTests/ECGQualityComputeTests.swift
 git commit -m "feat(metrics): add ECG clipping detection to ECGQualityCompute"
 ```
 
@@ -414,8 +414,8 @@ git commit -m "feat(metrics): add ECG clipping detection to ECGQualityCompute"
 ## Task 3: RR tiering + combined tier
 
 **Files:**
-- Modify: `ios/Pulsar/Metrics/ECGQualityCompute.swift`
-- Modify: `ios/PulsarTests/ECGQualityComputeTests.swift`
+- Modify: `ios/Wythin/Metrics/ECGQualityCompute.swift`
+- Modify: `ios/WythinTests/ECGQualityComputeTests.swift`
 
 **Interfaces:**
 - Consumes: `SignalQualityTier`, `ECGQualityResult`, `CombinedSignalQuality` from Task 1.
@@ -423,7 +423,7 @@ git commit -m "feat(metrics): add ECG clipping detection to ECGQualityCompute"
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `ios/PulsarTests/ECGQualityComputeTests.swift`:
+Add to `ios/WythinTests/ECGQualityComputeTests.swift`:
 
 ```swift
     func testRRTierBoundaries() {
@@ -457,13 +457,13 @@ Add to `ios/PulsarTests/ECGQualityComputeTests.swift`:
 
 Run:
 ```bash
-cd /Users/alexutkin/ios && xcodebuild test -project Pulsar.xcodeproj -scheme Pulsar -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:PulsarTests/ECGQualityComputeTests
+cd /Users/alexutkin/ios && xcodebuild test -project Wythin.xcodeproj -scheme Wythin -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:WythinTests/ECGQualityComputeTests
 ```
 Expected: **BUILD FAILED** — `Cannot find 'rrTier' in scope` / `Cannot find 'combinedTier' in scope`.
 
 - [ ] **Step 3: Implement `rrTier` and `combinedTier`**
 
-In `ios/Pulsar/Metrics/ECGQualityCompute.swift`, add these two static functions inside `enum ECGQualityCompute` (after `compute(ecg:)`):
+In `ios/Wythin/Metrics/ECGQualityCompute.swift`, add these two static functions inside `enum ECGQualityCompute` (after `compute(ecg:)`):
 
 ```swift
     /// Tiers the existing RR-artifact-based `MetricsTick.signalQuality`
@@ -497,7 +497,7 @@ Expected: **TEST SUCCEEDED** — all 10 tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add ios/Pulsar/Metrics/ECGQualityCompute.swift ios/PulsarTests/ECGQualityComputeTests.swift
+git add ios/Wythin/Metrics/ECGQualityCompute.swift ios/WythinTests/ECGQualityComputeTests.swift
 git commit -m "feat(metrics): add RR tiering and combined signal quality tier"
 ```
 
@@ -506,10 +506,10 @@ git commit -m "feat(metrics): add RR tiering and combined signal quality tier"
 ## Task 4: Wire into `MetricsEngine`
 
 **Files:**
-- Modify: `ios/Pulsar/Metrics/MetricsEngine.swift`
-- Modify: `ios/PulsarTests/MetricsTests.swift`
-- Modify: `ios/Pulsar/UI/Live/LiveView.swift` (two pre-existing `MetricsTick` construction sites need the new field)
-- Modify: `ios/Pulsar/UI/Live/MetricsChartsView.swift` (one pre-existing `MetricsTick` construction site needs the new field)
+- Modify: `ios/Wythin/Metrics/MetricsEngine.swift`
+- Modify: `ios/WythinTests/MetricsTests.swift`
+- Modify: `ios/Wythin/UI/Live/LiveView.swift` (two pre-existing `MetricsTick` construction sites need the new field)
+- Modify: `ios/Wythin/UI/Live/MetricsChartsView.swift` (one pre-existing `MetricsTick` construction site needs the new field)
 
 **Interfaces:**
 - Consumes: `ECGQualityCompute.compute(ecg:) -> ECGQualityResult?` from Task 1.
@@ -517,7 +517,7 @@ git commit -m "feat(metrics): add RR tiering and combined signal quality tier"
 
 - [ ] **Step 1: Write the failing test**
 
-Add to `ios/PulsarTests/MetricsTests.swift` (inside `MetricsTests`, e.g. after `testCBIRange`):
+Add to `ios/WythinTests/MetricsTests.swift` (inside `MetricsTests`, e.g. after `testCBIRange`):
 
 ```swift
     // MARK: - ECG quality wiring
@@ -535,13 +535,13 @@ Add to `ios/PulsarTests/MetricsTests.swift` (inside `MetricsTests`, e.g. after `
 
 Run:
 ```bash
-cd /Users/alexutkin/ios && xcodebuild test -project Pulsar.xcodeproj -scheme Pulsar -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:PulsarTests/MetricsTests/testMetricsEngineComputesECGQuality
+cd /Users/alexutkin/ios && xcodebuild test -project Wythin.xcodeproj -scheme Wythin -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:WythinTests/MetricsTests/testMetricsEngineComputesECGQuality
 ```
 Expected: **BUILD FAILED** — `value of type 'MetricsTick' has no member 'ecgQuality'`.
 
 - [ ] **Step 3: Add the field and wire the call**
 
-In `ios/Pulsar/Metrics/MetricsEngine.swift`, add the new field to `MetricsTick` (after the existing `signalQuality` field):
+In `ios/Wythin/Metrics/MetricsEngine.swift`, add the new field to `MetricsTick` (after the existing `signalQuality` field):
 ```swift
     // Signal quality
     let signalQuality: Float?
@@ -569,9 +569,9 @@ Expected: **TEST SUCCEEDED**.
 
 - [ ] **Step 5: Update the three other `MetricsTick(...)` construction sites**
 
-Adding a new non-defaulted field to `MetricsTick` makes it a required argument everywhere the struct is built. Three other places build one directly (`grep -rn "MetricsTick(" ios/Pulsar` to confirm no others exist beyond these plus `MetricsEngine.swift`):
+Adding a new non-defaulted field to `MetricsTick` makes it a required argument everywhere the struct is built. Three other places build one directly (`grep -rn "MetricsTick(" ios/Wythin` to confirm no others exist beyond these plus `MetricsEngine.swift`):
 
-**a)** In `ios/Pulsar/UI/Live/LiveView.swift`, `dayAverageTick(from:)` builds a `MetricsTick` averaged from `MetricsHistoryPoint`s, which don't carry ECG-quality data (it's live-only, per design) — pass `nil`. Replace:
+**a)** In `ios/Wythin/UI/Live/LiveView.swift`, `dayAverageTick(from:)` builds a `MetricsTick` averaged from `MetricsHistoryPoint`s, which don't carry ECG-quality data (it's live-only, per design) — pass `nil`. Replace:
 ```swift
             signalQuality:   avg(history.compactMap(\.signalQuality)),
             rcmse:           avg(history.compactMap(\.rcmse)),
@@ -595,7 +595,7 @@ with:
         rcmse: 1.45, pip: 54.2, ials: 0.51, dc: 7.2,
 ```
 
-**c)** In `ios/Pulsar/UI/Live/MetricsChartsView.swift`, `mockHistory()` (another preview mock) builds a `MetricsTick` per synthetic data point — same reasoning as (a), pass `nil`. Replace:
+**c)** In `ios/Wythin/UI/Live/MetricsChartsView.swift`, `mockHistory()` (another preview mock) builds a `MetricsTick` per synthetic data point — same reasoning as (a), pass `nil`. Replace:
 ```swift
             dfa1:           Float(1.0 + 0.15 * sin(phase * 0.15)),
             signalQuality:  Float(0.95 + 0.05 * sin(phase * 0.2)),
@@ -612,16 +612,16 @@ with:
 - [ ] **Step 6: Run the full test suite and full build**
 
 ```bash
-cd /Users/alexutkin/ios && xcodebuild test -project Pulsar.xcodeproj -scheme Pulsar -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17'
-cd /Users/alexutkin/ios && xcodebuild -project Pulsar.xcodeproj -scheme Pulsar -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -configuration Debug build
+cd /Users/alexutkin/ios && xcodebuild test -project Wythin.xcodeproj -scheme Wythin -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17'
+cd /Users/alexutkin/ios && xcodebuild -project Wythin.xcodeproj -scheme Wythin -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -configuration Debug build
 ```
 Expected: both **SUCCEEDED**, with zero missing-argument errors.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add ios/Pulsar/Metrics/MetricsEngine.swift ios/PulsarTests/MetricsTests.swift \
-        ios/Pulsar/UI/Live/LiveView.swift ios/Pulsar/UI/Live/MetricsChartsView.swift
+git add ios/Wythin/Metrics/MetricsEngine.swift ios/WythinTests/MetricsTests.swift \
+        ios/Wythin/UI/Live/LiveView.swift ios/Wythin/UI/Live/MetricsChartsView.swift
 git commit -m "feat(metrics): wire ECGQualityCompute into MetricsEngine"
 ```
 
@@ -630,8 +630,8 @@ git commit -m "feat(metrics): wire ECGQualityCompute into MetricsEngine"
 ## Task 5: Quality dot on the nav-bar pill
 
 **Files:**
-- Modify: `ios/Pulsar/UI/Design/BLENavButton.swift`
-- Modify: `ios/Pulsar/UI/Live/LiveView.swift`
+- Modify: `ios/Wythin/UI/Design/BLENavButton.swift`
+- Modify: `ios/Wythin/UI/Live/LiveView.swift`
 
 **Interfaces:**
 - Consumes: `CombinedSignalQuality`, `SignalQualityTier` from Task 3; `MetricsTick.signalQuality` (existing), `MetricsTick.ecgQuality` (Task 4).
@@ -639,7 +639,7 @@ git commit -m "feat(metrics): wire ECGQualityCompute into MetricsEngine"
 
 - [ ] **Step 1: Add the `quality` parameter and dot overlay to `BLENavButton`**
 
-In `ios/Pulsar/UI/Design/BLENavButton.swift`, replace:
+In `ios/Wythin/UI/Design/BLENavButton.swift`, replace:
 ```swift
 struct BLENavButton: View {
     let state:  BLEState
@@ -713,7 +713,7 @@ Add this helper method inside `BLENavButton` (after `startAnimations()`):
 
 - [ ] **Step 2: Add `currentQuality` to `LiveView` and pass it to `BLENavButton`**
 
-In `ios/Pulsar/UI/Live/LiveView.swift`, add this computed property to `LiveView` (after `private func goForward() { ... }`):
+In `ios/Wythin/UI/Live/LiveView.swift`, add this computed property to `LiveView` (after `private func goForward() { ... }`):
 ```swift
     private var currentQuality: CombinedSignalQuality? {
         ECGQualityCompute.combinedTier(
@@ -746,7 +746,7 @@ with:
 - [ ] **Step 3: Build and verify in the simulator**
 
 ```bash
-cd /Users/alexutkin/ios && xcodebuild -project Pulsar.xcodeproj -scheme Pulsar -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -configuration Debug build
+cd /Users/alexutkin/ios && xcodebuild -project Wythin.xcodeproj -scheme Wythin -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -configuration Debug build
 ```
 Expected: **BUILD SUCCEEDED**, and the two other `BLENavButton` call sites (`TrainView.swift:205`, `ActionsView.swift:108`) still compile unchanged since `quality` defaults to `nil`.
 
@@ -755,7 +755,7 @@ Run the app in the simulator (or on device with a Polar H10 connected): confirm 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add ios/Pulsar/UI/Design/BLENavButton.swift ios/Pulsar/UI/Live/LiveView.swift
+git add ios/Wythin/UI/Design/BLENavButton.swift ios/Wythin/UI/Live/LiveView.swift
 git commit -m "feat(live): show signal quality dot on BLE nav pill"
 ```
 
@@ -764,7 +764,7 @@ git commit -m "feat(live): show signal quality dot on BLE nav pill"
 ## Task 6: Signal Quality section in `BLEConnectionSheet`
 
 **Files:**
-- Modify: `ios/Pulsar/UI/Live/LiveView.swift`
+- Modify: `ios/Wythin/UI/Live/LiveView.swift`
 
 **Interfaces:**
 - Consumes: `CombinedSignalQuality`, `SignalQualityTier` (Task 3); `LiveView.currentQuality` (Task 5).
@@ -909,7 +909,7 @@ with:
 - [ ] **Step 3: Build and verify in the simulator**
 
 ```bash
-cd /Users/alexutkin/ios && xcodebuild -project Pulsar.xcodeproj -scheme Pulsar -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -configuration Debug build
+cd /Users/alexutkin/ios && xcodebuild -project Wythin.xcodeproj -scheme Wythin -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -configuration Debug build
 ```
 Expected: **BUILD SUCCEEDED**.
 
@@ -918,7 +918,7 @@ Run the app: tap the nav-bar pill to open the BLE sheet. With no data yet, no Si
 - [ ] **Step 4: Commit**
 
 ```bash
-git add ios/Pulsar/UI/Live/LiveView.swift
+git add ios/Wythin/UI/Live/LiveView.swift
 git commit -m "feat(live): add Signal Quality breakdown to BLE connection sheet"
 ```
 

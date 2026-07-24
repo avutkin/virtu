@@ -80,7 +80,7 @@ Fallback when freq-domain unavailable (< 30 RR intervals):
 }
 ```
 
-Added to the existing `Schema` in `PulsarApp.swift`.
+Added to the existing `Schema` in `WythinApp.swift`.
 
 ### Session Lifecycle in TrainView
 
@@ -124,7 +124,7 @@ TRAIN segment shows a list of `TrainSession` records:
 | `Models/TrainSession.swift` | NEW — SwiftData model |
 | `UI/Train/TrainView.swift` | Add `AutonomicCard`, START/END buttons, session recording logic |
 | `UI/History/HistoryView.swift` | Add TRAIN segment with `TrainSession` list |
-| `App/PulsarApp.swift` | Add `TrainSession` to SwiftData schema |
+| `App/WythinApp.swift` | Add `TrainSession` to SwiftData schema |
 
 ---
 

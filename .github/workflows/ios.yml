@@ -24,10 +24,10 @@ jobs:
       - name: Build & run unit tests (simulator)
         run: |
           xcodebuild test \
-            -project ios/Pulsar.xcodeproj \
-            -scheme Pulsar \
+            -project ios/Wythin.xcodeproj \
+            -scheme Wythin \
             -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
-            -only-testing:PulsarTests/MetricsTests \
+            -only-testing:WythinTests/MetricsTests \
             -resultBundlePath TestResults.xcresult \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
@@ -75,15 +75,15 @@ jobs:
         run: |
           PROFILE_PATH="$HOME/Library/MobileDevice/Provisioning Profiles"
           mkdir -p "$PROFILE_PATH"
-          echo "$PROFILE_BASE64" | base64 --decode > "$PROFILE_PATH/Pulsar_Distribution.mobileprovision"
+          echo "$PROFILE_BASE64" | base64 --decode > "$PROFILE_PATH/Wythin_Distribution.mobileprovision"
 
       - name: Archive
         run: |
           xcodebuild archive \
-            -project ios/Pulsar.xcodeproj \
-            -scheme Pulsar \
+            -project ios/Wythin.xcodeproj \
+            -scheme Wythin \
             -configuration Release \
-            -archivePath "$RUNNER_TEMP/Pulsar.xcarchive" \
+            -archivePath "$RUNNER_TEMP/Wythin.xcarchive" \
             -destination 'generic/platform=iOS'
 
       - name: Export IPA
@@ -103,14 +103,14 @@ jobs:
           </plist>
           EOF
           xcodebuild -exportArchive \
-            -archivePath "$RUNNER_TEMP/Pulsar.xcarchive" \
+            -archivePath "$RUNNER_TEMP/Wythin.xcarchive" \
             -exportPath "$RUNNER_TEMP/export" \
             -exportOptionsPlist /tmp/ExportOptions.plist
 
       - name: Upload to TestFlight
         uses: apple-actions/upload-testflight-build@v1
         with:
-          app-path: ${{ runner.temp }}/export/Pulsar.ipa
+          app-path: ${{ runner.temp }}/export/Wythin.ipa
           issuer-id: ${{ secrets.APPSTORE_ISSUER_ID }}
           api-key-id: ${{ secrets.APPSTORE_KEY_ID }}
           api-private-key: ${{ secrets.APPSTORE_PRIVATE_KEY }}
