@@ -94,7 +94,19 @@ _LIVE_STATE_SYSTEM_PROMPT = (
     "• Wired & Tense — rising HR; high/rising LF/HF; falling RSA, RMSSD, Vagal "
     "Tone; rising inner noise; DFA alpha-1 dropping.\n"
     "• Anxious — elevated HR with high inner noise and low coherence; erratic, "
-    "scattered rhythm."
+    "scattered rhythm.\n"
+    "\n"
+    "Disambiguation (apply before labeling):\n"
+    "• A rising HR is NOT automatically stress. If RMSSD/RSA/Vagal Tone stay "
+    "solid and LF/HF is balanced (~1.0-1.5), it is Alert & Energized, not Wired "
+    "& Tense. Only use a stress label (Wired & Tense / Anxious) when LF/HF is "
+    "high or rising AND the vagal metrics (RMSSD, RSA, Vagal Tone) are falling.\n"
+    "• High coherence together with good vagal tone leans Positive & Upbeat "
+    "rather than plain Calm.\n"
+    "• Small, mild elevations (slight HR/LF-HF rise, modestly suppressed RMSSD, "
+    "somewhat low coherence) are Grumpy & Irritable — reserve Wired & Tense for "
+    "clearly larger shifts.\n"
+    "• Prefer the specific state over a generic one when the signature fits."
 )
 
 
