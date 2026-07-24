@@ -1114,7 +1114,7 @@ struct MetricsChartsView: View, Equatable {
         MetricChartCard(
             title:    "Inner Noise",
             technicalName: "PIP",
-            subtitle: "How steady your heartbeat is — lower is smoother",
+            subtitle: "Beat-to-beat fragmentation — rises with stress and fatigue",
             yLabel:   "%",
             color:    Color(red: 1.0, green: 0.7, blue: 0.3),
             windows:  TimeWindow.allCases,
