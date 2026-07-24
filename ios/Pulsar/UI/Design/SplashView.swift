@@ -4,15 +4,14 @@ import SwiftUI
 
 /// Full-screen splash shown on launch.
 /// Displays a random quote about the power of breath, with attribution.
-/// The user can tap the arrow to proceed immediately, or wait 15 s for auto-dismiss.
+/// Brief brand overlay (~2.5 s); the app loads behind it. Tap the arrow to skip.
 struct SplashView: View {
 
     let onFinished: () -> Void
 
-    @State private var opacity:      Double = 1   // whole-view fade on dismiss
-    @State private var quoteOpacity: Double = 0   // quote appears first
-    @State private var logoOpacity:  Double = 0   // brand appears after 5 s
-    @State private var arrowOpacity: Double = 0
+    @State private var opacity:        Double = 1   // whole-view fade on dismiss
+    @State private var contentOpacity: Double = 0   // brand + quote fade in together
+    @State private var arrowOpacity:   Double = 0
     @State private var quote = quotes.randomElement()!
 
     private func dismiss() {
@@ -49,7 +48,7 @@ struct SplashView: View {
                     }
                 }
                 .padding(.top, 64)
-                .opacity(logoOpacity)
+                .opacity(contentOpacity)
 
                 Spacer()
 
@@ -77,7 +76,7 @@ struct SplashView: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 48)
                 }
-                .opacity(quoteOpacity)
+                .opacity(contentOpacity)
 
                 Spacer()
 
@@ -97,13 +96,12 @@ struct SplashView: View {
             .opacity(opacity)
         }
         .onAppear {
-            // The quote appears first; the brand (star + pulsar + slogan)
-            // fades in after 5 s.
-            withAnimation(.easeIn(duration: 1.5)) { quoteOpacity = 1 }
-            withAnimation(.easeIn(duration: 1.5).delay(5.0)) { logoOpacity = 1 }
-            withAnimation(.easeIn(duration: 1.0).delay(6.5)) { arrowOpacity = 1 }
-            // Auto-dismiss after 15 s if the user doesn't tap the arrow.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 15.0) { dismiss() }
+            // The real app is already loading behind this overlay, so keep the
+            // splash brief: show the Pulsar brand immediately and auto-dismiss
+            // in ~2.5 s (skippable via the arrow almost at once).
+            withAnimation(.easeIn(duration: 0.7)) { contentOpacity = 1 }
+            withAnimation(.easeIn(duration: 0.5).delay(0.7)) { arrowOpacity = 1 }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { dismiss() }
         }
     }
 
