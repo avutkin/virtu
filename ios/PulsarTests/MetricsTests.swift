@@ -64,6 +64,52 @@ final class MetricsTests: XCTestCase {
         XCTAssertNil(HeartRateCompute.current(rrMs: [], sensorBPM: []))
     }
 
+    // MARK: - Autonomic balance (breathing-aware)
+
+    func testAutonomicSlowBreathingIsVagalNotSympathetic() {
+        // Resonance breathing (6/min): the respiratory peak sits in LF, so LF≫HF.
+        // The OLD LF/HF logic would call this "sympathetic". RMSSD is high, so the
+        // new logic must read parasympathetic dominant.
+        let a = AutonomicCompute.balance(rmssd: 80, lf: 600, hf: 40,
+                                         breathBPM: 6, meanBPM: 58, baselineRmssd: nil)
+        XCTAssertNotNil(a)
+        XCTAssertGreaterThan(a!.pns, a!.sns, "Slow deep breathing must read vagal")
+        XCTAssertEqual(a!.state, .ventralVagal)
+    }
+
+    func testAutonomicLowRMSSDIsSympathetic() {
+        let a = AutonomicCompute.balance(rmssd: 15, lf: nil, hf: nil,
+                                         breathBPM: 15, meanBPM: 82, baselineRmssd: nil)
+        XCTAssertLessThan(a!.pns, 0.35)
+        XCTAssertEqual(a!.state, .sympathetic)
+    }
+
+    func testAutonomicBaselineRelativeMidpoint() {
+        // RMSSD equal to baseline → balanced 0.5.
+        let a = AutonomicCompute.balance(rmssd: 50, lf: nil, hf: nil,
+                                         breathBPM: 14, meanBPM: 70, baselineRmssd: 50)
+        XCTAssertEqual(a!.pns, 0.5, accuracy: 0.01)
+    }
+
+    func testAutonomicFallsBackToHFWhenNoRMSSD() {
+        // No RMSSD, normal breathing → LF/HF fallback: HF/(LF+HF).
+        let a = AutonomicCompute.balance(rmssd: nil, lf: 100, hf: 300,
+                                         breathBPM: 15, meanBPM: 70, baselineRmssd: nil)
+        XCTAssertEqual(a!.pns, 0.75, accuracy: 0.001)
+    }
+
+    func testAutonomicNilWhenNoData() {
+        XCTAssertNil(AutonomicCompute.balance(rmssd: nil, lf: nil, hf: nil,
+                                              breathBPM: nil, meanBPM: nil, baselineRmssd: nil))
+    }
+
+    func testAutonomicDorsalShutdown() {
+        // Near-zero variability with a low, non-elevated HR → shutdown.
+        let a = AutonomicCompute.balance(rmssd: 5, lf: nil, hf: nil,
+                                         breathBPM: 12, meanBPM: 56, baselineRmssd: nil)
+        XCTAssertEqual(a!.state, .dorsalVagal)
+    }
+
     // MARK: - RR correction (missed/extra beat)
 
     func testCorrectionLeavesRSARangeUntouched() {
