@@ -15,7 +15,7 @@ final class LiveStateTrendComputeTests: XCTestCase {
     }
 
     func testReturnsNilBelowMinimumPoints() {
-        let history = points(count: 30, hrValues: Array(repeating: 70, count: 30))
+        let history = points(count: 20, hrValues: Array(repeating: 70, count: 20))
         XCTAssertNil(LiveStateTrendCompute.summarize(history, windowMinutes: 10))
     }
 

@@ -49,10 +49,11 @@ struct LiveStateWidget: View {
     private func startLoop() {
         guard refreshTask == nil else { return }
         refreshTask = Task {
-            var isFirstIteration = true
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(isFirstIteration ? 120 : 300))
-                isFirstIteration = false
+                // Poll quickly until the first description lands (so the user
+                // isn't stuck on "Gathering data…"), then settle to a 5-minute
+                // refresh cadence.
+                try? await Task.sleep(for: .seconds(description == nil ? 30 : 300))
                 guard !Task.isCancelled else { break }
 
                 let filtered = MetricsQualityFilter.filter(env.tickHistory)

@@ -29,7 +29,7 @@ enum LiveStateTrendCompute {
 
     /// Minimum quality-passing points required in the window before summarizing
     /// (≈2 minutes at 2 s/tick).
-    static let minimumPoints = 60
+    static let minimumPoints = 30
 
     /// Summarizes the last `windowMinutes` of quality-filtered history into one
     /// MetricTrend per core metric. Returns nil if there isn't enough valid
