@@ -271,38 +271,17 @@ struct ActivitiesView: View {
     // MARK: - Activity CRUD
 
     private func beginActivity(type: ActivityType, subtype: String?, customName: String?) {
-        let entry = ActivityLog(
-            activityType:    type.rawValue,
-            activitySubtype: subtype,
-            customName:      customName,
-            startedAt:       .now,
-            isManual:        false
-        )
-        ctx.insert(entry)
-        try? ctx.save()
+        ActivityLogging.begin(type: type, subtype: subtype, customName: customName, context: ctx)
     }
 
     private func endActivity(_ entry: ActivityLog) {
-        entry.endedAt = .now
-        entry.computeHRVWindows(context: ctx)
-        try? ctx.save()
-        Task { await InsightGenerator(client: env.sync.client).generate(for: entry, context: ctx) }
+        ActivityLogging.end(entry, context: ctx, client: env.sync.client)
     }
 
     private func logPast(type: ActivityType, subtype: String?, customName: String?,
                          start: Date, end: Date) {
-        let entry = ActivityLog(
-            activityType:    type.rawValue,
-            activitySubtype: subtype,
-            customName:      customName,
-            startedAt:       start,
-            endedAt:         end,
-            isManual:        true
-        )
-        entry.computeHRVWindows(context: ctx)
-        ctx.insert(entry)
-        try? ctx.save()
-        Task { await InsightGenerator(client: env.sync.client).generate(for: entry, context: ctx) }
+        ActivityLogging.logPast(type: type, subtype: subtype, customName: customName,
+                                start: start, end: end, context: ctx, client: env.sync.client)
     }
 
     private func deleteEntry(_ entry: ActivityLog) {
@@ -801,7 +780,7 @@ struct ActivityDetailView: View {
 
 // MARK: - StartActivitySheet
 
-private struct StartActivitySheet: View {
+struct StartActivitySheet: View {
     var preselected: ActivityType? = nil
     let onStart: (ActivityType, String?, String?) -> Void
     @Environment(\.dismiss) var dismiss
@@ -908,15 +887,32 @@ private struct StartActivitySheet: View {
 
 // MARK: - LogPastSheet
 
-private struct LogPastSheet: View {
+struct LogPastSheet: View {
     let onSave: (ActivityType, String?, String?, Date, Date) -> Void
     @Environment(\.dismiss) var dismiss
-    @State private var selected:        ActivityType = .meditation
-    @State private var selectedSubtype: String?      = nil
+    @State private var selected:        ActivityType
+    @State private var selectedSubtype: String?
     @State private var customName:      String       = ""
     @State private var showCustom:      Bool         = false
     @State private var startDate:       Date         = .now
-    @State private var durationMins:    Double       = 30
+    @State private var durationMins:    Double
+
+    /// Blank sheet (Activities "LOG PAST"): defaults to Meditation / 30 min.
+    init(onSave: @escaping (ActivityType, String?, String?, Date, Date) -> Void) {
+        self.onSave = onSave
+        _selected        = State(initialValue: .meditation)
+        _selectedSubtype = State(initialValue: nil)
+        _durationMins    = State(initialValue: 30)
+    }
+
+    /// Prefilled from a Practice ("Log it"): seeds type / subtype / duration.
+    init(prefill: ActivityPrefill,
+         onSave: @escaping (ActivityType, String?, String?, Date, Date) -> Void) {
+        self.onSave = onSave
+        _selected        = State(initialValue: prefill.type)
+        _selectedSubtype = State(initialValue: prefill.subtype)
+        _durationMins    = State(initialValue: prefill.durationMins ?? 30)
+    }
 
     private var endDate: Date { startDate.addingTimeInterval(durationMins * 60) }
 
@@ -1026,7 +1022,7 @@ private struct LogPastSheet: View {
 
 // MARK: - SubtypePicker
 
-private struct SubtypePicker: View {
+struct SubtypePicker: View {
     let type:     ActivityType
     @Binding var selected: String?
 
@@ -1072,7 +1068,7 @@ private struct SubtypePicker: View {
 
 // MARK: - ActivityTypeCell
 
-private struct ActivityTypeCell: View {
+struct ActivityTypeCell: View {
     let type:       ActivityType
     let isSelected: Bool
     let action:     () -> Void

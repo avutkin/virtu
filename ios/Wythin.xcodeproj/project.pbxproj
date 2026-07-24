@@ -40,10 +40,17 @@
 		A131 /* HRVAnalysisView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F131 /* HRVAnalysisView.swift */; };
 		A132 /* SplashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F132 /* SplashView.swift */; };
 		A133 /* BLENavButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = F133 /* BLENavButton.swift */; };
-		A134 /* TrainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F134 /* TrainView.swift */; };
+		A134 /* BiofeedbackViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F134 /* BiofeedbackViews.swift */; };
 		A135 /* TrainSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = F135 /* TrainSession.swift */; };
 		A136 /* ActivityLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F136 /* ActivityLog.swift */; };
+		A200 /* Practice.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200 /* Practice.swift */; };
+		A201 /* PracticeCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F201 /* PracticeCatalog.swift */; };
 		A137 /* ActivitiesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F137 /* ActivitiesView.swift */; };
+		A203 /* ActivityLogging.swift in Sources */ = {isa = PBXBuildFile; fileRef = F203 /* ActivityLogging.swift */; };
+		A204 /* PracticeHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F204 /* PracticeHubView.swift */; };
+		A205 /* PracticeDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F205 /* PracticeDetailView.swift */; };
+		A206 /* ResonanceSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F206 /* ResonanceSessionView.swift */; };
+		A207 /* BiofeedbackSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F207 /* BiofeedbackSessionView.swift */; };
 		A138 /* PolyvagalState.swift in Sources */ = {isa = PBXBuildFile; fileRef = F138 /* PolyvagalState.swift */; };
 		A139 /* CurrentStateCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F139 /* CurrentStateCard.swift */; };
 		A140 /* RecommendedActionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F140 /* RecommendedActionCard.swift */; };
@@ -60,6 +67,7 @@
 		A150 /* ActivityWindowChart.swift in Sources */ = {isa = PBXBuildFile; fileRef = F150 /* ActivityWindowChart.swift */; };
 		A151 /* ActivityMetricStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = F151 /* ActivityMetricStats.swift */; };
 		A152 /* ActivityImpact.swift in Sources */ = {isa = PBXBuildFile; fileRef = F152 /* ActivityImpact.swift */; };
+		A202 /* AutonomicCompute.swift in Sources */ = {isa = PBXBuildFile; fileRef = F202 /* AutonomicCompute.swift */; };
 		A153 /* PracticeImpactGauge.swift in Sources */ = {isa = PBXBuildFile; fileRef = F153 /* PracticeImpactGauge.swift */; };
 		A154 /* MetricProgressRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F154 /* MetricProgressRow.swift */; };
 		A155 /* HeartRateCompute.swift in Sources */ = {isa = PBXBuildFile; fileRef = F155 /* HeartRateCompute.swift */; };
@@ -76,6 +84,7 @@
 		AT07 /* ActivityMetricStatsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT07 /* ActivityMetricStatsTests.swift */; };
 		AT08 /* ActivityImpactTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT08 /* ActivityImpactTests.swift */; };
 		AT10 /* ClientProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT10 /* ClientProfileTests.swift */; };
+		AT11 /* PracticeCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT11 /* PracticeCatalogTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -122,10 +131,17 @@
 		F131 /* HRVAnalysisView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HRVAnalysisView.swift; sourceTree = "<group>"; };
 		F132 /* SplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashView.swift; sourceTree = "<group>"; };
 		F133 /* BLENavButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BLENavButton.swift; sourceTree = "<group>"; };
-		F134 /* TrainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainView.swift; sourceTree = "<group>"; };
+		F134 /* BiofeedbackViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiofeedbackViews.swift; sourceTree = "<group>"; };
 		F135 /* TrainSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainSession.swift; sourceTree = "<group>"; };
 		F136 /* ActivityLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityLog.swift; sourceTree = "<group>"; };
+		F200 /* Practice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Practice.swift; sourceTree = "<group>"; };
+		F201 /* PracticeCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PracticeCatalog.swift; sourceTree = "<group>"; };
 		F137 /* ActivitiesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivitiesView.swift; sourceTree = "<group>"; };
+		F203 /* ActivityLogging.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityLogging.swift; sourceTree = "<group>"; };
+		F204 /* PracticeHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PracticeHubView.swift; sourceTree = "<group>"; };
+		F205 /* PracticeDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PracticeDetailView.swift; sourceTree = "<group>"; };
+		F206 /* ResonanceSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResonanceSessionView.swift; sourceTree = "<group>"; };
+		F207 /* BiofeedbackSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiofeedbackSessionView.swift; sourceTree = "<group>"; };
 		F138 /* PolyvagalState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolyvagalState.swift; sourceTree = "<group>"; };
 		F139 /* CurrentStateCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrentStateCard.swift; sourceTree = "<group>"; };
 		F140 /* RecommendedActionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecommendedActionCard.swift; sourceTree = "<group>"; };
@@ -142,6 +158,7 @@
 		F150 /* ActivityWindowChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityWindowChart.swift; sourceTree = "<group>"; };
 		F151 /* ActivityMetricStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityMetricStats.swift; sourceTree = "<group>"; };
 		F152 /* ActivityImpact.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityImpact.swift; sourceTree = "<group>"; };
+		F202 /* AutonomicCompute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutonomicCompute.swift; sourceTree = "<group>"; };
 		F153 /* PracticeImpactGauge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PracticeImpactGauge.swift; sourceTree = "<group>"; };
 		F154 /* MetricProgressRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricProgressRow.swift; sourceTree = "<group>"; };
 		F155 /* HeartRateCompute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeartRateCompute.swift; sourceTree = "<group>"; };
@@ -160,6 +177,7 @@
 		FT07 /* ActivityMetricStatsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityMetricStatsTests.swift; sourceTree = "<group>"; };
 		FT08 /* ActivityImpactTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityImpactTests.swift; sourceTree = "<group>"; };
 		FT10 /* ClientProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClientProfileTests.swift; sourceTree = "<group>"; };
+		FT11 /* PracticeCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PracticeCatalogTests.swift; sourceTree = "<group>"; };
 		FTST /* WythinTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WythinTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -200,6 +218,7 @@
 			isa = PBXGroup;
 			children = (
 				F137 /* ActivitiesView.swift */,
+				F203 /* ActivityLogging.swift */,
 				F149 /* ActivityMetricsGrid.swift */,
 				F150 /* ActivityWindowChart.swift */,
 				F153 /* PracticeImpactGauge.swift */,
@@ -281,6 +300,7 @@
 				F199 /* LiveStateInsight.swift */,
 				F151 /* ActivityMetricStats.swift */,
 				F152 /* ActivityImpact.swift */,
+				F202 /* AutonomicCompute.swift */,
 				F155 /* HeartRateCompute.swift */,
 			);
 			path = Metrics;
@@ -295,6 +315,8 @@
 				F127 /* MetricsHistoryPoint.swift */,
 				F135 /* TrainSession.swift */,
 				F136 /* ActivityLog.swift */,
+				F200 /* Practice.swift */,
+				F201 /* PracticeCatalog.swift */,
 				F138 /* PolyvagalState.swift */,
 				F160 /* ClientProfile.swift */,
 			);
@@ -315,6 +337,7 @@
 			children = (
 				F123 /* ResonateView.swift */,
 				F124 /* PacerCircleView.swift */,
+				F206 /* ResonanceSessionView.swift */,
 			);
 			path = Resonate;
 			sourceTree = "<group>";
@@ -341,9 +364,19 @@
 		GAPP_TRN /* Train */ = {
 			isa = PBXGroup;
 			children = (
-				F134 /* TrainView.swift */,
+				F204 /* PracticeHubView.swift */,
+				F205 /* PracticeDetailView.swift */,
 			);
 			path = Train;
+			sourceTree = "<group>";
+		};
+		GAPP_BIO /* Biofeedback */ = {
+			isa = PBXGroup;
+			children = (
+				F134 /* BiofeedbackViews.swift */,
+				F207 /* BiofeedbackSessionView.swift */,
+			);
+			path = Biofeedback;
 			sourceTree = "<group>";
 		};
 		GAPP_UI /* UI */ = {
@@ -353,6 +386,7 @@
 				GAPP_LIV /* Live */,
 				GAPP_ONB /* Onboarding */,
 				GAPP_TRN /* Train */,
+				GAPP_BIO /* Biofeedback */,
 				GAPP_ACT /* Activities */,
 				GAPP_RES /* Resonate */,
 				GAPP_HIS /* History */,
@@ -391,6 +425,7 @@
 				FT07 /* ActivityMetricStatsTests.swift */,
 				FT08 /* ActivityImpactTests.swift */,
 				FT10 /* ClientProfileTests.swift */,
+				FT11 /* PracticeCatalogTests.swift */,
 			);
 			path = WythinTests;
 			sourceTree = "<group>";
@@ -517,9 +552,16 @@
 				A129 /* ACCWaveformView.swift in Sources */,
 				A130 /* RRTachogramView.swift in Sources */,
 				A131 /* HRVAnalysisView.swift in Sources */,
-				A134 /* TrainView.swift in Sources */,
+				A134 /* BiofeedbackViews.swift in Sources */,
 				A136 /* ActivityLog.swift in Sources */,
+				A200 /* Practice.swift in Sources */,
+				A201 /* PracticeCatalog.swift in Sources */,
 				A137 /* ActivitiesView.swift in Sources */,
+				A203 /* ActivityLogging.swift in Sources */,
+				A204 /* PracticeHubView.swift in Sources */,
+				A205 /* PracticeDetailView.swift in Sources */,
+				A206 /* ResonanceSessionView.swift in Sources */,
+				A207 /* BiofeedbackSessionView.swift in Sources */,
 				A138 /* PolyvagalState.swift in Sources */,
 				A160 /* ClientProfile.swift in Sources */,
 				A161 /* OnboardingFlow.swift in Sources */,
@@ -540,6 +582,7 @@
 				A154 /* MetricProgressRow.swift in Sources */,
 				A151 /* ActivityMetricStats.swift in Sources */,
 				A152 /* ActivityImpact.swift in Sources */,
+				A202 /* AutonomicCompute.swift in Sources */,
 				A155 /* HeartRateCompute.swift in Sources */,
 				A123 /* ResonateView.swift in Sources */,
 				A124 /* PacerCircleView.swift in Sources */,
@@ -561,6 +604,7 @@
 				AT10 /* ClientProfileTests.swift in Sources */,
 				AT07 /* ActivityMetricStatsTests.swift in Sources */,
 				AT08 /* ActivityImpactTests.swift in Sources */,
+				AT11 /* PracticeCatalogTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

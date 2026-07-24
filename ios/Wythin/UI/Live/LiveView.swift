@@ -112,7 +112,6 @@ private struct DayScrollView: View {
     @State private var chartRaw:      [MetricsHistoryPoint] = []
     @State private var chartFiltered: [MetricsHistoryPoint] = []
     @State private var chartDayAvg:   MetricsTick?          = nil
-    @State private var showResonate   = false
     @State private var liveStore      = LiveStateStore()
 
     private var isToday: Bool { Calendar.current.isDateInToday(date) }
@@ -207,10 +206,6 @@ private struct DayScrollView: View {
                 guard !Task.isCancelled else { return }
                 await loadDayHistory()
             }
-        }
-        .sheet(isPresented: $showResonate) {
-            ResonateView()
-                .environment(env)
         }
     }
 

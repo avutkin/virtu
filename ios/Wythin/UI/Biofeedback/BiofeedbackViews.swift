@@ -1,357 +1,15 @@
 import SwiftUI
 import Charts
 
-// MARK: - Train State
-
-enum TrainState: Equatable {
-    case calibrating
-    case ready
-    case active
-    case recover
-}
-
-// MARK: - Train Baseline
-
-struct TrainBaseline {
-    let hr:        Float
-    let rmssd:     Float?
-    let timestamp: Date
-}
-
-// MARK: - Polyvagal State
-
-enum ANSState: Equatable {
-    case ventralVagal   // parasympathetic dominant — vagal tone (PNS) high
-    case sympathetic    // arousal dominant — vagal tone (PNS) low
-    case dorsalVagal    // very low HRV + HR not elevated — shutdown warning
-    case mixed          // transitioning
-}
-
-struct AutonomicIndices: Equatable {
-    let sns:   Float           // 0–1 arousal / non-vagal share (= 1 − pns)
-    let pns:   Float           // 0–1 vagal tone (RMSSD-based, breathing-robust)
-    let state: ANSState
-}
-
-// MARK: - Autonomic Compute
-
-enum AutonomicCompute {
-    static func compute(tick: MetricsTick, baseline: TrainBaseline?) -> AutonomicIndices? {
-        balance(rmssd: tick.rmssd, lf: tick.lfPower, hf: tick.hfPower,
-                breathBPM: tick.breathBPM, meanBPM: tick.meanBPM,
-                baselineRmssd: baseline?.rmssd)
-    }
-
-    /// Pure, testable core — breathing-aware autonomic balance.
-    ///
-    /// PNS (vagal tone) is driven by **RMSSD**, a time-domain vagal marker that
-    /// is robust to breathing FREQUENCY: it reflects RSA magnitude regardless of
-    /// which spectral band the breath lands in. This deliberately avoids the
-    /// LF/HF trap — slow paced/resonance breathing (~6/min ≈ 0.1 Hz) pushes the
-    /// vagal respiratory peak out of HF down into LF, so HF/(LF+HF) reads
-    /// "sympathetic" during exactly the most vagally-activating breathing. LF/HF
-    /// is therefore only a fallback, and only at normal breathing rates where it
-    /// is valid.
-    static func balance(rmssd: Float?, lf: Float?, hf: Float?,
-                        breathBPM: Float?, meanBPM: Float?,
-                        baselineRmssd: Float?) -> AutonomicIndices? {
-        // HF band starts at 0.15 Hz ≈ 9 breaths/min; below ~10/min the vagal
-        // respiratory peak drops below HF, inverting any LF/HF-based balance.
-        let paced = (breathBPM ?? 99) < 10
-
-        let pns: Float
-        if let vagal = vagalIndex(rmssd: rmssd, baselineRmssd: baselineRmssd) {
-            pns = vagal
-        } else if !paced, let lf = lf, let hf = hf, lf + hf > 0 {
-            pns = hf / (lf + hf)          // fallback: valid only at normal breathing rates
-        } else {
-            return nil
-        }
-        let sns = 1 - pns
-        return AutonomicIndices(sns: sns, pns: pns,
-                                state: classify(pns: pns, rmssd: rmssd, meanBPM: meanBPM, paced: paced))
-    }
-
-    /// Vagal index 0–1 from RMSSD. Relative to the session baseline when known
-    /// (baseline RMSSD → 0.5, ≥2× → ~0.95); otherwise an absolute saturating map
-    /// (RMSSD 40 ms → 0.5, 80 → 0.67, 120 → 0.75).
-    private static func vagalIndex(rmssd: Float?, baselineRmssd: Float?) -> Float? {
-        guard let rmssd = rmssd, rmssd > 0 else { return nil }
-        if let b = baselineRmssd, b > 0 {
-            return min(0.95, max(0.05, 0.5 * rmssd / b))
-        }
-        return min(0.95, max(0.05, rmssd / (rmssd + 40)))
-    }
-
-    /// Precondition: `sns == 1 − pns`.
-    private static func classify(pns: Float, rmssd: Float?, meanBPM: Float?, paced: Bool) -> ANSState {
-        // Dorsal shutdown: near-zero variability with a NON-elevated heart rate
-        // (low RMSSD + high HR is exercise/sympathetic, not shutdown).
-        if let rmssd = rmssd, rmssd < 8, (meanBPM ?? 99) < 65 { return .dorsalVagal }
-        // Slow paced breathing is inherently vagal — never call it sympathetic.
-        if paced { return pns >= 0.45 ? .ventralVagal : .mixed }
-        if pns >= 0.55 { return .ventralVagal }
-        if pns <= 0.35 { return .sympathetic }     // sns ≥ 0.65
-        return .mixed
-    }
-}
-
-// MARK: - Train Section
-
-private enum TrainSection: String, CaseIterable {
-    case train    = "TRAIN"
-    case resonate = "RESONATE"
-}
-
-// MARK: - Train View
-
-struct TrainView: View {
-    @Environment(AppEnvironment.self) var env
-    @Environment(\.modelContext) var ctx
-
-    @State private var section:          TrainSection    = .train
-    @State private var trainHistory:    [MetricsTick]    = []
-    @State private var baseline:        TrainBaseline?   = nil
-    @State private var trainState:      TrainState       = .calibrating
-    @State private var showBLESheet                      = false
-    @State private var autonomicIndices: AutonomicIndices? = nil
-
-    // Session recording
-    @State private var isSessionActive:  Bool       = false
-    @State private var sessionSNSAccum:  [Float]    = []
-    @State private var sessionPNSAccum:  [Float]    = []
-    @State private var setCount:         Int        = 0
-    @State private var recoveryStart:    Date?      = nil
-    @State private var setRecoveryMins:  [Float]    = []
-    @State private var prevTrainState:   TrainState = .calibrating
-
-    @AppStorage("train.maxHR") private var maxHR: Double = 160
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-
-                // ── Section picker ──────────────────────────────────
-                HStack(spacing: 0) {
-                    ForEach(TrainSection.allCases, id: \.self) { s in
-                        Button(s.rawValue) {
-                            withAnimation(.easeInOut(duration: 0.2)) { section = s }
-                        }
-                        .font(Theme.monoLabel)
-                        .foregroundStyle(section == s ? Theme.bg : Theme.accent)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity)
-                        .background(section == s ? Theme.accent : Color.clear)
-                    }
-                }
-                .background(Theme.card)
-                .clipShape(Capsule())
-                .overlay(Capsule().strokeBorder(Theme.border, lineWidth: 0.5))
-                .padding(.horizontal, 16)
-                .padding(.top, 10)
-                .padding(.bottom, 6)
-
-                // ── Section content ─────────────────────────────────
-                if section == .train {
-                    ScrollView {
-                        VStack(spacing: 16) {
-
-                            StateBanner(state: trainState)
-
-                            HRPanel(
-                                tick:     env.latestTick,
-                                baseline: baseline,
-                                history:  trainHistory
-                            )
-
-                            AutonomicCard(indices: autonomicIndices)
-
-                            HRRecoveryChart(
-                                history:  Array(trainHistory.suffix(150)),
-                                baseline: baseline,
-                                maxHR:    Float(maxHR)
-                            )
-
-                            // Max HR stepper
-                            HStack(spacing: 12) {
-                                Button {
-                                    if maxHR > 100 { maxHR -= 5 }
-                                } label: {
-                                    Image(systemName: "minus.circle")
-                                        .font(.system(size: 18, weight: .light))
-                                        .foregroundStyle(Theme.dim)
-                                }
-
-                                Text("MAX  \(Int(maxHR)) bpm")
-                                    .font(Theme.monoLabel)
-                                    .foregroundStyle(Theme.dim)
-
-                                Button {
-                                    if maxHR < 220 { maxHR += 5 }
-                                } label: {
-                                    Image(systemName: "plus.circle")
-                                        .font(.system(size: 18, weight: .light))
-                                        .foregroundStyle(Theme.dim)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .trailing)
-                            .padding(.horizontal, 4)
-                            .padding(.top, -8)
-
-                            if trainState == .recover || trainState == .ready {
-                                RSACard(tick: env.latestTick)
-
-                                RMSSDChart(
-                                    history:  Array(trainHistory.suffix(150)),
-                                    baseline: baseline
-                                )
-                            }
-
-                            CalibrationBar(
-                                baseline:        baseline,
-                                isCollecting:    trainHistory.count < 15 && baseline == nil,
-                                isSessionActive: isSessionActive,
-                                onRecalibrate:   recalibrate,
-                                onStartSession:  startSession,
-                                onEndSession:    endSession
-                            )
-                        }
-                        .padding(.horizontal)
-                        .padding(.top, 12)
-                        .padding(.bottom, 20)
-                    }
-                } else {
-                    ResonateView()
-                }
-            }
-            .background(Theme.bg)
-            .navigationTitle(section == .train ? "TRAIN" : "RESONATE")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(Theme.bg, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    BLENavButton(state: env.ble.state,
-                                 bpm: env.latestTick?.meanBPM) {
-                        showBLESheet = true
-                    }
-                }
-            }
-            .sheet(isPresented: $showBLESheet) {
-                BLEConnectionSheet(ble: env.ble)
-            }
-        }
-        .onChange(of: env.latestTick?.timestamp) { _, _ in
-            guard let tick = env.latestTick else { return }
-            appendTick(tick)
-        }
-    }
-
-    // MARK: - Data Management
-
-    private func appendTick(_ tick: MetricsTick) {
-        // Rolling 60-min cap (1800 ticks at ~2 s each)
-        if trainHistory.count >= 1800 { trainHistory.removeFirst() }
-        trainHistory.append(tick)
-
-        // Auto-calibrate after first 15 ticks
-        if baseline == nil && trainHistory.count == 15 {
-            calibrateFrom(Array(trainHistory))
-        }
-
-        // Update state machine
-        trainState = deriveState(tick: tick)
-        autonomicIndices = AutonomicCompute.compute(tick: tick, baseline: baseline)
-
-        // Track set/recovery transitions for session recording
-        if isSessionActive {
-            let now = Date.now
-            if prevTrainState == .active && trainState == .recover {
-                recoveryStart = now
-                setCount += 1
-            }
-            if prevTrainState == .recover && trainState == .ready, let rs = recoveryStart {
-                let mins = Float(now.timeIntervalSince(rs) / 60)
-                setRecoveryMins.append(mins)
-                recoveryStart = nil
-            }
-            if let idx = autonomicIndices {
-                sessionSNSAccum.append(idx.sns)
-                sessionPNSAccum.append(idx.pns)
-            }
-        }
-        prevTrainState = trainState
-    }
-
-    private func calibrateFrom(_ ticks: [MetricsTick]) {
-        let hrs   = ticks.compactMap(\.meanBPM)
-        let rmssds = ticks.compactMap(\.rmssd)
-        guard !hrs.isEmpty else { return }
-        let meanHR    = hrs.reduce(0, +) / Float(hrs.count)
-        let meanRMSSD = rmssds.isEmpty ? nil : rmssds.reduce(0, +) / Float(rmssds.count)
-        baseline = TrainBaseline(hr: meanHR, rmssd: meanRMSSD, timestamp: .now)
-    }
-
-    private func recalibrate() {
-        let recent = Array(trainHistory.suffix(15))
-        calibrateFrom(recent)
-    }
-
-    private func startSession() {
-        guard baseline != nil else { return }
-        isSessionActive  = true
-        sessionSNSAccum  = []
-        sessionPNSAccum  = []
-        setCount         = 0
-        setRecoveryMins  = []
-        recoveryStart    = nil
-        prevTrainState   = trainState
-    }
-
-    private func endSession() {
-        guard isSessionActive, let b = baseline else { return }
-        isSessionActive = false
-
-        let avgSNS = sessionSNSAccum.isEmpty ? 0 : sessionSNSAccum.reduce(0, +) / Float(sessionSNSAccum.count)
-        let avgPNS = sessionPNSAccum.isEmpty ? 0 : sessionPNSAccum.reduce(0, +) / Float(sessionPNSAccum.count)
-        let avgRec = setRecoveryMins.isEmpty ? 0 : setRecoveryMins.reduce(0, +) / Float(setRecoveryMins.count)
-        let recData = (try? JSONEncoder().encode(setRecoveryMins)) ?? Data()
-        let rec     = String(data: recData, encoding: .utf8) ?? "[]"
-
-        let session         = TrainSession(baselineHR: b.hr, baselineRMSSD: b.rmssd)
-        session.endedAt     = .now
-        session.setCount    = setCount
-        session.avgSNSIndex = avgSNS
-        session.avgPNSIndex = avgPNS
-        session.avgRecoveryMin = avgRec
-        session.recoveryMins   = rec
-        ctx.insert(session)
-        try? ctx.save()
-
-        sessionSNSAccum = []
-        sessionPNSAccum = []
-        setCount        = 0
-        setRecoveryMins = []
-    }
-
-    private func deriveState(tick: MetricsTick) -> TrainState {
-        guard let b = baseline, let hr = tick.meanBPM else { return .calibrating }
-        let delta = hr - b.hr
-        switch trainState {
-        case .calibrating, .ready:
-            return delta > 20 ? .active : .ready
-        case .active:
-            let prevHR = trainHistory.suffix(3).compactMap(\.meanBPM).first ?? hr
-            return (delta < 35 && hr <= prevHR) ? .recover : .active
-        case .recover:
-            return delta <= 15 ? .ready : .recover
-        }
-    }
-}
+// MARK: - Biofeedback Views
+//
+// The autonomic / HR-recovery / RSA feedback cards and calibration bar, shown
+// live inside a workout BiofeedbackSessionView. Extracted from the former
+// TrainView (now replaced by the Practices hub).
 
 // MARK: - Autonomic Card
 
-private struct AutonomicCard: View {
+struct AutonomicCard: View {
     let indices: AutonomicIndices?
 
     private var state: ANSState { indices?.state ?? .mixed }
@@ -423,7 +81,7 @@ private struct AutonomicCard: View {
     }
 }
 
-private struct IndexBar: View {
+struct IndexBar: View {
     let label: String
     let value: Float?
     let color: Color
@@ -456,7 +114,7 @@ private struct IndexBar: View {
 
 // MARK: - State Banner
 
-private struct StateBanner: View {
+struct StateBanner: View {
     let state: TrainState
 
     var label: String {
@@ -505,7 +163,7 @@ private struct StateBanner: View {
 
 // MARK: - HR Panel
 
-private struct HRPanel: View {
+struct HRPanel: View {
     let tick:     MetricsTick?
     let baseline: TrainBaseline?
     let history:  [MetricsTick]
@@ -560,12 +218,12 @@ private struct HRPanel: View {
 
 // MARK: - HR Recovery Chart
 
-private struct HRRecoveryChart: View {
+struct HRRecoveryChart: View {
     let history:  [MetricsTick]
     let baseline: TrainBaseline?
     let maxHR:    Float
 
-    private struct ChartPoint: Identifiable {
+    struct ChartPoint: Identifiable {
         let id    = UUID()
         let index: Int
         let hr:    Float
@@ -672,7 +330,7 @@ private struct HRRecoveryChart: View {
 
 // MARK: - RSA Card
 
-private struct RSACard: View {
+struct RSACard: View {
     let tick: MetricsTick?
 
     private var rsaDots: String {
@@ -752,11 +410,11 @@ private struct RSACard: View {
 
 // MARK: - RMSSD Chart
 
-private struct RMSSDChart: View {
+struct RMSSDChart: View {
     let history:  [MetricsTick]
     let baseline: TrainBaseline?
 
-    private struct ChartPoint: Identifiable {
+    struct ChartPoint: Identifiable {
         let id    = UUID()
         let index: Int
         let rmssd: Float
@@ -832,7 +490,7 @@ private struct RMSSDChart: View {
 
 // MARK: - Calibration Bar
 
-private struct CalibrationBar: View {
+struct CalibrationBar: View {
     let baseline:        TrainBaseline?
     let isCollecting:    Bool
     let isSessionActive: Bool
