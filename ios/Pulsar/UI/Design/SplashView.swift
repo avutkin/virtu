@@ -9,7 +9,9 @@ struct SplashView: View {
 
     let onFinished: () -> Void
 
-    @State private var opacity:      Double = 0
+    @State private var opacity:      Double = 1   // whole-view fade on dismiss
+    @State private var quoteOpacity: Double = 0   // quote appears first
+    @State private var logoOpacity:  Double = 0   // brand appears after 5 s
     @State private var arrowOpacity: Double = 0
     @State private var quote = quotes.randomElement()!
 
@@ -20,7 +22,7 @@ struct SplashView: View {
 
     var body: some View {
         ZStack {
-            Color(hex: "#070B11").ignoresSafeArea()
+            Color(hex: "#0C0C0C").ignoresSafeArea()
 
             VStack(spacing: 0) {
 
@@ -30,31 +32,32 @@ struct SplashView: View {
                         .resizable()
                         .scaledToFit()
                         .frame(width: 60, height: 60)
-                        .foregroundStyle(Color(hex: "#EDE8DF"))
+                        .foregroundStyle(Color.white)
 
                     VStack(spacing: 10) {
-                        Text("Pulsar")
-                            .font(.custom("JetBrainsMono-Regular", size: 18))
+                        Text("pulsar")
+                            .font(.system(size: 20, weight: .bold))
                             .foregroundStyle(Color.white)
-                            .tracking(2)
+                            .tracking(4)
 
                         Text("Discover the Universe Inside You")
-                            .font(.custom("JetBrainsMono-Regular", size: 11))
-                            .foregroundStyle(Color(hex: "#8FA8BF"))
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(Color.white.opacity(0.7))
                             .tracking(1)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 24)
                     }
                 }
                 .padding(.top, 64)
+                .opacity(logoOpacity)
 
                 Spacer()
 
                 // ── Quote ──────────────────────────────────────────────
                 VStack(spacing: 0) {
                     Text(quote.text)
-                        .font(.custom("JetBrainsMono-Regular", size: 19))
-                        .foregroundStyle(Color(hex: "#8FA8BF"))
+                        .font(.system(size: 18, design: .monospaced))
+                        .foregroundStyle(Color.white)
                         .multilineTextAlignment(.center)
                         .lineSpacing(8)
                         .padding(.horizontal, 40)
@@ -62,18 +65,19 @@ struct SplashView: View {
                     Spacer().frame(height: 32)
 
                     Rectangle()
-                        .fill(Color(hex: "#242E3D"))
+                        .fill(Color.white.opacity(0.25))
                         .frame(width: 20, height: 1)
 
                     Spacer().frame(height: 24)
 
                     Text(quote.author.uppercased())
-                        .font(.custom("JetBrainsMono-Regular", size: 8))
-                        .foregroundStyle(Color(hex: "#3A4758"))
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Color.white.opacity(0.55))
                         .tracking(4.5)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 48)
                 }
+                .opacity(quoteOpacity)
 
                 Spacer()
 
@@ -93,9 +97,12 @@ struct SplashView: View {
             .opacity(opacity)
         }
         .onAppear {
-            withAnimation(.easeIn(duration: 2.0)) { opacity = 1 }
-            withAnimation(.easeIn(duration: 1.0).delay(2.5)) { arrowOpacity = 1 }
-            // Auto-dismiss after 15 s if user doesn't tap the arrow
+            // The quote appears first; the brand (star + pulsar + slogan)
+            // fades in after 5 s.
+            withAnimation(.easeIn(duration: 1.5)) { quoteOpacity = 1 }
+            withAnimation(.easeIn(duration: 1.5).delay(5.0)) { logoOpacity = 1 }
+            withAnimation(.easeIn(duration: 1.0).delay(6.5)) { arrowOpacity = 1 }
+            // Auto-dismiss after 15 s if the user doesn't tap the arrow.
             DispatchQueue.main.asyncAfter(deadline: .now() + 15.0) { dismiss() }
         }
     }
