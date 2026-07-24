@@ -417,9 +417,6 @@ private struct MetricChartCard: View {
                         .font(Theme.monoLabel)
                         .foregroundStyle(Theme.dim.opacity(0.7))
                 }
-                Text(windowLabel)
-                    .font(Theme.monoLabel)
-                    .foregroundStyle(Theme.dim)
             }
             Spacer()
         }
@@ -846,8 +843,8 @@ struct MetricsChartsView: View, Equatable {
     private var hrCard: some View {
         MetricChartCard(
             title:    "Pulse",
-            technicalName: "Heart Rate",
-            subtitle: "average BPM",
+            technicalName: "HR",
+            subtitle: "Your heart rate",
             yLabel:   "bpm",
             color:    Theme.warn,
             windows:  TimeWindow.allCases,
@@ -935,8 +932,8 @@ struct MetricsChartsView: View, Equatable {
     private var vtiCard: some View {
         MetricChartCard(
             title:   "Calm Power",
-            technicalName: "VTI · Vagal Tone Index",
-            subtitle: "ln(RMSSD)  — higher = more parasympathetic",
+            technicalName: "VTI",
+            subtitle: "Strength of your recovery drive",
             yLabel:  "VTI",
             color:   Theme.breathe,
             windows: TimeWindow.allCases,
@@ -966,7 +963,7 @@ struct MetricsChartsView: View, Equatable {
         MetricChartCard(
             title:   "Conscious Breathing",
             technicalName: "RSA",
-            subtitle: "",
+            subtitle: "How your breath moves your heart rate",
             yLabel:  "ms",
             color:   Theme.rsa,
             windows: TimeWindow.allCases,
@@ -998,7 +995,7 @@ struct MetricsChartsView: View, Equatable {
         MetricChartCard(
             title:   "Energy Reserve",
             technicalName: "SDNN",
-            subtitle: "overall HRV",
+            subtitle: "Your overall heart-rate variability",
             yLabel:  "ms",
             color:   Theme.hrv,
             windows: TimeWindow.allCases,
@@ -1054,7 +1051,7 @@ struct MetricsChartsView: View, Equatable {
     private var dcCard: some View {
         MetricChartCard(
             title:    "Vagal Tone",
-            technicalName: "DC · Deceleration Capacity",
+            technicalName: "DC",
             subtitle: "Your relaxation and recovery capacity",
             yLabel:   "ms",
             color:    Color(red: 0.4, green: 0.7, blue: 1.0),
@@ -1086,7 +1083,7 @@ struct MetricsChartsView: View, Equatable {
         MetricChartCard(
             title:    "Adaptive Capacity",
             technicalName: "RCMSE",
-            subtitle: "",
+            subtitle: "How flexibly your system adapts",
             yLabel:   "entropy",
             color:    Color(red: 0.8, green: 0.5, blue: 1.0),
             windows:  TimeWindow.allCases,
@@ -1116,8 +1113,8 @@ struct MetricsChartsView: View, Equatable {
     private var pipCard: some View {
         MetricChartCard(
             title:    "Inner Noise",
-            technicalName: "HR Fragmentation · PIP",
-            subtitle: "% inflection points  ·  Costa 2017",
+            technicalName: "PIP",
+            subtitle: "Beat-to-beat jitter — lower is calmer",
             yLabel:   "%",
             color:    Color(red: 1.0, green: 0.7, blue: 0.3),
             windows:  TimeWindow.allCases,
@@ -1149,7 +1146,7 @@ struct MetricsChartsView: View, Equatable {
         MetricChartCard(
             title:   "Harmony",
             technicalName: "DFA α1",
-            subtitle: "short-term fractal scaling  ·  scales 4–16 beats",
+            subtitle: "Balance of your heart rhythm",
             yLabel:  "α1",
             color:   Theme.ulf,
             windows: TimeWindow.allCases,
@@ -1180,8 +1177,8 @@ struct MetricsChartsView: View, Equatable {
     private var lfhfCard: some View {
         MetricChartCard(
             title:   "Stress Balance",
-            technicalName: "Arousal",
-            subtitle: "breathing-robust · lower is calmer",
+            technicalName: "LF/HF",
+            subtitle: "Stress vs calm — lower is calmer",
             yLabel:  "%",
             color:   Theme.rsa,
             windows: TimeWindow.allCases,
