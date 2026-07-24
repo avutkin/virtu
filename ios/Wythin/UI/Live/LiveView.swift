@@ -126,7 +126,10 @@ private struct DayScrollView: View {
     }
 
     var body: some View {
-        ScrollView {
+        LogoRefreshableScrollView(enabled: isToday, onRefresh: {
+            // Pull down on today's page to force an immediate live-state update.
+            await liveStore.refresh(env: env, force: true)
+        }) {
             VStack(spacing: 12) {
 
                 // ── Autonomic state (today only) ────────────────────
@@ -180,10 +183,6 @@ private struct DayScrollView: View {
 
             }
             .padding(.top, 8)
-        }
-        .refreshable {
-            // Pull down on today's page to force an immediate live-state update.
-            if isToday { await liveStore.refresh(env: env, force: true) }
         }
         .task(id: date) {
             if isToday {
@@ -802,4 +801,121 @@ private func generateMockECG() -> [Float] {
         } else if p < 0.7 { v = 150 * sin((p - 0.5) * .pi / 0.2) }
         return v + Float.random(in: -15...15)
     }
+}
+
+// MARK: - Logo Pull-to-Refresh
+
+/// Vertical ScrollView with a custom pull-to-refresh whose indicator is the
+/// Wythin logo: it rotates with the pull and spins continuously while
+/// refreshing. Uses scroll-offset detection (not a gesture) so it never fights
+/// the horizontal day-paging TabView, and it only reacts to downward overscroll
+/// so normal scrolling doesn't re-evaluate the (heavy) content.
+struct LogoRefreshableScrollView<Content: View>: View {
+    var enabled: Bool = true
+    let onRefresh: () async -> Void
+    let content: Content
+
+    init(enabled: Bool = true,
+         onRefresh: @escaping () async -> Void,
+         @ViewBuilder content: () -> Content) {
+        self.enabled   = enabled
+        self.onRefresh = onRefresh
+        self.content   = content()
+    }
+
+    @State private var pull: CGFloat = 0
+    @State private var isRefreshing = false
+
+    private let threshold       = 72.0
+    private let indicatorHeight = 60.0
+    private let logoSize        = 26.0
+    private let space           = "wythinLogoRefresh"
+
+    private var progress: Double { min(1, Double(pull) / threshold) }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                // Zero-height anchor at the very top: its minY in the scroll
+                // space is 0 at rest and grows as the user overscrolls down.
+                GeometryReader { proxy in
+                    Color.clear.preference(
+                        key: RefreshOffsetKey.self,
+                        value: proxy.frame(in: .named(space)).minY)
+                }
+                .frame(height: 0)
+
+                // Revealed band that holds the spinning logo while refreshing.
+                Color.clear.frame(height: isRefreshing ? indicatorHeight : 0)
+
+                content
+            }
+        }
+        .coordinateSpace(name: space)
+        .overlay(alignment: .top) {
+            if enabled {
+                let y = isRefreshing
+                    ? indicatorHeight / 2 - logoSize / 2
+                    : min(max(0, Double(pull)), 140) / 2 - logoSize / 2
+                RefreshLogo(spinning: isRefreshing,
+                            pullAngle: progress * 270,
+                            opacity:  isRefreshing ? 1 : progress,
+                            size: logoSize)
+                    .offset(y: y)
+                    .allowsHitTesting(false)
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: isRefreshing)
+        .onPreferenceChange(RefreshOffsetKey.self) { value in
+            guard enabled else { return }
+            let p = max(0, value)              // ignore normal (upward) scrolling
+            if p != pull { pull = p }
+            if !isRefreshing && p > threshold { trigger() }
+        }
+    }
+
+    private func trigger() {
+        isRefreshing = true
+        Task {
+            await onRefresh()
+            isRefreshing = false
+        }
+    }
+}
+
+/// The Wythin logo used as the refresh indicator. Owns its own spin animation
+/// so keeping it turning doesn't re-evaluate the scroll view's content.
+private struct RefreshLogo: View {
+    let spinning:  Bool
+    let pullAngle: Double
+    let opacity:   Double
+    let size:      Double
+
+    @State private var spin = false
+
+    var body: some View {
+        Image("WythinLogo")
+            .resizable()
+            .renderingMode(.template)
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .foregroundStyle(Theme.accent)
+            .rotationEffect(.degrees(spinning ? (spin ? 360 : 0) : pullAngle))
+            .opacity(opacity)
+            .onChange(of: spinning) { _, now in
+                if now {
+                    spin = false
+                    withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) {
+                        spin = true
+                    }
+                } else {
+                    withAnimation(.easeOut(duration: 0.2)) { spin = false }
+                }
+            }
+    }
+}
+
+private struct RefreshOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
