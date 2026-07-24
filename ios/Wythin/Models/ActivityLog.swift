@@ -123,6 +123,9 @@ final class ActivityLog {
     var beforeRSA:   Float?;  var duringRSA:   Float?;  var afterRSA:   Float?
     var beforeVTI:   Float?;  var duringVTI:   Float?;  var afterVTI:   Float?
     var beforeLFHF:  Float?;  var duringLFHF:  Float?;  var afterLFHF:  Float?
+    // Stress Balance as the Live view shows it: the breathing-robust 0–100
+    // autonomic dial (SNS %), not the raw LF/HF ratio.
+    var beforeStress: Float?;  var duringStress: Float?;  var afterStress: Float?
     var beforeRMSSD: Float?;  var duringRMSSD: Float?;  var afterRMSSD: Float?
     var beforeRCMSE: Float?;  var duringRCMSE: Float?;  var afterRCMSE: Float?
     var beforePIP:   Float?;  var duringPIP:   Float?;  var afterPIP:   Float?
@@ -229,11 +232,24 @@ final class ActivityLog {
             return log(meanRMSSD)
         }
 
+        // Stress Balance dial (0–100 SNS %), matching the Live view: compute the
+        // breathing-robust balance per sample, then average over the window.
+        func stressDial(_ arr: [HRVSample]) -> Float? {
+            let vals = arr.compactMap { s in
+                AutonomicCompute.balance(rmssd: s.rmssd, lf: s.lfPower, hf: s.hfPower,
+                                         breathBPM: s.breathBPM, meanBPM: s.meanBPM,
+                                         baselineRmssd: nil).map { $0.sns * 100 }
+            }
+            guard !vals.isEmpty else { return nil }
+            return vals.reduce(0, +) / Float(vals.count)
+        }
+
         beforeHR    = avg(before, \.meanBPM);   duringHR    = avg(during, \.meanBPM);   afterHR    = avg(after, \.meanBPM)
         beforeSDNN  = avg(before, \.sdnn);       duringSDNN  = avg(during, \.sdnn);       afterSDNN  = avg(after, \.sdnn)
         beforeRSA   = avg(before, \.rsaMs);      duringRSA   = avg(during, \.rsaMs);      afterRSA   = avg(after, \.rsaMs)
         beforeVTI   = vtiFromRMSSD(before);      duringVTI   = vtiFromRMSSD(during);      afterVTI   = vtiFromRMSSD(after)
         beforeLFHF  = avg(before, \.lfHF);       duringLFHF  = avg(during, \.lfHF);       afterLFHF  = avg(after, \.lfHF)
+        beforeStress = stressDial(before);       duringStress = stressDial(during);       afterStress = stressDial(after)
         beforeRMSSD = avg(before, \.rmssd);      duringRMSSD = avg(during, \.rmssd);      afterRMSSD = avg(after, \.rmssd)
         beforeRCMSE = avg(before, \.rcmse);      duringRCMSE = avg(during, \.rcmse);      afterRCMSE = avg(after, \.rcmse)
         beforePIP   = avg(before, \.pip);        duringPIP   = avg(during, \.pip);        afterPIP   = avg(after, \.pip)

@@ -55,8 +55,12 @@ let activityMetricDefs: [ActivityMetricDef] = [
           why: "Inner Noise (Percentage of Inflection Points) captures beat-to-beat jitter — erratic, non-restorative variability. Lower means a cleaner, calmer signal; expect it to fall as you relax."),
     .init(label: "Harmony",             techLabel: "DFA α1", unit: "",    direction: .target(1.0), extract: { $0.dfa1.map(Double.init) },    format: f2,                                 beforeKey: \.beforeDFA1,  duringKey: \.duringDFA1,
           why: "Harmony (DFA α1) is the fractal balance of your heartbeat, with ~1.0 the healthy sweet spot. Moving toward 1.0 signals well-organised regulation; expect it to approach 1.0 as you relax."),
-    .init(label: "Stress Balance",      techLabel: "LF/HF",  unit: "",    direction: .lower,       extract: { $0.lfHF.map(Double.init) },    format: { fFloat($0, MetricFormat.ratio) }, beforeKey: \.beforeLFHF,  duringKey: \.duringLFHF,
-          why: "Stress Balance (LF/HF ratio) weighs sympathetic drive against parasympathetic calm. Lower means you’re shifting into rest-and-digest; expect it to drop through the session."),
+    .init(label: "Stress Balance",      techLabel: "LF/HF",  unit: "%",   direction: .lower,       extract: { pt in
+              AutonomicCompute.balance(rmssd: pt.rmssd, lf: pt.lfPower, hf: pt.hfPower,
+                                       breathBPM: pt.breathBPM, meanBPM: pt.meanBPM,
+                                       baselineRmssd: nil).map { Double($0.sns) * 100 }
+          }, format: f1,                                 beforeKey: \.beforeStress, duringKey: \.duringStress,
+          why: "Stress Balance is a breathing-robust 0–100 dial of how revved-up vs calm you are — the same one the Live view shows. Unlike a raw LF/HF ratio it isn’t fooled by slow breathing, so paced breaths correctly read as calmer. Lower means you’re shifting into rest-and-digest; expect it to drop through the session."),
     .init(label: "Conscious Breathing", techLabel: "RSA",    unit: "ms",  direction: .higher,      extract: { $0.rsaMs.map(Double.init) },   format: { fFloat($0, MetricFormat.ms) },    beforeKey: \.beforeRSA,   duringKey: \.duringRSA,
           why: "Conscious Breathing (Respiratory Sinus Arrhythmia) is the swing of heart rate with each breath — the clearest sign of vagal tone. Higher means slow, deep breathing is landing; expect it to rise with paced diaphragmatic breaths."),
     .init(label: "Calm Power",          techLabel: "VTI",    unit: "",    direction: .higher,      extract: { $0.vti.map(Double.init) },     format: { fFloat($0, MetricFormat.ratio) }, beforeKey: \.beforeVTI,   duringKey: \.duringVTI,
