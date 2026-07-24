@@ -50,7 +50,15 @@ _LIVE_STATE_SYSTEM_PROMPT = (
     "Anxious, Low & Fatigued). Use 2-3 bullets. The '→' recommendation must fit "
     "the state — e.g. lean into focused work, a slow breath to settle inner "
     "noise, or a walk / light movement to lift a low or flat state. Keep the "
-    "whole reply under 60 words. Only rely on the metrics provided."
+    "whole reply under 60 words. Only rely on the metrics provided.\n"
+    "\n"
+    "Pay special attention to Inner noise (PIP) and DFA alpha-1 as a proxy for "
+    "mental focus: low, falling inner noise together with DFA alpha-1 near 1.0 "
+    "signals sharp, absorbed focus (a good time for deep work); rising inner "
+    "noise or DFA alpha-1 drifting toward 0.5 signals scattered, restless "
+    "attention (suggest a reset — a few slow breaths or a short movement break). "
+    "When these two are present, make one bullet about focus and let it steer "
+    "the recommendation."
 )
 
 
@@ -92,7 +100,11 @@ _METRIC_NAMES = {
     "coherence":  "Coherence — heart–breath synchronization (0–1)",
     "breath_bpm": "Breathing rate (breaths/min)",
     "cbi":        "Cardiac balance index",
-    "pip":        "Inner noise — beat-to-beat fragmentation (higher = more erratic)",
+    "pip":        "Inner noise — beat-to-beat fragmentation; a focus proxy "
+                  "(lower = smoother, more settled attention; higher = scattered/restless)",
+    "dfa1":       "DFA alpha-1 — fractal organization of the rhythm; a focus proxy "
+                  "(near 1.0 = well-ordered, absorbed/focused; drifting toward 0.5 = "
+                  "random/uncoupled; above ~1.2 = overly rigid)",
 }
 
 

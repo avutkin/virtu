@@ -25,6 +25,8 @@ enum LiveStateTrendCompute {
         ("coherence",  { $0.coherence }),
         ("breath_bpm", { $0.breathBPM }),
         ("cbi",        { $0.cbi }),
+        ("pip",        { $0.pip }),     // inner noise — focus proxy
+        ("dfa1",       { $0.dfa1 }),    // fractal organization — focus proxy
     ]
 
     /// Minimum quality-passing points required in the window before summarizing
