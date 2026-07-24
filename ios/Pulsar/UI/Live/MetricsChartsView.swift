@@ -1084,15 +1084,15 @@ struct MetricsChartsView: View, Equatable {
 
     private var rcmseCard: some View {
         MetricChartCard(
-            title:    "Adaptive Power",
+            title:    "Adaptive Capacity",
             technicalName: "RCMSE",
             subtitle: "",
             yLabel:   "entropy",
             color:    Color(red: 0.8, green: 0.5, blue: 1.0),
             windows:  TimeWindow.allCases,
             refs: [
-                RefLine(value: 1.0, label: "Burnout",    color: Theme.warn),
-                RefLine(value: 1.5, label: "Recovering", color: Theme.dim),
+                RefLine(value: 1.0, label: "Depleted",   color: Theme.warn),
+                RefLine(value: 1.5, label: "Recharging", color: Theme.dim),
                 RefLine(value: 2.0, label: "Thriving",   color: Theme.coh),
             ],
             yDomain: 0.5...3.0,
