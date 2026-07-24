@@ -1114,7 +1114,7 @@ struct MetricsChartsView: View, Equatable {
         MetricChartCard(
             title:    "Inner Noise",
             technicalName: "PIP",
-            subtitle: "Beat-to-beat jitter — lower is calmer",
+            subtitle: "How steady your heartbeat is — lower is smoother",
             yLabel:   "%",
             color:    Color(red: 1.0, green: 0.7, blue: 0.3),
             windows:  TimeWindow.allCases,
@@ -1183,8 +1183,8 @@ struct MetricsChartsView: View, Equatable {
             color:   Theme.rsa,
             windows: TimeWindow.allCases,
             refs: [
-                RefLine(value: 35, label: "calm",     color: Theme.coh),
-                RefLine(value: 65, label: "elevated",  color: Theme.warn),
+                RefLine(value: 45, label: "parasympathetic", color: Theme.coh),
+                RefLine(value: 65, label: "sympathetic",     color: Theme.warn),
             ],
             yDomain: 0...100,
             win: window, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
@@ -1194,7 +1194,7 @@ struct MetricsChartsView: View, Equatable {
                 physiology:  "Deliberately NOT the classic LF/HF ratio. LF/HF is confounded by breathing rate — slow resonance breathing (~6/min) pushes the vagal respiratory peak into the LF band, making LF/HF spike as if you were stressed during the calmest possible breathing. An RMSSD-based index avoids that inversion, so slow breathing correctly reads as low arousal.",
                 training:    "Watch it fall during resonance breathing and recovery, and rise with stress or exercise. Because it's breathing-robust, a paced-breathing session should trend this downward — the opposite of what a raw LF/HF chart would show.",
                 sensitivity: "Moderate. Tracks vagal tone; robust to breathing frequency (unlike LF/HF).",
-                levels:      "Calm:        < 35%\nBalanced:    35–65%\nElevated:    > 65%",
+                levels:      "Parasympathetic: < 45%\nBalanced:        45–65%\nSympathetic:     > 65%",
                 notes:       "The raw LF/HF ratio is intentionally not plotted here because it misleads during breathwork; this arousal index is the app's stress signal."
             ),
             history: history, rawHistory: rawHistory, date: date
