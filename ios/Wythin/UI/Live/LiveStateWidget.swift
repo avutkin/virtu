@@ -44,32 +44,87 @@ struct LiveStateWidget: View {
 
     // MARK: - Rendering
 
-    /// Renders the structured insight: first line = state headline (bold),
-    /// "•" lines = trend bullets, "→" line = the recommendation (accented).
+    /// Renders the parsed insight: a colored state-icon badge + personalized
+    /// title, the trend bullets, and a distinct, state-tinted "right now"
+    /// recommendation block.
     @ViewBuilder
     private func structured(_ text: String) -> some View {
-        let lines = text
-            .components(separatedBy: "\n")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-        VStack(alignment: .leading, spacing: 7) {
-            ForEach(Array(lines.enumerated()), id: \.offset) { idx, line in
-                if idx == 0 {
-                    Text(line)
-                        .font(.system(size: 19, weight: .bold))
-                        .foregroundStyle(Theme.text)
-                } else if line.hasPrefix("→") {
-                    Text(line)
-                        .font(Theme.monoBody)
-                        .foregroundStyle(Theme.accent)
-                } else {
-                    Text(line)
-                        .font(Theme.monoBody)
-                        .foregroundStyle(Theme.dim)
+        let insight = LiveStateInsight(raw: text)
+        let accent  = insight.state?.color ?? Theme.accent
+        VStack(alignment: .leading, spacing: 14) {
+            header(insight, accent: accent)
+
+            if !insight.bullets.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(Array(insight.bullets.enumerated()), id: \.offset) { _, bullet in
+                        HStack(alignment: .top, spacing: 8) {
+                            Circle()
+                                .fill(accent.opacity(0.7))
+                                .frame(width: 5, height: 5)
+                                .padding(.top, 6)
+                            Text(bullet)
+                                .font(.system(size: 14))
+                                .foregroundStyle(Theme.dim)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .lineSpacing(3)
+                        }
+                    }
                 }
+            }
+
+            if let recommendation = insight.recommendation {
+                recommendationBlock(recommendation, accent: accent)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func header(_ insight: LiveStateInsight, accent: Color) -> some View {
+        HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(accent.opacity(0.16))
+                    .frame(width: 44, height: 44)
+                Image(systemName: insight.state?.iconName ?? "waveform.path.ecg")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(accent)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text("CURRENT STATE")
+                    .font(Theme.monoLabel)
+                    .foregroundStyle(Theme.dim)
+                Text(insight.title)
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(Theme.text)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func recommendationBlock(_ text: String, accent: Color) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "arrow.right.circle.fill")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(accent)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("RIGHT NOW")
+                    .font(Theme.monoLabel)
+                    .foregroundStyle(accent)
+                Text(text)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Theme.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .lineSpacing(3)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(accent.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12)
+            .strokeBorder(accent.opacity(0.25), lineWidth: 0.5))
     }
 
     // MARK: - Refresh loop

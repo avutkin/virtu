@@ -53,6 +53,7 @@
 		A144 /* SignalQualityTier+Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = F144 /* SignalQualityTier+Theme.swift */; };
 		A145 /* InsightGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F145 /* InsightGenerator.swift */; };
 		A146 /* LiveStateTrendCompute.swift in Sources */ = {isa = PBXBuildFile; fileRef = F146 /* LiveStateTrendCompute.swift */; };
+		A199 /* LiveStateInsight.swift in Sources */ = {isa = PBXBuildFile; fileRef = F199 /* LiveStateInsight.swift */; };
 		A147 /* LiveStateWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F147 /* LiveStateWidget.swift */; };
 		A148 /* MetricTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = F148 /* MetricTile.swift */; };
 		A149 /* ActivityMetricsGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = F149 /* ActivityMetricsGrid.swift */; };
@@ -134,6 +135,7 @@
 		F144 /* SignalQualityTier+Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SignalQualityTier+Theme.swift"; sourceTree = "<group>"; };
 		F145 /* InsightGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightGenerator.swift; sourceTree = "<group>"; };
 		F146 /* LiveStateTrendCompute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveStateTrendCompute.swift; sourceTree = "<group>"; };
+		F199 /* LiveStateInsight.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveStateInsight.swift; sourceTree = "<group>"; };
 		F147 /* LiveStateWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveStateWidget.swift; sourceTree = "<group>"; };
 		F148 /* MetricTile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricTile.swift; sourceTree = "<group>"; };
 		F149 /* ActivityMetricsGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityMetricsGrid.swift; sourceTree = "<group>"; };
@@ -276,6 +278,7 @@
 				F142 /* AdvancedHRVCompute.swift */,
 				F143 /* ECGQualityCompute.swift */,
 				F146 /* LiveStateTrendCompute.swift */,
+				F199 /* LiveStateInsight.swift */,
 				F151 /* ActivityMetricStats.swift */,
 				F152 /* ActivityImpact.swift */,
 				F155 /* HeartRateCompute.swift */,
@@ -529,6 +532,7 @@
 				A143 /* ECGQualityCompute.swift in Sources */,
 				A144 /* SignalQualityTier+Theme.swift in Sources */,
 				A146 /* LiveStateTrendCompute.swift in Sources */,
+				A199 /* LiveStateInsight.swift in Sources */,
 				A148 /* MetricTile.swift in Sources */,
 				A149 /* ActivityMetricsGrid.swift in Sources */,
 				A150 /* ActivityWindowChart.swift in Sources */,
