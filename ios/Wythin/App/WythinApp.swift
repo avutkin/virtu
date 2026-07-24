@@ -62,8 +62,10 @@ enum AppTab: Hashable { case train, activities, live, track, settings }
 
 struct ContentView: View {
     @Environment(AppEnvironment.self) var env
+    @Environment(\.modelContext) private var modelContext
     @State private var selectedTab: AppTab = .live
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @AppStorage("didBackfillWindowsV2") private var didBackfillWindowsV2 = false
 
     var body: some View {
         Group {
@@ -75,6 +77,13 @@ struct ContentView: View {
                 }
                 .transition(.opacity)
             }
+        }
+        .task {
+            // One-time: fill Stress Balance (and other post-hoc fields) on
+            // sessions logged before those fields existed.
+            guard !didBackfillWindowsV2 else { return }
+            ActivityLog.backfillMissingWindows(context: modelContext)
+            didBackfillWindowsV2 = true
         }
     }
 

@@ -133,9 +133,9 @@ struct ActivitiesView: View {
                                     Image(systemName: "play.fill")
                                     Text("START")
                                 }
-                                .font(Theme.monoBody)
+                                .font(Theme.monoLabel)
                                 .foregroundStyle(Theme.bg)
-                                .padding(.vertical, 10)
+                                .padding(.vertical, 7)
                                 .frame(maxWidth: .infinity)
                                 .background(Theme.accent)
                                 .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -148,9 +148,9 @@ struct ActivitiesView: View {
                                     Image(systemName: "clock.arrow.circlepath")
                                     Text("LOG PAST")
                                 }
-                                .font(Theme.monoBody)
+                                .font(Theme.monoLabel)
                                 .foregroundStyle(Theme.accent)
-                                .padding(.vertical, 10)
+                                .padding(.vertical, 7)
                                 .frame(maxWidth: .infinity)
                                 .background(Theme.accent.opacity(0.08))
                                 .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -421,7 +421,19 @@ private struct ActivityLogRow: View {
     private var timeStr: String {
         let fmt = DateFormatter()
         fmt.dateFormat = "HH:mm"
-        return fmt.string(from: entry.startedAt)
+        let start = fmt.string(from: entry.startedAt)
+        if let end = entry.endedAt {
+            return "\(start)–\(fmt.string(from: end))"
+        }
+        return start
+    }
+
+    private func impactColor(_ score: Int) -> Color {
+        switch score {
+        case 65...:   return Theme.accent
+        case 50..<65: return Theme.rsa
+        default:      return Theme.dim
+        }
     }
 
     var body: some View {
@@ -444,17 +456,30 @@ private struct ActivityLogRow: View {
                         .lineLimit(1)
                     HStack(spacing: 4) {
                         Text(timeStr)
-                            .font(.system(size: 11, design: .monospaced))
+                            .font(.system(size: 10, design: .monospaced))
                             .foregroundStyle(Theme.dim)
                         if entry.isActive {
-                            Text("LIVE").font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.warn)
+                            Text("LIVE").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.warn)
                         } else {
-                            Text(entry.durationString).font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.dim)
+                            Text(entry.durationString).font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim)
                         }
                     }
                 }
 
                 Spacer()
+
+                if let score = entry.impactScore {
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text("\(score)%")
+                            .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(impactColor(score))
+                        Text(ActivityImpact.caption(for: score))
+                            .font(.system(size: 8, design: .monospaced))
+                            .foregroundStyle(Theme.dim)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                    }
+                }
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11))
@@ -472,9 +497,10 @@ private struct ActivityLogRow: View {
     }
 }
 
-/// One metric mini-cell in a log row: technical label, the during-average
-/// value, and the raw difference vs the before-average — colored green when
-/// the change is a benefit for that metric, red when it isn't.
+/// One metric mini-cell in a log row: consumer-friendly name, the % change
+/// from the before-average to the during-average (the hero number), and the
+/// during value shown small underneath. The % is colored green when the
+/// change is a benefit for that metric, red when it isn't.
 private struct LogMetricCell: View {
     let def:   ActivityMetricDef
     let entry: ActivityLog
@@ -482,9 +508,10 @@ private struct LogMetricCell: View {
     private var during: Double? { entry[keyPath: def.duringKey].map(Double.init) }
     private var before: Double? { entry[keyPath: def.beforeKey].map(Double.init) }
 
-    private var delta: Double? {
-        guard let d = during, let b = before else { return nil }
-        return d - b
+    /// Percent change from the before-average to the during-average.
+    private var pctChange: Double? {
+        guard let d = during, let b = before, abs(b) > 0.0001 else { return nil }
+        return (d - b) / abs(b) * 100
     }
 
     private var deltaColor: Color {
@@ -495,25 +522,27 @@ private struct LogMetricCell: View {
     }
 
     private var deltaText: String {
-        guard let d = delta else { return "—" }
-        return (d >= 0 ? "+" : "−") + def.format(abs(d))
+        guard let p = pctChange else { return "—" }
+        return (p >= 0 ? "+" : "−") + String(format: "%.0f%%", abs(p))
     }
 
     var body: some View {
         VStack(spacing: 2) {
-            Text(def.techLabel)
+            Text(def.label)
                 .font(.system(size: 9, design: .monospaced))
                 .foregroundStyle(Theme.dim)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-            Text(def.format(during))
-                .font(.system(size: 13, design: .monospaced))
-                .foregroundStyle(Theme.text)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .minimumScaleFactor(0.8)
+                .frame(minHeight: 22, alignment: .bottom)
+            Text(deltaText)
+                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                .foregroundStyle(deltaColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-            Text(deltaText)
+            Text(def.format(during))
                 .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(deltaColor)
+                .foregroundStyle(Theme.text.opacity(0.55))
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
         }
@@ -601,13 +630,7 @@ struct ActivityDetailView: View {
     }
 
     private func impactCaption(_ score: Int) -> String {
-        switch score {
-        case 80...:   return "excellent session"
-        case 65..<80: return "solid session"
-        case 50..<65: return "steady session"
-        case 35..<50: return "gentle session"
-        default:      return "light session"
-        }
+        ActivityImpact.caption(for: score)
     }
 
     private func recIcon(_ kind: ActivityRecommendation.Kind) -> String {
@@ -688,10 +711,9 @@ struct ActivityDetailView: View {
                                                         startedAt: entry.startedAt,
                                                         endedAt: windowEnd))
                         }
-                        let uplifts = metrics.compactMap { $0.stats.avgUpliftPct }
-
-                        // Overall practice impact.
-                        if let score = ActivityImpact.score(uplifts: uplifts) {
+                        // Overall practice impact — read the value stored at
+                        // capture so this gauge and the row badge always agree.
+                        if let score = entry.impactScore {
                             VStack(spacing: 14) {
                                 Text("OVERALL PRACTICE IMPACT")
                                     .font(Theme.monoLabel)

@@ -132,6 +132,11 @@ final class ActivityLog {
     var beforeDC:    Float?;  var duringDC:    Float?;  var afterDC:    Float?
     var beforeDFA1:  Float?;  var duringDFA1:  Float?;  var afterDFA1:  Float?
 
+    /// Cached overall practice impact (0–100), computed once at capture from
+    /// quality-filtered samples so the activity-row badge and the detail
+    /// gauge always show the same number.
+    var impactScore: Int?
+
     init(activityType:    String,
          activitySubtype: String? = nil,
          customName:      String? = nil,
@@ -196,6 +201,27 @@ final class ActivityLog {
         return a - b
     }
 
+    // MARK: Backfill
+
+    /// One-time backfill for sessions logged before a metric field existed
+    /// (e.g. the Stress Balance dial, added later). For every finished,
+    /// non-manual entry whose `duringStress` is still nil, recomputes all HRV
+    /// windows from the `HRVSample` records still in the store. Idempotent —
+    /// entries with no samples in range simply stay nil, and re-running
+    /// produces the same values for entries already filled.
+    static func backfillMissingWindows(context: ModelContext) {
+        let desc = FetchDescriptor<ActivityLog>(
+            predicate: #Predicate { $0.isManual == false }
+        )
+        guard let all = try? context.fetch(desc) else { return }
+        let needsFill = all.filter { $0.endedAt != nil && ($0.duringStress == nil || $0.impactScore == nil) }
+        guard !needsFill.isEmpty else { return }
+        for entry in needsFill {
+            entry.computeHRVWindows(context: context)
+        }
+        try? context.save()
+    }
+
     // MARK: HRV window computation
 
     /// Queries HRVSample records for the three windows around this activity
@@ -255,5 +281,19 @@ final class ActivityLog {
         beforePIP   = avg(before, \.pip);        duringPIP   = avg(during, \.pip);        afterPIP   = avg(after, \.pip)
         beforeDC    = avg(before, \.dc);         duringDC    = avg(during, \.dc);         afterDC    = avg(after, \.dc)
         beforeDFA1  = avg(before, \.dfa1);       duringDFA1  = avg(during, \.dfa1);       afterDFA1  = avg(after, \.dfa1)
+
+        // Overall practice impact — the single source of truth for both the
+        // row badge and the detail gauge. Computed exactly the way the detail
+        // card does: benefit-signed during-vs-before uplift per metric over
+        // quality-filtered points, averaged by ActivityImpact.score.
+        let points = MetricsQualityFilter.filter(samples.map { MetricsHistoryPoint(from: $0) })
+        let uplifts = activityMetricDefs.compactMap { def in
+            ActivityMetricStats(points: points,
+                                extract: def.extract,
+                                direction: def.direction,
+                                startedAt: startedAt,
+                                endedAt: end).avgUpliftPct
+        }
+        impactScore = ActivityImpact.score(uplifts: uplifts)
     }
 }

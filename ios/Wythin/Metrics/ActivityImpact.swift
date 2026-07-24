@@ -16,6 +16,18 @@ enum ActivityImpact {
         return Int((mean * 100).rounded())
     }
 
+    /// Short human caption for an impact score (shared by the detail gauge and
+    /// the activity-row badge).
+    static func caption(for score: Int) -> String {
+        switch score {
+        case 80...:   return "excellent session"
+        case 65..<80: return "solid session"
+        case 50..<65: return "steady session"
+        case 35..<50: return "gentle session"
+        default:      return "light session"
+        }
+    }
+
     /// Counts of improved / held / dipped, with a small dead-zone (in percent)
     /// around zero that counts as "held".
     static func breakdown(uplifts: [Double], deadZone: Double = 2)
