@@ -17,7 +17,7 @@ from ..models import InsightRequest, InsightResponse, MetricTrend
 router = APIRouter(tags=["insights"])
 
 _SYSTEM_PROMPT = (
-    "You are a physiologist reviewing one logged activity's heart-rate-"
+    "You are an expert physiologist reviewing one logged activity's heart-rate-"
     "variability (HRV) response. The activity's type (and subtype) is given — "
     "treat it as central. In 2-3 sentences: briefly interpret the "
     "before/during/after deltas, then end with exactly ONE concrete, forward-"
@@ -30,8 +30,8 @@ _SYSTEM_PROMPT = (
 )
 
 _LIVE_STATE_SYSTEM_PROMPT = (
-    "You are a physiology expert reading a person's live heart-rate-variability "
-    "(HRV) metrics from a wearable, labeled with what each one means. Interpret "
+    "You are an expert physiologist reading a person's live heart-rate-"
+    "variability (HRV) metrics from a wearable, labeled with what each one means. Interpret "
     "the trends and reply in EXACTLY this plain-text structure — no markdown, no "
     "bold, no extra text before or after:\n"
     "\n"
