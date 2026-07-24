@@ -2,9 +2,9 @@ import SwiftUI
 
 /// Small, always-visible widget showing an OpenAI-generated, purely
 /// descriptive account of the nervous-system trend over the last 10
-/// minutes. Refreshes every 5 minutes (first pass after 2) while visible
-/// and BLE-connected. Never shows a loading state on refresh — the
-/// previous description stays until a new one replaces it.
+/// minutes. Refreshes about once a minute while visible and BLE-connected,
+/// and sooner when any metric shifts sharply. Never shows a loading state
+/// on refresh — the previous description stays until a new one replaces it.
 struct LiveStateWidget: View {
     @Environment(AppEnvironment.self) var env
     @State private var description: String?
@@ -132,22 +132,46 @@ struct LiveStateWidget: View {
     private func startLoop() {
         guard refreshTask == nil else { return }
         refreshTask = Task {
+            var lastRefresh = Date.distantPast
+            var lastLatest: [String: Float] = [:]
+
             while !Task.isCancelled {
-                // Poll quickly until the first description lands (so the user
-                // isn't stuck on "Gathering data…"), then settle to a 5-minute
-                // refresh cadence.
-                try? await Task.sleep(for: .seconds(description == nil ? 30 : 300))
+                // Poll on a short tick; decide below whether to actually refresh.
+                // Faster ticks until the first description lands so the user
+                // isn't stuck on "Gathering data…".
+                try? await Task.sleep(for: .seconds(description == nil ? 15 : 20))
                 guard !Task.isCancelled else { break }
 
                 let filtered = MetricsQualityFilter.filter(env.tickHistory)
                 guard let trends = LiveStateTrendCompute.summarize(filtered) else { continue }
 
+                // Refresh at least once a minute, and sooner (but no more than
+                // every 30 s) when any metric's latest value shifts sharply.
+                let latest       = trends.compactMapValues { $0.end }
+                let sinceRefresh = Date().timeIntervalSince(lastRefresh)
+                let dueByTime    = sinceRefresh >= 60
+                let dueByChange  = sinceRefresh >= 30 && Self.hasMajorChange(from: lastLatest, to: latest)
+                guard description == nil || dueByTime || dueByChange else { continue }
+
                 let payload = LiveStateInsightPayload(windowMinutes: 10, trends: trends)
                 if let response = try? await env.sync.client.generateLiveStateInsight(payload) {
                     description = response.text
+                    lastRefresh = Date()
+                    lastLatest  = latest
                 }
             }
         }
+    }
+
+    /// True when any metric's latest value moved ≥ 15% relative to the last
+    /// refresh — used to update the read-out sooner on a meaningful shift.
+    private static func hasMajorChange(from old: [String: Float], to new: [String: Float]) -> Bool {
+        guard !old.isEmpty else { return false }
+        for (key, newValue) in new {
+            guard let oldValue = old[key], abs(oldValue) > 0.0001 else { continue }
+            if abs(newValue - oldValue) / abs(oldValue) >= 0.15 { return true }
+        }
+        return false
     }
 
     private func stopLoop() {
