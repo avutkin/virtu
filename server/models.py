@@ -70,6 +70,7 @@ class MetricTrend(BaseModel):
     max:   Optional[float] = None
     mean:  Optional[float] = None
     direction: Optional[str] = None   # "rising" | "falling" | "stable"
+    day_mean: Optional[float] = None  # today's average for this metric
 
 
 class InsightRequest(BaseModel):

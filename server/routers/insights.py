@@ -63,20 +63,22 @@ _LIVE_STATE_SYSTEM_PROMPT = (
     "\n"
     "Example reply:\n"
     "engaged_performing | Locked In\n"
-    "• Energy is up ~15% and steady — **real drive, not stress**\n"
-    "• The mental static is fading ~20% — **your focus is sharpening**\n"
-    "• Breathing has slowed ~18% — **you're settling in**\n"
+    "• Energy is well above today's average and steady — **real drive, not stress**\n"
+    "• Inner noise sits near your calmest today — **your focus is sharp** (down ~20%)\n"
+    "• Breathing has settled below your daily norm — **you're grounded**\n"
     "→ Ride it: start your most demanding task now while the focus is here.\n"
     "\n"
     "BULLETS — use EXACTLY 3, data-driven and in PLAIN everyday language, each ONE "
-    "sentence that connects a real change to what it MEANS and how it feels (like "
-    "'Energy is up and steady — real drive, not stress' or 'The mental static is "
-    "fading — your focus is sharpening'). Wrap the single KEY IDEA / insight of "
-    "each bullet in **double asterisks** to bold it — the takeaway or standout "
-    "change, exactly one short bold span per bullet. Include a rough PERCENT "
-    "CHANGE for the main thing "
-    "each bullet is about, computed from its start-to-end move over the window and "
-    "rounded to a clean number (e.g. 'up ~15%', 'down about 20%'). NEVER put "
+    "sentence that connects the reading to what it MEANS and how it feels (like "
+    "'Energy is strong and steady — real drive, not stress' or 'The mental static "
+    "is low — your focus is sharp'). Wrap the single KEY IDEA / insight of each "
+    "bullet in **double asterisks** to bold it — the takeaway, exactly one short "
+    "bold span per bullet. Ground each bullet MOSTLY in the ABSOLUTE numbers: the "
+    "current value ('now') and how it compares to TODAY'S AVERAGE ('day_avg') — "
+    "e.g. 'well above your day's average', 'your calmest reading today', 'right "
+    "around your daily norm'. You MAY add the recent percent change as a secondary "
+    "detail (e.g. 'up ~15%'), but the absolute value and the day-average "
+    "comparison lead. NEVER put "
     "technical or metric terms in the output — no HRV, RMSSD, RSA, SDNN, DFA, "
     "LF/HF, 'vagal tone', 'coherence', 'entropy', 'deceleration'. ('Inner noise' "
     "is fine — it's one of the app's own plain labels.) "
@@ -225,13 +227,17 @@ _METRIC_NAMES = {
 
 
 def _format_live_state(req: InsightRequest) -> str:
-    lines = [f"Window: last {req.window_minutes} minutes"]
+    lines = [
+        f"Window: last {req.window_minutes} minutes. For each metric: 'now' is "
+        f"the current value, 'day_avg' is today's average so far, 'range' is the "
+        f"window's low–high, and 'trend' is the direction."
+    ]
     for name, trend in (req.metrics or {}).items():
         label = _METRIC_NAMES.get(name, name)
         lines.append(
-            f"{label}: start={trend.start} end={trend.end} "
-            f"min={trend.min} max={trend.max} mean={trend.mean} "
-            f"direction={trend.direction}"
+            f"{label}: now={trend.end} day_avg={trend.day_mean} "
+            f"window_avg={trend.mean} range={trend.min}-{trend.max} "
+            f"start={trend.start} trend={trend.direction}"
         )
     return "\n".join(lines)
 
