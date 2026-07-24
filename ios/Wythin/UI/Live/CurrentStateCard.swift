@@ -10,49 +10,17 @@ struct CurrentStateCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            stateHeader
-                .padding(.bottom, 18)
-
+        Group {
             if autonomic != nil {
-                Divider().background(Theme.border)
                 autonomicSection
-                    .padding(.vertical, 18)
+                    .padding(18)
+                    .background(Theme.card)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.cardRadius))
+                    .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius)
+                        .strokeBorder(Theme.border, lineWidth: 0.5))
             }
         }
-        .padding(18)
-        .background(Theme.card)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.cardRadius))
-        .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius)
-            .strokeBorder(Theme.border, lineWidth: 0.5))
         .animation(.easeInOut(duration: 0.4), value: autonomic?.state)
-    }
-
-    // MARK: - State Header
-
-    private var stateHeader: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(state.displayName)
-                .font(.system(size: 42, weight: .bold))
-                .foregroundStyle(Theme.text)
-
-            HStack(spacing: 10) {
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Theme.surface).frame(height: 4)
-                        Capsule()
-                            .fill(state.color)
-                            .frame(width: geo.size.width * CGFloat(state.severityProgress), height: 4)
-                            .animation(.spring(duration: 0.6), value: state.severityProgress)
-                    }
-                }
-                .frame(width: 72, height: 4)
-
-                Text(state.severity)
-                    .font(Theme.monoLabel)
-                    .foregroundStyle(Theme.dim)
-            }
-        }
     }
 
     // MARK: - Autonomic Balance
