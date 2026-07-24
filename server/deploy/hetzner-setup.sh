@@ -6,21 +6,21 @@
 #
 # PREREQUISITES (do these first — see README.md):
 #   1. Point a DNS A record (e.g. api.example.com) at this server's IP.
-#   2. Clone the repo to /opt/pulsar:
-#        sudo git clone https://github.com/avutkin/pulsar.git /opt/pulsar
-#   3. cp /opt/pulsar/server/deploy/env.example /opt/pulsar/server/deploy/.env
+#   2. Clone the repo to /opt/wythin:
+#        sudo git clone https://github.com/avutkin/wythin.git /opt/wythin
+#   3. cp /opt/wythin/server/deploy/env.example /opt/wythin/server/deploy/.env
 #      and fill it in (DB_PASSWORD, DATABASE_URL, OPENAI_API_KEY).
 #
 # USAGE (as root):
-#   sudo bash /opt/pulsar/server/deploy/hetzner-setup.sh api.example.com
+#   sudo bash /opt/wythin/server/deploy/hetzner-setup.sh api.example.com
 #
 set -euo pipefail
 
 DOMAIN="${1:?usage: hetzner-setup.sh <api-domain>   e.g. api.example.com}"
-APP_DIR=/opt/pulsar
-APP_USER=pulsar
-DB_NAME=pulsar
-DB_USER=pulsar
+APP_DIR=/opt/wythin
+APP_USER=wythin
+DB_NAME=wythin
+DB_USER=wythin
 ENV_FILE="$APP_DIR/server/deploy/.env"
 
 [ -f "$ENV_FILE" ] || { echo "Missing $ENV_FILE — copy env.example and fill it in first."; exit 1; }
@@ -66,9 +66,9 @@ echo "==> Running schema migration"
 sudo -u "$APP_USER" bash -c "cd $APP_DIR && set -a && . server/deploy/.env && set +a && .venv/bin/python server/deploy/migrate.py"
 
 echo "==> Installing systemd service"
-install -m 644 "$APP_DIR/server/deploy/pulsar-api.service" /etc/systemd/system/pulsar-api.service
+install -m 644 "$APP_DIR/server/deploy/wythin-api.service" /etc/systemd/system/wythin-api.service
 systemctl daemon-reload
-systemctl enable --now pulsar-api
+systemctl enable --now wythin-api
 
 echo "==> Configuring Caddy for https://$DOMAIN"
 API_DOMAIN="$DOMAIN" envsubst '${API_DOMAIN}' < "$APP_DIR/server/deploy/Caddyfile" > /etc/caddy/Caddyfile

@@ -628,6 +628,30 @@ struct ActivityDetailView: View {
         }
     }
 
+    /// Renders the coach insight with its first line (the headline) emphasised
+    /// and the rest — the read plus the "Next session:" line — in the body style.
+    @ViewBuilder
+    private func coachInsight(_ text: String) -> some View {
+        let parts = text.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
+        let headline = parts.first.map(String.init) ?? text
+        let rest = parts.count > 1
+            ? parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+            : ""
+        VStack(alignment: .leading, spacing: 6) {
+            Text(headline)
+                .font(Theme.monoBody.weight(.semibold))
+                .foregroundStyle(Theme.text)
+                .fixedSize(horizontal: false, vertical: true)
+            if !rest.isEmpty {
+                Text(rest)
+                    .font(Theme.monoBody)
+                    .foregroundStyle(Theme.text.opacity(0.85))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -692,18 +716,28 @@ struct ActivityDetailView: View {
                                               endedAt: windowEnd)
                         }
 
-                        // Recommendations (rule-based, from this session's moves).
+                        // Combined COACH card: the AI coach's read on top, then the
+                        // rule-based quick-stat bullets below as supporting evidence.
                         let recs = ActivityImpact.recommendations(metrics.map { m in
                             MetricMovement(name: m.def.label,
                                            uplift: m.stats.avgUpliftPct,
                                            vs2mo: m.def.benefitDelta(current: m.stats.duringMean,
                                                                      base: twoMonthAvg[m.def.id]))
                         })
-                        if !recs.isEmpty {
-                            VStack(alignment: .leading, spacing: 10) {
-                                Text("RECOMMENDATIONS")
+                        if entry.insightText != nil || !recs.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("COACH")
                                     .font(Theme.monoLabel)
                                     .foregroundStyle(Theme.dim)
+
+                                if let insight = entry.insightText {
+                                    coachInsight(insight)
+                                }
+
+                                if entry.insightText != nil && !recs.isEmpty {
+                                    Divider().overlay(Theme.border)
+                                }
+
                                 ForEach(recs) { rec in
                                     HStack(alignment: .top, spacing: 8) {
                                         Image(systemName: recIcon(rec.kind))
@@ -716,19 +750,6 @@ struct ActivityDetailView: View {
                                             .fixedSize(horizontal: false, vertical: true)
                                     }
                                 }
-                            }
-                            .cardStyle()
-                        }
-
-                        // Insight
-                        if let insight = entry.insightText {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("INSIGHT")
-                                    .font(Theme.monoLabel)
-                                    .foregroundStyle(Theme.dim)
-                                Text(insight)
-                                    .font(Theme.monoBody)
-                                    .foregroundStyle(Theme.text)
                             }
                             .cardStyle()
                         }

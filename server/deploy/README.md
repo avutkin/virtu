@@ -1,4 +1,4 @@
-# Deploying the Pulsar API to Hetzner
+# Deploying the Wythin API to Hetzner
 
 A one-box setup: FastAPI (uvicorn) + PostgreSQL + Caddy (automatic HTTPS) on a
 single Hetzner Cloud server. Recommended size: **CAX11** (Arm, 2 vCPU / 4 GB /
@@ -68,13 +68,13 @@ most; say the word if you want it.
 2. **DNS:** point an `A` record `api.yourdomain.com` → the server IP.
 3. **SSH in** and clone the repo:
    ```bash
-   sudo git clone https://github.com/avutkin/pulsar.git /opt/pulsar
-   cp /opt/pulsar/server/deploy/env.example /opt/pulsar/server/deploy/.env
-   sudo nano /opt/pulsar/server/deploy/.env      # set DB_PASSWORD, DATABASE_URL, OPENAI_API_KEY
+   sudo git clone https://github.com/avutkin/wythin.git /opt/wythin
+   cp /opt/wythin/server/deploy/env.example /opt/wythin/server/deploy/.env
+   sudo nano /opt/wythin/server/deploy/.env      # set DB_PASSWORD, DATABASE_URL, OPENAI_API_KEY
    ```
 4. **Provision:**
    ```bash
-   sudo bash /opt/pulsar/server/deploy/hetzner-setup.sh api.yourdomain.com
+   sudo bash /opt/wythin/server/deploy/hetzner-setup.sh api.yourdomain.com
    ```
 5. **Verify:** `curl https://api.yourdomain.com/health` → `{"status":"ok"}`.
 6. Point the iOS app's server URL at `https://api.yourdomain.com`.
@@ -94,7 +94,7 @@ Set these repo secrets (Settings → Secrets and variables → Actions):
 
 The deploy user needs passwordless restart rights — add a sudoers drop-in:
 ```
-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart pulsar-api
+deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart wythin-api
 ```
 
 ## Files
@@ -102,7 +102,7 @@ deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart pulsar-api
 | File | Purpose |
 |---|---|
 | `hetzner-setup.sh` | one-time provisioning (idempotent-ish) |
-| `pulsar-api.service` | systemd unit (loopback-bound uvicorn) |
+| `wythin-api.service` | systemd unit (loopback-bound uvicorn) |
 | `Caddyfile` | reverse proxy + automatic HTTPS + security headers |
 | `migrate.py` | idempotent schema creation |
 | `env.example` | template for the (gitignored) `.env` |

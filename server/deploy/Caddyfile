@@ -1,4 +1,4 @@
-# Pulsar API — automatic HTTPS reverse proxy.
+# Wythin API — automatic HTTPS reverse proxy.
 #
 # The setup script replaces {$API_DOMAIN} with your real domain and installs
 # this at /etc/caddy/Caddyfile. Caddy obtains and renews a free Let's Encrypt

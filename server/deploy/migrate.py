@@ -9,7 +9,7 @@ import asyncio
 import os
 import sys
 
-# Ensure the repo root (…/pulsar) is importable no matter how this is invoked
+# Ensure the repo root (…/wythin) is importable no matter how this is invoked
 # (running `python server/deploy/migrate.py` puts server/deploy on sys.path,
 # not the repo root, so `import server` would fail without this).
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
