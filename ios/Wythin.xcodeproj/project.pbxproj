@@ -62,6 +62,7 @@
 		A150 /* ActivityWindowChart.swift in Sources */ = {isa = PBXBuildFile; fileRef = F150 /* ActivityWindowChart.swift */; };
 		A151 /* ActivityMetricStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = F151 /* ActivityMetricStats.swift */; };
 		A152 /* ActivityImpact.swift in Sources */ = {isa = PBXBuildFile; fileRef = F152 /* ActivityImpact.swift */; };
+		A202 /* AutonomicCompute.swift in Sources */ = {isa = PBXBuildFile; fileRef = F202 /* AutonomicCompute.swift */; };
 		A153 /* PracticeImpactGauge.swift in Sources */ = {isa = PBXBuildFile; fileRef = F153 /* PracticeImpactGauge.swift */; };
 		A154 /* MetricProgressRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F154 /* MetricProgressRow.swift */; };
 		A155 /* HeartRateCompute.swift in Sources */ = {isa = PBXBuildFile; fileRef = F155 /* HeartRateCompute.swift */; };
@@ -146,6 +147,7 @@
 		F150 /* ActivityWindowChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityWindowChart.swift; sourceTree = "<group>"; };
 		F151 /* ActivityMetricStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityMetricStats.swift; sourceTree = "<group>"; };
 		F152 /* ActivityImpact.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityImpact.swift; sourceTree = "<group>"; };
+		F202 /* AutonomicCompute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutonomicCompute.swift; sourceTree = "<group>"; };
 		F153 /* PracticeImpactGauge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PracticeImpactGauge.swift; sourceTree = "<group>"; };
 		F154 /* MetricProgressRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricProgressRow.swift; sourceTree = "<group>"; };
 		F155 /* HeartRateCompute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeartRateCompute.swift; sourceTree = "<group>"; };
@@ -285,6 +287,7 @@
 				F199 /* LiveStateInsight.swift */,
 				F151 /* ActivityMetricStats.swift */,
 				F152 /* ActivityImpact.swift */,
+				F202 /* AutonomicCompute.swift */,
 				F155 /* HeartRateCompute.swift */,
 			);
 			path = Metrics;
@@ -548,6 +551,7 @@
 				A154 /* MetricProgressRow.swift in Sources */,
 				A151 /* ActivityMetricStats.swift in Sources */,
 				A152 /* ActivityImpact.swift in Sources */,
+				A202 /* AutonomicCompute.swift in Sources */,
 				A155 /* HeartRateCompute.swift in Sources */,
 				A123 /* ResonateView.swift in Sources */,
 				A124 /* PacerCircleView.swift in Sources */,
