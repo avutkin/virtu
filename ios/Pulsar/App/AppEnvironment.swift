@@ -71,8 +71,8 @@ final class AppEnvironment {
 
     var serverURL: URL {
         get {
-            let s = UserDefaults.standard.string(forKey: "serverURL") ?? "http://localhost:8000"
-            return URL(string: s) ?? URL(string: "http://localhost:8000")!
+            let s = UserDefaults.standard.string(forKey: "serverURL") ?? "https://api.77.42.73.250.sslip.io"
+            return URL(string: s) ?? URL(string: "https://api.77.42.73.250.sslip.io")!
         }
         set { UserDefaults.standard.set(newValue.absoluteString, forKey: "serverURL") }
     }
@@ -105,7 +105,7 @@ final class AppEnvironment {
     init(modelContainer: ModelContainer) {
         self.modelContainer = modelContainer
         self.sync = SyncService(serverURL: UserDefaults.standard.string(forKey: "serverURL")
-            .flatMap(URL.init) ?? URL(string: "http://localhost:8000")!)
+            .flatMap(URL.init) ?? URL(string: "https://api.77.42.73.250.sslip.io")!)
 
         bindBLE()
         loadHistory()
