@@ -40,7 +40,7 @@
 		A131 /* HRVAnalysisView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F131 /* HRVAnalysisView.swift */; };
 		A132 /* SplashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F132 /* SplashView.swift */; };
 		A133 /* BLENavButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = F133 /* BLENavButton.swift */; };
-		A134 /* TrainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F134 /* TrainView.swift */; };
+		A134 /* BiofeedbackViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F134 /* BiofeedbackViews.swift */; };
 		A135 /* TrainSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = F135 /* TrainSession.swift */; };
 		A136 /* ActivityLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F136 /* ActivityLog.swift */; };
 		A200 /* Practice.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200 /* Practice.swift */; };
@@ -84,6 +84,7 @@
 		AT07 /* ActivityMetricStatsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT07 /* ActivityMetricStatsTests.swift */; };
 		AT08 /* ActivityImpactTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT08 /* ActivityImpactTests.swift */; };
 		AT10 /* ClientProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT10 /* ClientProfileTests.swift */; };
+		AT11 /* PracticeCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT11 /* PracticeCatalogTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -130,7 +131,7 @@
 		F131 /* HRVAnalysisView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HRVAnalysisView.swift; sourceTree = "<group>"; };
 		F132 /* SplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashView.swift; sourceTree = "<group>"; };
 		F133 /* BLENavButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BLENavButton.swift; sourceTree = "<group>"; };
-		F134 /* TrainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainView.swift; sourceTree = "<group>"; };
+		F134 /* BiofeedbackViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiofeedbackViews.swift; sourceTree = "<group>"; };
 		F135 /* TrainSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainSession.swift; sourceTree = "<group>"; };
 		F136 /* ActivityLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityLog.swift; sourceTree = "<group>"; };
 		F200 /* Practice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Practice.swift; sourceTree = "<group>"; };
@@ -176,6 +177,7 @@
 		FT07 /* ActivityMetricStatsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityMetricStatsTests.swift; sourceTree = "<group>"; };
 		FT08 /* ActivityImpactTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityImpactTests.swift; sourceTree = "<group>"; };
 		FT10 /* ClientProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClientProfileTests.swift; sourceTree = "<group>"; };
+		FT11 /* PracticeCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PracticeCatalogTests.swift; sourceTree = "<group>"; };
 		FTST /* WythinTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WythinTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -362,7 +364,6 @@
 		GAPP_TRN /* Train */ = {
 			isa = PBXGroup;
 			children = (
-				F134 /* TrainView.swift */,
 				F204 /* PracticeHubView.swift */,
 				F205 /* PracticeDetailView.swift */,
 			);
@@ -372,6 +373,7 @@
 		GAPP_BIO /* Biofeedback */ = {
 			isa = PBXGroup;
 			children = (
+				F134 /* BiofeedbackViews.swift */,
 				F207 /* BiofeedbackSessionView.swift */,
 			);
 			path = Biofeedback;
@@ -423,6 +425,7 @@
 				FT07 /* ActivityMetricStatsTests.swift */,
 				FT08 /* ActivityImpactTests.swift */,
 				FT10 /* ClientProfileTests.swift */,
+				FT11 /* PracticeCatalogTests.swift */,
 			);
 			path = WythinTests;
 			sourceTree = "<group>";
@@ -549,7 +552,7 @@
 				A129 /* ACCWaveformView.swift in Sources */,
 				A130 /* RRTachogramView.swift in Sources */,
 				A131 /* HRVAnalysisView.swift in Sources */,
-				A134 /* TrainView.swift in Sources */,
+				A134 /* BiofeedbackViews.swift in Sources */,
 				A136 /* ActivityLog.swift in Sources */,
 				A200 /* Practice.swift in Sources */,
 				A201 /* PracticeCatalog.swift in Sources */,
@@ -601,6 +604,7 @@
 				AT10 /* ClientProfileTests.swift in Sources */,
 				AT07 /* ActivityMetricStatsTests.swift in Sources */,
 				AT08 /* ActivityImpactTests.swift in Sources */,
+				AT11 /* PracticeCatalogTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
