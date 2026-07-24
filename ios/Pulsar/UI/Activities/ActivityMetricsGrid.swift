@@ -47,8 +47,8 @@ private func fFloat(_ v: Double?, _ fmt: (Float?) -> String) -> String { fmt(v.m
 /// The 9 metrics, in display order, matching the Live section's charts
 /// (MetricsChartsView): DC, RCMSE, PIP, DFA α1, LF/HF, RSA, VTI, HRV, HR.
 let activityMetricDefs: [ActivityMetricDef] = [
-    .init(label: "Calm Reserve",        techLabel: "DC",     unit: "ms",  direction: .higher,      extract: { $0.dc.map(Double.init) },      format: f1,                                 beforeKey: \.beforeDC,    duringKey: \.duringDC,
-          why: "Calm Reserve (Deceleration Capacity) is your vagal “brake” — how readily the heart slows. Higher means deeper parasympathetic recovery; expect it to climb as you settle."),
+    .init(label: "Vagal Tone",          techLabel: "DC",     unit: "ms",  direction: .higher,      extract: { $0.dc.map(Double.init) },      format: f1,                                 beforeKey: \.beforeDC,    duringKey: \.duringDC,
+          why: "Vagal Tone (Deceleration Capacity) is your relaxation and recovery capacity — your vagal “brake”, how readily the heart slows. Higher means deeper parasympathetic recovery; expect it to climb as you settle."),
     .init(label: "Adaptive Power",      techLabel: "RCMSE",  unit: "",    direction: .higher,      extract: { $0.rcmse.map(Double.init) },   format: f2,                                 beforeKey: \.beforeRCMSE, duringKey: \.duringRCMSE,
           why: "Adaptive Power (Refined Composite Multiscale Entropy) reflects how flexible your system is across timescales. Higher signals a resilient, responsive heart; expect a modest rise with calm focus."),
     .init(label: "Inner Noise",         techLabel: "PIP",    unit: "%",   direction: .lower,       extract: { $0.pip.map(Double.init) },     format: f1,                                 beforeKey: \.beforePIP,   duringKey: \.duringPIP,

@@ -1053,16 +1053,16 @@ struct MetricsChartsView: View, Equatable {
 
     private var dcCard: some View {
         MetricChartCard(
-            title:    "Calm Reserve",
+            title:    "Vagal Tone",
             technicalName: "DC · Deceleration Capacity",
-            subtitle: "PRSA vagal modulation  ·  L=64",
+            subtitle: "Your relaxation and recovery capacity",
             yLabel:   "ms",
             color:    Color(red: 0.4, green: 0.7, blue: 1.0),
             windows:  TimeWindow.allCases,
             refs: [
-                RefLine(value: 4.5,  label: "high risk (24h)",  color: Theme.warn),
-                RefLine(value: 6.1,  label: "5-min median",     color: Theme.dim),
-                RefLine(value: 10.0, label: "healthy",          color: Theme.coh),
+                RefLine(value: 4.5,  label: "Reduced",    color: Theme.warn),
+                RefLine(value: 6.1,  label: "Developing", color: Color(hex: "#FCD34D")),
+                RefLine(value: 10.0, label: "Strong",     color: Theme.coh),
             ],
             yDomain: 0...20,
             win: window, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
