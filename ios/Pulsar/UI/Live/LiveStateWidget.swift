@@ -18,9 +18,7 @@ struct LiveStateWidget: View {
     var body: some View {
         Group {
             if let description {
-                Text(description)
-                    .font(Theme.monoBody)
-                    .foregroundStyle(Theme.text)
+                structured(description)
             } else {
                 Text("Gathering data…")
                     .font(Theme.monoBody)
@@ -42,6 +40,36 @@ struct LiveStateWidget: View {
                 stopLoop()
             }
         }
+    }
+
+    // MARK: - Rendering
+
+    /// Renders the structured insight: first line = state headline (bold),
+    /// "•" lines = trend bullets, "→" line = the recommendation (accented).
+    @ViewBuilder
+    private func structured(_ text: String) -> some View {
+        let lines = text
+            .components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        VStack(alignment: .leading, spacing: 7) {
+            ForEach(Array(lines.enumerated()), id: \.offset) { idx, line in
+                if idx == 0 {
+                    Text(line)
+                        .font(.system(size: 19, weight: .bold))
+                        .foregroundStyle(Theme.text)
+                } else if line.hasPrefix("→") {
+                    Text(line)
+                        .font(Theme.monoBody)
+                        .foregroundStyle(Theme.accent)
+                } else {
+                    Text(line)
+                        .font(Theme.monoBody)
+                        .foregroundStyle(Theme.dim)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Refresh loop
