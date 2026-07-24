@@ -30,13 +30,18 @@ _SYSTEM_PROMPT = (
 )
 
 _LIVE_STATE_SYSTEM_PROMPT = (
-    "You are a physiologist describing a live trend in heart-rate-variability "
-    "(HRV) metrics over the last few minutes. Interpret the direction and "
-    "magnitude of change across the metrics provided into a short, purely "
-    "descriptive account of the person's current nervous-system state — no "
-    "recommendations or suggested actions, this is a live status readout, not "
-    "post-activity feedback. Keep the whole reply to 2-3 sentences. Do not "
-    "use markdown formatting."
+    "You are a physiology expert reading a person's live heart-rate-variability "
+    "(HRV) metrics from a wearable. Using the trend of each metric over the last "
+    "few minutes, reply in EXACTLY this plain-text structure — no markdown, no "
+    "bold, no headers:\n"
+    "First line: their current state in 2-3 words (e.g. Calm & Present, Focused, "
+    "Wired & Tense, Anxious, Low & Fatigued).\n"
+    "Then 2-3 lines, each starting with '• ', each interpreting one key trend in "
+    "plain, non-clinical language.\n"
+    "Then one final line starting with '→ ' with the single best thing to do "
+    "right now, matched to the state — e.g. lean into focused work, a slow breath "
+    "to settle inner noise, or a walk / light movement to lift a low or flat "
+    "state. Keep the whole reply under 60 words."
 )
 
 
@@ -88,16 +93,18 @@ async def generate_insight(
             raise HTTPException(status_code=422, detail="metrics is required for live_state mode")
         system_prompt = _LIVE_STATE_SYSTEM_PROMPT
         user_content = _format_live_state(req)
+        max_tokens = 220   # room for the state line + bullets + recommendation
     else:
         if not req.activity_type:
             raise HTTPException(status_code=422, detail="activity_type is required for activity mode")
         system_prompt = _SYSTEM_PROMPT
         user_content = _format_metrics(req)
+        max_tokens = 150
 
     try:
         response = await client.chat.completions.create(
             model="gpt-4o-mini",
-            max_tokens=150,
+            max_tokens=max_tokens,
             temperature=0.6,
             messages=[
                 {"role": "system", "content": system_prompt},
