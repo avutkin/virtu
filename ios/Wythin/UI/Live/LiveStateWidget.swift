@@ -19,8 +19,11 @@ final class LiveStateStore {
     func refresh(env: AppEnvironment) async {
         guard !inFlight else { return }
 
-        let filtered = MetricsQualityFilter.filter(env.tickHistory)
-        guard let trends = LiveStateTrendCompute.summarize(filtered) else { return }
+        // Pass today's points so each metric's dayMean is today's average, and
+        // the 10-minute window (for the current value + trend) is the tail of it.
+        let startOfDay = Calendar.current.startOfDay(for: Date())
+        let todayPoints = MetricsQualityFilter.filter(env.tickHistory.filter { $0.timestamp >= startOfDay })
+        guard let trends = LiveStateTrendCompute.summarize(todayPoints) else { return }
 
         guard text == nil || Date().timeIntervalSince(lastRefresh) >= minInterval else { return }
 

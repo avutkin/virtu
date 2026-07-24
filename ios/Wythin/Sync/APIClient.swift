@@ -64,6 +64,12 @@ struct MetricTrendPayload: Codable {
     let max:   Float?
     let mean:  Float?
     let direction: String?
+    let dayMean: Float?
+
+    enum CodingKeys: String, CodingKey {
+        case start, end, min, max, mean, direction
+        case dayMean = "day_mean"
+    }
 }
 
 struct LiveStateInsightPayload: Codable {
@@ -233,6 +239,7 @@ extension MetricTrendPayload {
         self.max   = trend.max
         self.mean  = trend.mean
         self.direction = trend.direction
+        self.dayMean = trend.dayMean
     }
 }
 

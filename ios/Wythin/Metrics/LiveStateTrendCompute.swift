@@ -9,6 +9,18 @@ struct MetricTrend {
     let max:   Float?
     let mean:  Float?
     let direction: String   // "rising" | "falling" | "stable"
+    let dayMean: Float?     // today's average for this metric
+
+    init(start: Float?, end: Float?, min: Float?, max: Float?, mean: Float?,
+         direction: String, dayMean: Float? = nil) {
+        self.start = start
+        self.end = end
+        self.min = min
+        self.max = max
+        self.mean = mean
+        self.direction = direction
+        self.dayMean = dayMean
+    }
 }
 
 // MARK: - LiveStateTrendCompute
@@ -48,13 +60,16 @@ enum LiveStateTrendCompute {
         for (key, path) in keyPaths {
             let values = window.compactMap(path)
             guard !values.isEmpty else { continue }
-            result[key] = trend(for: values)
+            // Day average: mean over the full history passed in (today's points).
+            let dayValues = history.compactMap(path)
+            let dayMean = dayValues.isEmpty ? nil : dayValues.reduce(0, +) / Float(dayValues.count)
+            result[key] = trend(for: values, dayMean: dayMean)
         }
         guard !result.isEmpty else { return nil }
         return result
     }
 
-    private static func trend(for values: [Float]) -> MetricTrend {
+    private static func trend(for values: [Float], dayMean: Float?) -> MetricTrend {
         let startVal = values.first
         let endVal   = values.last
         let minVal   = values.min()
@@ -78,6 +93,6 @@ enum LiveStateTrendCompute {
             direction = "stable"
         }
 
-        return MetricTrend(start: startVal, end: endVal, min: minVal, max: maxVal, mean: meanVal, direction: direction)
+        return MetricTrend(start: startVal, end: endVal, min: minVal, max: maxVal, mean: meanVal, direction: direction, dayMean: dayMean)
     }
 }
