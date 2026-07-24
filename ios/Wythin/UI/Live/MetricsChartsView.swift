@@ -1177,13 +1177,14 @@ struct MetricsChartsView: View, Equatable {
         MetricChartCard(
             title:   "Stress Balance",
             technicalName: "LF/HF",
-            subtitle: "Balance of stress vs rest signals",
+            subtitle: "Balance of activation vs rest",
             yLabel:  "%",
             color:   Theme.rsa,
             windows: TimeWindow.allCases,
             refs: [
-                RefLine(value: 45, label: "parasympathetic", color: Theme.coh),
-                RefLine(value: 65, label: "sympathetic",     color: Theme.warn),
+                RefLine(value: 45, label: "parasympathetic",  color: Theme.coh),
+                RefLine(value: 50, label: "flow · balanced",  color: Theme.accent),
+                RefLine(value: 65, label: "sympathetic",      color: Theme.warn),
             ],
             yDomain: 0...100,
             win: window, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
