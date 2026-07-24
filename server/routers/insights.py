@@ -31,17 +31,26 @@ _SYSTEM_PROMPT = (
 
 _LIVE_STATE_SYSTEM_PROMPT = (
     "You are a physiology expert reading a person's live heart-rate-variability "
-    "(HRV) metrics from a wearable. Using the trend of each metric over the last "
-    "few minutes, reply in EXACTLY this plain-text structure — no markdown, no "
-    "bold, no headers:\n"
-    "First line: their current state in 2-3 words (e.g. Calm & Present, Focused, "
-    "Wired & Tense, Anxious, Low & Fatigued).\n"
-    "Then 2-3 lines, each starting with '• ', each interpreting one key trend in "
-    "plain, non-clinical language.\n"
-    "Then one final line starting with '→ ' with the single best thing to do "
-    "right now, matched to the state — e.g. lean into focused work, a slow breath "
-    "to settle inner noise, or a walk / light movement to lift a low or flat "
-    "state. Keep the whole reply under 60 words."
+    "(HRV) metrics from a wearable, labeled with what each one means. Interpret "
+    "the trends and reply in EXACTLY this plain-text structure — no markdown, no "
+    "bold, no extra text before or after:\n"
+    "\n"
+    "<2-3 word current state>\n"
+    "• <plain-language interpretation of a key trend>\n"
+    "• <another key trend>\n"
+    "→ <the single best thing to do right now, matched to the state>\n"
+    "\n"
+    "Example reply:\n"
+    "Calm & Present\n"
+    "• Heart rate is easing and RSA rising — your body is settling into rest\n"
+    "• Inner noise is dropping — your rhythm is getting smoother\n"
+    "→ A good moment for focused work, or a slow breath to deepen the calm.\n"
+    "\n"
+    "The state is 2-3 words (e.g. Calm & Present, Focused, Wired & Tense, "
+    "Anxious, Low & Fatigued). Use 2-3 bullets. The '→' recommendation must fit "
+    "the state — e.g. lean into focused work, a slow breath to settle inner "
+    "noise, or a walk / light movement to lift a low or flat state. Keep the "
+    "whole reply under 60 words. Only rely on the metrics provided."
 )
 
 
@@ -72,11 +81,27 @@ def _format_metrics(req: InsightRequest) -> str:
     return "\n".join(lines)
 
 
+# Human-readable names so the model interprets each metric correctly instead of
+# guessing from the abbreviation (e.g. it must not read PIP as "peripheral").
+_METRIC_NAMES = {
+    "hr":         "Heart rate (bpm)",
+    "rmssd":      "RMSSD — short-term HRV / vagal tone (ms)",
+    "rsa":        "RSA — breathing-driven heart-rate swing / vagal tone (ms)",
+    "sdnn":       "SDNN — overall HRV (ms)",
+    "lf_hf":      "LF/HF — stress-vs-rest balance (higher = more stress)",
+    "coherence":  "Coherence — heart–breath synchronization (0–1)",
+    "breath_bpm": "Breathing rate (breaths/min)",
+    "cbi":        "Cardiac balance index",
+    "pip":        "Inner noise — beat-to-beat fragmentation (higher = more erratic)",
+}
+
+
 def _format_live_state(req: InsightRequest) -> str:
     lines = [f"Window: last {req.window_minutes} minutes"]
     for name, trend in (req.metrics or {}).items():
+        label = _METRIC_NAMES.get(name, name)
         lines.append(
-            f"{name}: start={trend.start} end={trend.end} "
+            f"{label}: start={trend.start} end={trend.end} "
             f"min={trend.min} max={trend.max} mean={trend.mean} "
             f"direction={trend.direction}"
         )
