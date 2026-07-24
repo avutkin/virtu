@@ -47,6 +47,10 @@
 		A201 /* PracticeCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F201 /* PracticeCatalog.swift */; };
 		A137 /* ActivitiesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F137 /* ActivitiesView.swift */; };
 		A203 /* ActivityLogging.swift in Sources */ = {isa = PBXBuildFile; fileRef = F203 /* ActivityLogging.swift */; };
+		A204 /* PracticeHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F204 /* PracticeHubView.swift */; };
+		A205 /* PracticeDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F205 /* PracticeDetailView.swift */; };
+		A206 /* ResonanceSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F206 /* ResonanceSessionView.swift */; };
+		A207 /* BiofeedbackSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F207 /* BiofeedbackSessionView.swift */; };
 		A138 /* PolyvagalState.swift in Sources */ = {isa = PBXBuildFile; fileRef = F138 /* PolyvagalState.swift */; };
 		A139 /* CurrentStateCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F139 /* CurrentStateCard.swift */; };
 		A140 /* RecommendedActionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F140 /* RecommendedActionCard.swift */; };
@@ -133,6 +137,10 @@
 		F201 /* PracticeCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PracticeCatalog.swift; sourceTree = "<group>"; };
 		F137 /* ActivitiesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivitiesView.swift; sourceTree = "<group>"; };
 		F203 /* ActivityLogging.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityLogging.swift; sourceTree = "<group>"; };
+		F204 /* PracticeHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PracticeHubView.swift; sourceTree = "<group>"; };
+		F205 /* PracticeDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PracticeDetailView.swift; sourceTree = "<group>"; };
+		F206 /* ResonanceSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResonanceSessionView.swift; sourceTree = "<group>"; };
+		F207 /* BiofeedbackSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiofeedbackSessionView.swift; sourceTree = "<group>"; };
 		F138 /* PolyvagalState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolyvagalState.swift; sourceTree = "<group>"; };
 		F139 /* CurrentStateCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrentStateCard.swift; sourceTree = "<group>"; };
 		F140 /* RecommendedActionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecommendedActionCard.swift; sourceTree = "<group>"; };
@@ -327,6 +335,7 @@
 			children = (
 				F123 /* ResonateView.swift */,
 				F124 /* PacerCircleView.swift */,
+				F206 /* ResonanceSessionView.swift */,
 			);
 			path = Resonate;
 			sourceTree = "<group>";
@@ -354,8 +363,18 @@
 			isa = PBXGroup;
 			children = (
 				F134 /* TrainView.swift */,
+				F204 /* PracticeHubView.swift */,
+				F205 /* PracticeDetailView.swift */,
 			);
 			path = Train;
+			sourceTree = "<group>";
+		};
+		GAPP_BIO /* Biofeedback */ = {
+			isa = PBXGroup;
+			children = (
+				F207 /* BiofeedbackSessionView.swift */,
+			);
+			path = Biofeedback;
 			sourceTree = "<group>";
 		};
 		GAPP_UI /* UI */ = {
@@ -365,6 +384,7 @@
 				GAPP_LIV /* Live */,
 				GAPP_ONB /* Onboarding */,
 				GAPP_TRN /* Train */,
+				GAPP_BIO /* Biofeedback */,
 				GAPP_ACT /* Activities */,
 				GAPP_RES /* Resonate */,
 				GAPP_HIS /* History */,
@@ -535,6 +555,10 @@
 				A201 /* PracticeCatalog.swift in Sources */,
 				A137 /* ActivitiesView.swift in Sources */,
 				A203 /* ActivityLogging.swift in Sources */,
+				A204 /* PracticeHubView.swift in Sources */,
+				A205 /* PracticeDetailView.swift in Sources */,
+				A206 /* ResonanceSessionView.swift in Sources */,
+				A207 /* BiofeedbackSessionView.swift in Sources */,
 				A138 /* PolyvagalState.swift in Sources */,
 				A160 /* ClientProfile.swift in Sources */,
 				A161 /* OnboardingFlow.swift in Sources */,

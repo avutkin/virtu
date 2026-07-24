@@ -80,7 +80,7 @@ struct ContentView: View {
 
     private var mainApp: some View {
         TabView(selection: $selectedTab) {
-            TrainView()
+            PracticeHubView()
                 .tag(AppTab.train)
             ActivitiesView()
                 .tag(AppTab.activities)
@@ -112,7 +112,7 @@ struct AppTabBar: View {
     var body: some View {
         HStack(spacing: 0) {
             // Left pair
-            TabBarButton(tab: .train,      icon: "figure.run",                label: "Train",      selected: $selected)
+            TabBarButton(tab: .train,      icon: "figure.mind.and.body",      label: "Practice",   selected: $selected)
             TabBarButton(tab: .activities, icon: "list.bullet.clipboard",     label: "Activities", selected: $selected)
 
             // Live — prominent center button (position 3 of 5)
