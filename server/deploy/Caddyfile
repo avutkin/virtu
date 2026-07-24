@@ -1,0 +1,22 @@
+# Pulsar API — automatic HTTPS reverse proxy.
+#
+# The setup script replaces {$API_DOMAIN} with your real domain and installs
+# this at /etc/caddy/Caddyfile. Caddy obtains and renews a free Let's Encrypt
+# certificate automatically, terminates TLS, and proxies to the loopback-only
+# uvicorn service. WebSockets (the /stream endpoints) are proxied transparently
+# — no extra config needed.
+
+{$API_DOMAIN} {
+	encode zstd gzip
+
+	# Security headers
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options    "nosniff"
+		X-Frame-Options           "DENY"
+		Referrer-Policy           "no-referrer"
+		-Server
+	}
+
+	reverse_proxy 127.0.0.1:8000
+}

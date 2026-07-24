@@ -35,3 +35,6 @@ Pictures/
 Public/
 ios/JustBreathe.xcodeproj/xcuserdata/
 ios/JustBreathe.xcodeproj/project.xcworkspace/xcuserdata/
+
+# Hetzner deploy secrets
+server/deploy/.env
