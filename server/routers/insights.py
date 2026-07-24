@@ -58,7 +58,20 @@ _LIVE_STATE_SYSTEM_PROMPT = (
     "noise or DFA alpha-1 drifting toward 0.5 signals scattered, restless "
     "attention (suggest a reset — a few slow breaths or a short movement break). "
     "When these two are present, make one bullet about focus and let it steer "
-    "the recommendation."
+    "the recommendation.\n"
+    "\n"
+    "State map — pick the closest 2-3 word label (blend two if between):\n"
+    "• Calm & Present — low/steady HR; high or rising RMSSD, RSA, Vagal Tone, "
+    "Calm Power; high coherence; low LF/HF; low inner noise.\n"
+    "• Focused — low/falling inner noise; DFA alpha-1 near 1.0; steady HR; decent "
+    "coherence and Adaptive Capacity.\n"
+    "• Wired & Tense — rising HR; high/rising LF/HF; falling RSA, RMSSD, Vagal "
+    "Tone; rising inner noise; DFA alpha-1 dropping.\n"
+    "• Anxious — elevated HR with high inner noise and low coherence; erratic, "
+    "scattered rhythm.\n"
+    "• Low & Fatigued — low HR but blunted RMSSD, Vagal Tone, Calm Power and low "
+    "Adaptive Capacity; under-activated and flat.\n"
+    "• Recovering — HR falling while RSA, RMSSD, Vagal Tone and coherence rise."
 )
 
 
@@ -100,6 +113,12 @@ _METRIC_NAMES = {
     "coherence":  "Coherence — heart–breath synchronization (0–1)",
     "breath_bpm": "Breathing rate (breaths/min)",
     "cbi":        "Cardiac balance index",
+    "dc":         "Vagal Tone (deceleration capacity, ms) — relaxation & recovery "
+                  "capacity; higher = stronger parasympathetic brake",
+    "rcmse":      "Adaptive Capacity (multiscale entropy) — flexibility/resilience "
+                  "across timescales; higher = more adaptable",
+    "vti":        "Calm Power (vagal tone index, ln RMSSD) — total restorative "
+                  "parasympathetic drive; higher = stronger recovery drive",
     "pip":        "Inner noise — beat-to-beat fragmentation; a focus proxy "
                   "(lower = smoother, more settled attention; higher = scattered/restless)",
     "dfa1":       "DFA alpha-1 — fractal organization of the rhythm; a focus proxy "
