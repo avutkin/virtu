@@ -43,6 +43,8 @@
 		A134 /* TrainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F134 /* TrainView.swift */; };
 		A135 /* TrainSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = F135 /* TrainSession.swift */; };
 		A136 /* ActivityLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F136 /* ActivityLog.swift */; };
+		A200 /* Practice.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200 /* Practice.swift */; };
+		A201 /* PracticeCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F201 /* PracticeCatalog.swift */; };
 		A137 /* ActivitiesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F137 /* ActivitiesView.swift */; };
 		A138 /* PolyvagalState.swift in Sources */ = {isa = PBXBuildFile; fileRef = F138 /* PolyvagalState.swift */; };
 		A139 /* CurrentStateCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F139 /* CurrentStateCard.swift */; };
@@ -125,6 +127,8 @@
 		F134 /* TrainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainView.swift; sourceTree = "<group>"; };
 		F135 /* TrainSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainSession.swift; sourceTree = "<group>"; };
 		F136 /* ActivityLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityLog.swift; sourceTree = "<group>"; };
+		F200 /* Practice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Practice.swift; sourceTree = "<group>"; };
+		F201 /* PracticeCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PracticeCatalog.swift; sourceTree = "<group>"; };
 		F137 /* ActivitiesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivitiesView.swift; sourceTree = "<group>"; };
 		F138 /* PolyvagalState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolyvagalState.swift; sourceTree = "<group>"; };
 		F139 /* CurrentStateCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrentStateCard.swift; sourceTree = "<group>"; };
@@ -295,6 +299,8 @@
 				F127 /* MetricsHistoryPoint.swift */,
 				F135 /* TrainSession.swift */,
 				F136 /* ActivityLog.swift */,
+				F200 /* Practice.swift */,
+				F201 /* PracticeCatalog.swift */,
 				F138 /* PolyvagalState.swift */,
 				F160 /* ClientProfile.swift */,
 			);
@@ -519,6 +525,8 @@
 				A131 /* HRVAnalysisView.swift in Sources */,
 				A134 /* TrainView.swift in Sources */,
 				A136 /* ActivityLog.swift in Sources */,
+				A200 /* Practice.swift in Sources */,
+				A201 /* PracticeCatalog.swift in Sources */,
 				A137 /* ActivitiesView.swift in Sources */,
 				A138 /* PolyvagalState.swift in Sources */,
 				A160 /* ClientProfile.swift in Sources */,
