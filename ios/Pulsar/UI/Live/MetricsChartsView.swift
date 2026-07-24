@@ -933,7 +933,7 @@ struct MetricsChartsView: View, Equatable {
         MetricChartCard(
             title:   "Calm Power",
             technicalName: "VTI",
-            subtitle: "Strength of your recovery drive",
+            subtitle: "Total strength of your recovery drive",
             yLabel:  "VTI",
             color:   Theme.breathe,
             windows: TimeWindow.allCases,
@@ -1083,7 +1083,7 @@ struct MetricsChartsView: View, Equatable {
         MetricChartCard(
             title:    "Adaptive Capacity",
             technicalName: "RCMSE",
-            subtitle: "How flexibly your system adapts",
+            subtitle: "How flexibly your system adapts across timescales",
             yLabel:   "entropy",
             color:    Color(red: 0.8, green: 0.5, blue: 1.0),
             windows:  TimeWindow.allCases,
@@ -1146,7 +1146,7 @@ struct MetricsChartsView: View, Equatable {
         MetricChartCard(
             title:   "Harmony",
             technicalName: "DFA α1",
-            subtitle: "Balance of your heart rhythm",
+            subtitle: "How ordered vs random your heart rhythm is",
             yLabel:  "α1",
             color:   Theme.ulf,
             windows: TimeWindow.allCases,
@@ -1178,7 +1178,7 @@ struct MetricsChartsView: View, Equatable {
         MetricChartCard(
             title:   "Stress Balance",
             technicalName: "LF/HF",
-            subtitle: "Stress vs calm — lower is calmer",
+            subtitle: "Balance of stress vs rest signals",
             yLabel:  "%",
             color:   Theme.rsa,
             windows: TimeWindow.allCases,
