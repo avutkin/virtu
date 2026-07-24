@@ -1175,35 +1175,37 @@ struct MetricsChartsView: View, Equatable {
         ) { $0.dfa1.map(Double.init) }
     }
 
-    // MARK: LF/HF Ratio
+    // MARK: Stress Balance (breathing-robust arousal)
 
     private var lfhfCard: some View {
         MetricChartCard(
             title:   "Stress Balance",
-            technicalName: "LF/HF Ratio",
-            subtitle: "sympathovagal balance",
-            yLabel:  "ratio",
+            technicalName: "Arousal",
+            subtitle: "breathing-robust · lower is calmer",
+            yLabel:  "%",
             color:   Theme.rsa,
             windows: TimeWindow.allCases,
             refs: [
-                RefLine(value: 0.5, label: "parasympathetic", color: Theme.breathe),
-                RefLine(value: 1.0, label: "balanced",        color: Theme.coh),
-                RefLine(value: 2.0, label: "sympathetic",     color: Theme.warn),
+                RefLine(value: 35, label: "calm",     color: Theme.coh),
+                RefLine(value: 65, label: "elevated",  color: Theme.warn),
             ],
-            yDomain: 0...5,
+            yDomain: 0...100,
             win: window, selectedX: $sharedSelectedX, panOffset: $sharedPanOffset,
-            dynamicY: true,
             info: MetricInfo(
-                "Ratio of low-frequency (LF, 0.04–0.15 Hz) to high-frequency (HF, 0.15–0.40 Hz) spectral power.",
-                physical:    "LF power reflects baroreceptor-mediated oscillations (~10-second Mayer waves) with contributions from both sympathetic and parasympathetic branches. HF power is almost exclusively vagal, locked to respiration. Their ratio was once considered a pure sympathovagal balance index.",
-                physiology:  "High LF/HF → more sympathetic influence or slow breathing shifting power into LF. Low LF/HF → parasympathetic dominance. Caution: slow resonance breathing (6 br/min) moves respiratory frequency into the LF band, artificially inflating LF/HF even during deep relaxation.",
-                training:    "More useful as a trend than an absolute value. Expect LF/HF to rise during stress or exercise and fall during recovery and resonance breathing (provided breathing rate stays above ~9 br/min). At exactly 6 br/min the ratio loses interpretive meaning.",
-                sensitivity: "Moderate. Highly sensitive to breathing rate — use it alongside coherence score for fuller context.",
-                levels:      "Parasympathetic: < 0.5\nBalanced:        0.5–1.5\nSympatho-vagal:  1.5–3.0\nStress/exercise: > 3.0\n(Can exceed 10 during intense activity)",
-                notes:       "The sympathovagal balance interpretation of LF/HF is contested in recent literature. Treat it as one signal among many, not as a definitive autonomic index."
+                "A 0–100 arousal index (the SNS share from Autonomic Balance): higher = more sympathetic arousal, lower = calmer. This is the same value shown as SNS on the state card.",
+                physical:    "Derived from RMSSD (beat-to-beat vagal variability): high vagal tone → low arousal, suppressed vagal tone → high arousal. Relative to your session baseline when training; otherwise on an absolute scale.",
+                physiology:  "Deliberately NOT the classic LF/HF ratio. LF/HF is confounded by breathing rate — slow resonance breathing (~6/min) pushes the vagal respiratory peak into the LF band, making LF/HF spike as if you were stressed during the calmest possible breathing. An RMSSD-based index avoids that inversion, so slow breathing correctly reads as low arousal.",
+                training:    "Watch it fall during resonance breathing and recovery, and rise with stress or exercise. Because it's breathing-robust, a paced-breathing session should trend this downward — the opposite of what a raw LF/HF chart would show.",
+                sensitivity: "Moderate. Tracks vagal tone; robust to breathing frequency (unlike LF/HF).",
+                levels:      "Calm:        < 35%\nBalanced:    35–65%\nElevated:    > 65%",
+                notes:       "The raw LF/HF ratio is intentionally not plotted here because it misleads during breathwork; this arousal index is the app's stress signal."
             ),
             history: history, rawHistory: rawHistory, date: date
-        ) { $0.lfHF.map(Double.init) }
+        ) { pt in
+            AutonomicCompute.balance(rmssd: pt.rmssd, lf: pt.lfPower, hf: pt.hfPower,
+                                     breathBPM: pt.breathBPM, meanBPM: pt.meanBPM,
+                                     baselineRmssd: nil).map { Double($0.sns) * 100 }
+        }
     }
 
     // MARK: VLF
