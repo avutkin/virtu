@@ -436,6 +436,9 @@ private struct MetricPill: View {
 private struct ActivityLogRow: View {
     let entry: ActivityLog
 
+    // 3×3 grid of the nine metrics grouped under the row header.
+    private let metricCols = Array(repeating: GridItem(.flexible(), spacing: 6), count: 3)
+
     private var timeStr: String {
         let fmt = DateFormatter()
         fmt.dateFormat = "HH:mm"
@@ -443,86 +446,102 @@ private struct ActivityLogRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
-            // Icon
-            ZStack {
-                Circle()
-                    .fill(entry.activityTypeEnum.color.opacity(0.15))
-                    .frame(width: 36, height: 36)
-                Image(systemName: entry.activityTypeEnum.icon)
-                    .font(.system(size: 16))
-                    .foregroundStyle(entry.activityTypeEnum.color)
-            }
+        VStack(alignment: .leading, spacing: 10) {
+            // Header: icon + name + time
+            HStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(entry.activityTypeEnum.color.opacity(0.15))
+                        .frame(width: 36, height: 36)
+                    Image(systemName: entry.activityTypeEnum.icon)
+                        .font(.system(size: 16))
+                        .foregroundStyle(entry.activityTypeEnum.color)
+                }
 
-            // Name + time
-            VStack(alignment: .leading, spacing: 2) {
-                Text(entry.displayName)
-                    .font(.system(size: 14, weight: .medium, design: .monospaced))
-                    .foregroundStyle(Theme.text)
-                    .lineLimit(1)
-                HStack(spacing: 4) {
-                    Text(timeStr)
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(Theme.dim)
-                    if entry.isActive {
-                        Text("LIVE").font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.warn)
-                    } else {
-                        Text(entry.durationString).font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.dim)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(entry.displayName)
+                        .font(.system(size: 14, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Theme.text)
+                        .lineLimit(1)
+                    HStack(spacing: 4) {
+                        Text(timeStr)
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(Theme.dim)
+                        if entry.isActive {
+                            Text("LIVE").font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.warn)
+                        } else {
+                            Text(entry.durationString).font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.dim)
+                        }
                     }
                 }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.dim.opacity(0.4))
             }
-            .frame(width: 96, alignment: .leading)
 
-            // Metric columns
-            LogMetricCell(label: "HR",   value: entry.duringHR,   base: entry.beforeHR,   fmt: "%.0f", isRate: true)
-            LogMetricCell(label: "RSA",  value: entry.duringRSA,  base: entry.beforeRSA,  fmt: "%.0f", isRate: false)
-            LogMetricCell(label: "VTI",  value: entry.duringVTI,  base: entry.beforeVTI,  fmt: "%.2f", isRate: false)
-            LogMetricCell(label: "SDNN", value: entry.duringSDNN, base: entry.beforeSDNN, fmt: "%.0f", isRate: false)
-
-            Image(systemName: "chevron.right")
-                .font(.system(size: 11))
-                .foregroundStyle(Theme.dim.opacity(0.4))
+            // All nine metrics — during value + benefit-signed difference.
+            LazyVGrid(columns: metricCols, spacing: 6) {
+                ForEach(activityMetricDefs) { def in
+                    LogMetricCell(def: def, entry: entry)
+                }
+            }
         }
         .padding(.vertical, 7)
     }
 }
 
+/// One metric mini-cell in a log row: technical label, the during-average
+/// value, and the raw difference vs the before-average — colored green when
+/// the change is a benefit for that metric, red when it isn't.
 private struct LogMetricCell: View {
-    let label:  String
-    let value:  Float?
-    let base:   Float?
-    let fmt:    String
-    let isRate: Bool
+    let def:   ActivityMetricDef
+    let entry: ActivityLog
 
-    private var delta: Float? {
-        guard let v = value, let b = base else { return nil }
-        return v - b
+    private var during: Double? { entry[keyPath: def.duringKey].map(Double.init) }
+    private var before: Double? { entry[keyPath: def.beforeKey].map(Double.init) }
+
+    private var delta: Double? {
+        guard let d = during, let b = before else { return nil }
+        return d - b
     }
 
     private var deltaColor: Color {
-        guard let d = delta else { return Theme.dim }
-        return isRate ? Theme.dim : (d >= 0 ? Theme.accent : Theme.warn)
+        guard let d = during, let b = before else { return Theme.dim.opacity(0.4) }
+        let diff = def.direction.benefit(d) - def.direction.benefit(b)
+        if abs(diff) < 0.0005 { return Theme.dim }
+        return diff > 0 ? Theme.accent : Theme.warn
+    }
+
+    private var deltaText: String {
+        guard let d = delta else { return "—" }
+        return (d >= 0 ? "+" : "−") + def.format(abs(d))
     }
 
     var body: some View {
         VStack(spacing: 2) {
-            Text(label)
+            Text(def.techLabel)
                 .font(.system(size: 9, design: .monospaced))
                 .foregroundStyle(Theme.dim)
-            Text(value.map { String(format: fmt, $0) } ?? "—")
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            Text(def.format(during))
                 .font(.system(size: 13, design: .monospaced))
                 .foregroundStyle(Theme.text)
-            Group {
-                if let d = delta {
-                    Text("\(d >= 0 ? "+" : "")\(String(format: fmt, d))")
-                        .foregroundStyle(deltaColor)
-                } else {
-                    Text("—").foregroundStyle(Theme.dim.opacity(0.4))
-                }
-            }
-            .font(.system(size: 10, design: .monospaced))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            Text(deltaText)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(deltaColor)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
         }
         .frame(maxWidth: .infinity)
+        .padding(.vertical, 6)
+        .background(Theme.surface.opacity(0.4))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 
